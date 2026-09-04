@@ -218,6 +218,42 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                  fg_scroll_x, fg_scroll_y,
                  pix, pitch, 64, 32);
 
+    /* Render sprites from sprite table buffer */
+    {
+        uint8_t *table = &ram[v_spritetablebuffer];
+        for (int i = 0; i < v_spritecount && i < sprites_max; i++) {
+            uint8_t *entry = &table[i * 8];
+            int y = entry[0] | ((entry[1] & 1) << 8);
+            int size = ((entry[1] >> 1) & 0xF) | (((entry[1] >> 5) & 0xF) << 4);
+            int tile = ((entry[3] & 1) << 8) | entry[4];
+            int x = entry[6] | ((entry[7] & 1) << 8);
+
+            int width_tiles = (size & 0xF) ? (size & 0xF) : 1;
+            int height_tiles = (size >> 4) ? (size >> 4) : 1;
+
+            for (int ty = 0; ty < height_tiles; ty++) {
+                for (int tx = 0; tx < width_tiles; tx++) {
+                    int tile_idx = tile + ty * 2 + tx;
+                    const uint8_t *tile_data = &vdp.vram[tile_idx * 32];
+                    int px = x + tx * 8;
+                    int py = y + ty * 8;
+
+                    for (int row = 0; row < 8; row++) {
+                        const uint8_t *r = &tile_data[row * 4];
+                        for (int col = 0; col < 8; col++) {
+                            int color_idx = (col & 1) ? (r[col >> 1] & 0xF) : ((r[col >> 1] >> 4) & 0xF);
+                            if (color_idx == 0) continue;
+                            int sx = px + col;
+                            int sy = py + row;
+                            if (sx < 0 || sx >= SCREEN_WIDTH || sy < 0 || sy >= SCREEN_HEIGHT) continue;
+                            pix[sy * SCREEN_WIDTH + sx] = MD_ColorToRGBA(palette_main[color_idx]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /* Optional test overlay: draw a counter as colored bars (debug/title test) */
     if (vdp_test_counter >= 0) {
         int w = SCREEN_WIDTH - 20;

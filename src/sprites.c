@@ -1,56 +1,54 @@
 #include "sprites.h"
 #include "ram.h"
 #include "constants.h"
+#include "objects.h"
 #include <string.h>
+#include <stdio.h>
 
 /* Sprite priority queue (from ASM v_spritequeue)
-   8 layers, each $80 bytes. First 2 bytes = count of objects in layer. */
+    8 layers, each $80 bytes. First 2 bytes = count of objects in layer. */
 #define SPRITE_QUEUE_LAYERS  8
 
-void BuildSprites(void) {
-    uint8_t *queue = &ram[v_spritequeue];
-    uint8_t *sprite_table = &ram[v_spritetablebuffer];
-    int total_sprites = 0;
+/* Minimal sprite table writer helpers */
+static void write_sprite(uint8_t *table, int index, int y, int size, int link, int tile, int x) {
+    uint8_t *entry = &table[index * 8];
+    entry[0] = (uint8_t)(y & 0xFF);
+    entry[1] = (uint8_t)(((y & 0x100) ? 1 : 0) | ((size & 0xF) << 1) | (((size >> 4) & 0xF) << 5));
+    entry[2] = (uint8_t)link;
+    entry[3] = (uint8_t)((tile >> 8) & 0x1);
+    entry[4] = (uint8_t)(tile & 0xFF);
+    entry[5] = 0;
+    entry[6] = (uint8_t)(x & 0xFF);
+    entry[7] = (uint8_t)((x >> 8) & 0x1);
+}
 
-    /* Clear sprite table */
+void BuildSprites(void) {
+    extern uint8_t **sprite_queue;
+    extern int sprite_queue_count;
+
+    uint8_t *sprite_table = &ram[v_spritetablebuffer];
     memset(sprite_table, 0, sprites_max * 8);
 
-    /* Process each priority layer */
-    for (int layer = 0; layer < SPRITE_QUEUE_LAYERS; layer++) {
-        uint8_t *layer_ptr = queue + layer * spritelayer_size;
-        uint16_t count = *(uint16_t *)layer_ptr;
+    int sprite_index = 0;
+    for (int i = 0; i < sprite_queue_count && sprite_index < sprites_max; i++) {
+        uint8_t *obj = sprite_queue[i];
+        if (!obj || obj[0] == 0) continue;
 
-        if (count == 0) continue;
+        int16_t y = (int16_t)((obj[0x0C] << 8) | obj[0x0D]);
+        int16_t x = (int16_t)((obj[0x08] << 8) | obj[0x09]);
 
-        int offset = 2; /* skip count word */
-        for (uint16_t j = 0; j < count; j++) {
-            if (total_sprites >= sprites_max) goto done;
+        int tile = ArtTile_Title_Sonic;
+        int size = 0x22; /* 2x2 tiles */
 
-            /* Read object pointer from queue (2 bytes, little-endian) */
-            uint16_t obj_addr = *(uint16_t *)(layer_ptr + offset);
-            offset += 2;
+        write_sprite(sprite_table, sprite_index, y, size, sprite_index + 1, tile, x);
+        sprite_index++;
+        if (sprite_index >= sprites_max) break;
 
-            if (obj_addr == 0) continue;
-
-            uint8_t *obj = &ram[obj_addr];
-
-            /* Check if object is still valid */
-            if (obj[0] == 0) continue; /* obID == 0 */
-
-            /* TODO: Full BuildSprites implementation
-               For now, just increment the counter */
-            total_sprites++;
-        }
+        write_sprite(sprite_table, sprite_index, y + 16, size, 0, tile + 2, x);
+        sprite_index++;
     }
 
-done:
-    v_spritecount = (uint8_t)total_sprites;
-
-    /* Write end-of-sprites marker */
-    if (total_sprites < sprites_max) {
-        uint32_t *end = (uint32_t *)(&sprite_table[total_sprites * 8]);
-        *end = 0;
-    }
+    v_spritecount = (uint8_t)sprite_index;
 }
 
 void Sprites_RenderToTexture(void *texture_pixels, int pitch) {

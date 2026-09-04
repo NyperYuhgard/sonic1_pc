@@ -15,19 +15,32 @@ void Palette_LoadFromData(const uint8_t *data, uint16_t *dest, int count) {
     }
 }
 
-/* Palette index entry: ROM data pointer, target RAM address, count (longwords - 1) */
+/* Palette index entry: data pointer, target RAM address, count (longwords - 1) */
 typedef struct {
-    const uint8_t *data;
+    uint8_t *data;
     uint16_t       target_ram_offset; /* offset into ram[] (e.g. v_palette_line_1) */
     uint16_t       count;             /* longwords - 1 */
 } PalEntry;
 
-static const PalEntry pal_index[] = {
-    /* palid_SegaBG */  { Pal_SegaBG,  v_palette_line_1, (128 / 4) - 1 },
-    /* palid_Title */   { NULL,        v_palette_line_1, 0 },
-    /* palid_LevelSel */{ NULL,        v_palette_line_1, 0 },
-    /* palid_Sonic */   { NULL,        v_palette_line_1, 0 },
-};
+static PalEntry pal_index[4];
+
+void Palette_Init(void) {
+    pal_index[0].data = Pal_SegaBG;
+    pal_index[0].target_ram_offset = v_palette_line_1;
+    pal_index[0].count = (128 / 4) - 1;
+
+    pal_index[1].data = Pal_Title;
+    pal_index[1].target_ram_offset = v_palette_line_1;
+    pal_index[1].count = (128 / 4) - 1;
+
+    pal_index[2].data = Pal_LevelSel;
+    pal_index[2].target_ram_offset = v_palette_line_1;
+    pal_index[2].count = (128 / 4) - 1;
+
+    pal_index[3].data = Pal_Sonic;
+    pal_index[3].target_ram_offset = v_palette_line_1;
+    pal_index[3].count = (128 / 4) - 1;
+}
 
 void PalLoad(int index) {
     if (index < 0 || index >= (int)(sizeof(pal_index) / sizeof(pal_index[0])))
@@ -48,16 +61,34 @@ void PalLoad(int index) {
     }
 }
 
+void PalLoad_Fade(int index) {
+    if (index < 0 || index >= (int)(sizeof(pal_index) / sizeof(pal_index[0])))
+        return;
+    const PalEntry *e = &pal_index[index];
+    if (!e->data) return;
+
+    uint16_t *dest = (uint16_t *)RAM_ADDR(v_palette_fading);
+    int longwords = e->count + 1;
+    for (int i = 0; i < longwords * 2; i += 2) {
+        uint8_t b0 = e->data[i * 2];
+        uint8_t b1 = e->data[i * 2 + 1];
+        uint8_t b2 = e->data[i * 2 + 2];
+        uint8_t b3 = e->data[i * 2 + 3];
+        dest[i]     = ((uint16_t)b0 << 8) | b1;
+        dest[i + 1] = ((uint16_t)b2 << 8) | b3;
+    }
+}
+
 /* Copy v_palette (RAM) to palette_main (rendering buffer) */
 void Palette_Update(void) {
     memcpy(palette_main, RAM_ADDR(v_palette), sizeof(palette_main));
 }
 
 /* ============================================================================
-   Palette Fade Out (from _inc/Palette Fading.asm - PaletteFadeOut)
-   Fades the active palette (v_palette) to black over 22 frames.
-   Fades red first, then green, then blue per color.
-   ============================================================================ */
+    Palette Fade Out (from _inc/Palette Fading.asm - PaletteFadeOut)
+    Fades the active palette (v_palette) to black over 22 frames.
+    Fades red first, then green, then blue per color.
+    ============================================================================ */
 
 static void fade_out_dec_color(uint16_t *color) {
     uint16_t c = *color;
@@ -98,6 +129,40 @@ void Palette_FadeOut(void) {
         for (int i = 0; i < num_colors; i++) {
             fade_out_dec_color(&pal_water[i]);
         }
+    }
+}
+
+/* ============================================================================
+    Palette Fade In
+    ============================================================================ */
+
+static void fade_inc_color(uint16_t *color) {
+    uint16_t c = *color;
+    /* Target is the full color stored in palette_fading (or the final color).
+       For simplicity, we fade towards white by increasing the lowest component
+       that is not yet maxed. A faithful port would use the fade-in buffer. */
+    if ((c & 0x00E) != 0x00E) {
+        *color = c + 0x002;
+        return;
+    }
+    if ((c & 0x0E0) != 0x0E0) {
+        *color = c + 0x020;
+        return;
+    }
+    if ((c & 0xE00) != 0xE00) {
+        *color = c + 0x200;
+    }
+}
+
+void Palette_FadeIn(void) {
+    uint16_t *src = (uint16_t *)RAM_ADDR(v_palette_fading);
+    uint16_t *dst = (uint16_t *)RAM_ADDR(v_palette);
+    int num_colors = 64;
+
+    for (int frame = 0; frame < 22; frame++) {
+        extern void WaitForVBlank(void);
+        WaitForVBlank();
+        memcpy(dst, src, num_colors * sizeof(uint16_t));
     }
 }
 
@@ -222,4 +287,11 @@ int PalCycle_Sega(void) {
     }
 
     return 1; /* still active */
+}
+
+/* ============================================================================
+ *  PalCycle_Title - stub for title screen palette cycling
+ *  ============================================================================ */
+void PalCycle_Title(void) {
+    /* TODO: Implement title palette cycle */
 }

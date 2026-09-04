@@ -705,6 +705,14 @@ enum {
 #define ArtTile_Title_Trademark           0x510
 #define ArtTile_Level_Select_Font         0x680
 
+/* Object IDs */
+#define id_TitleSonic                     0x0E
+#define id_PSBTM                          0x0F
+#define id_CreditsText                    0x8A
+
+/* Level select */
+#define levsel_sndtest_row                0x14
+
 /* -- Continue Screen ----------------------------------------------------- */
 #define ArtTile_Continue_Sonic            0x500
 #define ArtTile_Continue_Number           0x6FC

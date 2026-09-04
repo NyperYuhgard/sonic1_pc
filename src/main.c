@@ -141,6 +141,7 @@ static void ProcessSDLEvents(void) {
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         if (ev.type == SDL_QUIT) {
+            fprintf(stderr, "[Main] SDL_QUIT received, exiting\n");
             running = 0;
         }
     }
@@ -260,35 +261,183 @@ static void GM_Sega_Screen(void) {
 }
 
 /* ===================================================================
-   Game mode stubs
+    Game mode stubs and helpers
+    =================================================================== */
+
+/* Stub: Clear any pending PLC (Pattern Load Cue) */
+static void ClearPLC(void) {
+    memset(RAM_ADDR(v_plc_buffer), 0, 0x20);
+}
+
+/* Stub: Queue sound/music */
+static void QueueSound2(int id) {
+    Sound_Queue(id);
+}
+
+/* Stub: Deform background layers */
+static void DeformLayers(void) {
+    if (v_generictimer > 0) {
+        v_generictimer--;
+    }
+}
+
+/* Stub: Run PLC (load pending patterns) */
+static void RunPLC(void) {
+    /* TODO: Implement PLC runner */
+}
+
+/* Stub: Load level size for current zone */
+static void LevelSizeLoad(void) {
+    /* TODO: Implement level size loading */
+}
+
+/* Stub: Load level layout */
+static void LevelLayoutLoad(void) {
+    /* TODO: Implement level layout loading */
+}
+
+/* Stub: Draw background chunks */
+static void DrawChunks(void) {
+    /* TODO: Implement DrawChunks */
+}
+
+/* Stub: Start a new PLC */
+static void NewPLC(int id) {
+    /* TODO: Implement PLC */
+}
+
+/* Stub: Level select text load */
+static void LevSelTextLoad(void) {
+    /* TODO: Implement level select text */
+}
+
+/* Stub: Level select controls */
+static void LevSelControls(void) {
+    /* TODO: Implement level select controls */
+}
+
+/* Stub: Goto demo mode */
+static void GotoDemo(void) {
+    v_gamemode = GM_Sega;
+}
+
+/* Stub: Start level from title screen */
+static void PlayLevel(void) {
+    v_gamemode = GM_Level;
+}
+
+/* Clear screen alias */
+static void ClearScreen(void) {
+    VDP_ClearScreen();
+}
+
+/* ===================================================================
+   GM_Title_Screen (from sonic.asm GM_Title)
    =================================================================== */
 static void GM_Title_Screen(void) {
-    /* TEST MODE: black screen with a counter bar. This is a stand-in for the
-       real title screen while we debug the Sega -> Title transition.
-       Keeps frames advancing so we can confirm there is no live-lock. */
-    static int init = 0;
-    static int counter = 0;
+    static int init_done = 0;
 
-    if (!init) {
-        init = 1;
-        counter = 0;
-        /* Black screen */
-        VDP_ClearScreen();
-        v_vdp_buffer1 &= ~0x0040; /* display off while clearing */
-        v_vdp_buffer1 |= 0x0040;  /* display on */
-        vdp_test_counter = 0;     /* enable test overlay */
+    if (!init_done) {
+        fprintf(stderr, "[Title] init start\n");
+
+        /* Stop music and clear PLC */
+        QueueSound2(bgm_Stop);
+        ClearPLC();
+
+        /* Fade out from previous game mode */
+        Palette_FadeOut();
+
+        /* Disable display during setup */
+        v_vdp_buffer1 &= ~0x0040;
+
+        /* Screen setup */
+        VDP_SetRegister(0, 0x0400 | 0x04); /* 8-colour mode */
+        VDP_SetRegister(1, v_vdp_buffer1 | 0x34);
+        VDP_SetRegister(2, 0x0300);    /* FG nametable at $C000 */
+        VDP_SetRegister(3, 0x003C);    /* Window nametable at $A000 */
+        VDP_SetRegister(4, 0x0007);    /* BG nametable at $E000 */
+        VDP_SetRegister(7, 0x0000);    /* background colour */
+        VDP_SetRegister(0x0B, 0x0000); /* full-screen vertical scrolling */
+        VDP_SetRegister(0x0C, 0x0081); /* 40-cell display */
+        VDP_SetRegister(0x0D, 0x0037); /* H-scroll table at $DC00 */
+
+        /* Clear screen */
+        ClearScreen();
+
+        /* Clear object RAM */
+        memset(RAM_ADDR(v_objspace), 0, 0x2000);
+
+        /* Load title palette */
+        PalLoad(palid_Title);
+
+        /* Decompress title tile art to VRAM */
+        if (Nem_TitleFg) {
+            NemDecToVRAM(Nem_TitleFg, ArtTile_Title_Foreground * 32);
+        }
+        if (Nem_TitleSonic) {
+            NemDecToVRAM(Nem_TitleSonic, ArtTile_Title_Sonic * 32);
+        }
+        if (Nem_TitleTM) {
+            NemDecToVRAM(Nem_TitleTM, ArtTile_Title_Trademark * 32);
+        }
+
+        /* Decompress and load title tilemap */
+        if (Eni_Title) {
+            EniDec(Eni_Title, (uint16_t *)RAM_ADDR(v_ram_start), ArtTile_Level);
+            VDP_CopyTilemapToVRAM((uint16_t *)RAM_ADDR(v_ram_start), vram_fg + 0x206, 34, 22);
+        }
+
+        /* Setup title objects */
+        v_generictimer = 376;
+        RAM_BYTE(v_titlesonic) = id_TitleSonic;
+        RAM_BYTE(v_pressstart) = id_PSBTM;
+
+        /* Position title Sonic */
+        RAM_SET_S16(v_titlesonic + 0x08, 0x100);
+        RAM_SET_S16(v_titlesonic + 0x0C, 0x168);
+
+        /* Enable display */
+        v_vdp_buffer1 |= 0x0040;
+
+        init_done = 1;
     }
 
-    WaitForVBlank(); /* renders a frame, advances timing/input */
-    counter++;
-    vdp_test_counter = counter;
+    /* ==================================================================
+       Title screen main loop
+       ================================================================== */
+    v_vblank_routine = id_VBlank_Title;
+    WaitForVBlank();
+    ExecuteObjects();
+    DeformLayers();
+    BuildSprites();
+    PalCycle_Title();
+    RunPLC();
 
-    if (counter == 1) {
-        fprintf(stderr, "[hit] title running\n");
+    /* --- Timer / Start / Demo --- */
+    if (v_generictimer == 0) {
+        GotoDemo();
+        init_done = 0;
+        return;
     }
-    if ((counter % 60) == 0) {
-        printf("[Title] frame %d\n", counter);
+
+    if (v_jpadpress1 & btnStart) {
+        PlayLevel();
+        v_lives = 3;
+        v_rings = 0;
+        v_time = 0;
+        v_score = 0;
+        v_lastspecial = 0;
+        v_emeralds = 0;
+        RAM_SET_U32(v_emldlist, 0);
+        RAM_SET_U32(v_emldlist + 4, 0);
+        v_continues = 0;
+        QueueSound2(bgm_Fade);
+        init_done = 0;
+        return;
     }
+
+    /* Continue looping */
+    v_generictimer--;
 }
 
 static void GM_Level_Process(void) {
@@ -386,6 +535,7 @@ static int InitSDL(void) {
 }
 
 static void CleanupSDL(void) {
+    Data_Quit();
     if (vdp.framebuffer) {
         SDL_DestroyTexture(vdp.framebuffer);
         vdp.framebuffer = NULL;
@@ -408,6 +558,10 @@ int main(int argc, char *argv[]) {
 
     if (!InitSDL()) {
         return 1;
+    }
+
+    if (Data_Init() != 0) {
+        fprintf(stderr, "Warning: some assets failed to load, using fallbacks\n");
     }
 
     ClearCrossResetRAM();

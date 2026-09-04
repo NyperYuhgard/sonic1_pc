@@ -16,16 +16,13 @@ void Input_Init(void) {
 }
 
 void Input_Read(void) {
-    /* Process SDL events to update key states */
+    /* Process SDL events */
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
-            SDL_Event quit;
-            quit.type = SDL_QUIT;
-            SDL_PushEvent(&quit);
+            extern int running;
+            running = 0;
         }
-        /* We handle keyboard state directly below */
-        (void)event;
     }
 
     /* Read keyboard state directly (more reliable than event-based for games) */

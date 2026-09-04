@@ -63,6 +63,9 @@ static inline void RAM_SET_U16(uint32_t addr, uint16_t v) {
     ram[addr]     = (uint8_t)(v >> 8);
     ram[addr + 1] = (uint8_t)(v & 0xFF);
 }
+static inline void RAM_SET_S16(uint32_t addr, int16_t v) {
+    RAM_SET_U16(addr, (uint16_t)v);
+}
 static inline void RAM_SET_U32(uint32_t addr, uint32_t v) {
     ram[addr]     = (uint8_t)(v >> 24);
     ram[addr + 1] = (uint8_t)((v >> 16) & 0xFF);

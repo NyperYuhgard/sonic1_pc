@@ -19,11 +19,23 @@ void Palette_LoadFromData(const uint8_t *data, uint16_t *dest, int count);
 /* Load a palette by ID into v_palette (active palette in RAM) */
 void PalLoad(int index);
 
+/* Initialize palette index from loaded assets */
+void Palette_Init(void);
+
+/* Load a palette by ID into v_palette_fading (fade buffer) */
+void PalLoad_Fade(int index);
+
 /* Palette fading - fade active palette (v_palette) to black over 22 frames */
 void Palette_FadeOut(void);
 
+/* Palette fading - fade active palette in from v_palette_fading */
+void Palette_FadeIn(void);
+
 /* Sega screen palette cycling - returns nonzero while active, 0 when done */
 int PalCycle_Sega(void);
+
+/* Title screen palette cycling - stub */
+void PalCycle_Title(void);
 
 /* Update palette_main from v_palette: called during VBlank transfers */
 void Palette_Update(void);

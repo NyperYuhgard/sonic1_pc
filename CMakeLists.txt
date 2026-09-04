@@ -20,6 +20,7 @@ set(SOURCES
     src/ram.c
     src/decomp.c
     src/data.c
+    src/assets.c
 )
 
 # Executable
