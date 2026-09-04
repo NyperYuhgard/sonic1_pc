@@ -1,0 +1,259 @@
+#include "vdp.h"
+#include "ram.h"
+#include "palette.h"
+#include <SDL2/SDL.h>
+#include <string.h>
+#include <stdio.h>
+
+VDP_State vdp;
+int vdp_test_counter = -1; /* -1 = disabled (normal operation) */
+
+/* Persistent copy of the last rendered frame (ARGB8888) for screenshots */
+static uint32_t last_frame[SCREEN_WIDTH * SCREEN_HEIGHT];
+
+/* Convert MD CRAM color (0BGR) to 32-bit RGBA for SDL.
+   CRAM word layout (bits): ....BBB.GGG.RRR
+     - R = bits 1,2,3   (r0=1, r1=2, r2=3)
+     - G = bits 5,6,7   (g0=5, g1=6, g2=7)
+     - B = bits 9,10,11 (b0=9, b1=10, b2=11)
+   e.g. 0x0EEE = R7 G7 B7 = full white. */
+uint32_t MD_ColorToRGBA(uint16_t md_color) {
+    int r = (md_color >> 1) & 7;
+    int g = (md_color >> 5) & 7;
+    int b = (md_color >> 9) & 7;
+    /* Scale 3-bit to 8-bit (255/7 scale, same as Gens "Full") */
+    r = r * 255 / 7;
+    g = g * 255 / 7;
+    b = b * 255 / 7;
+    return 0xFF000000u | (r << 16) | (g << 8) | b;
+}
+
+void VDP_Init(void) {
+    memset(&vdp, 0, sizeof(vdp));
+    VDP_Reset();
+}
+
+void VDP_Reset(void) {
+    /* Default VDP register values (from VDPSetupArray in sonic.asm) */
+    vdp.registers[0]  = 0x0400;  /* $80: 8-colour mode */
+    vdp.registers[1]  = 0x0474;  /* $81: Mega Drive mode, DMA enable, display on */
+    vdp.registers[2]  = 0x0300;  /* $82: FG nametable at $C000 */
+    vdp.registers[3]  = 0x003C;  /* $83: Window nametable at $A000 */
+    vdp.registers[4]  = 0x0007;  /* $84: BG nametable at $E000 */
+    vdp.registers[5]  = 0x0700;  /* $85: Sprite table at $F800 */
+    vdp.registers[6]  = 0x0000;  /* $86 */
+    vdp.registers[7]  = 0x0000;  /* $87: BG colour */
+    vdp.registers[8]  = 0x0000;  /* $88 */
+    vdp.registers[9]  = 0x0000;  /* $89 */
+    vdp.registers[10] = 0x00FF;  /* $8A: HBlank rate */
+    vdp.registers[11] = 0x0000;  /* $8B: Full screen scroll */
+    vdp.registers[12] = 0x0081;  /* $8C: 40 cell display */
+    vdp.registers[13] = 0x0037;  /* $8D: H-scroll table at $DC00 */
+    vdp.registers[14] = 0x0000;  /* $8E */
+    vdp.registers[15] = 0x0001;  /* $8F: VDP increment = 2 */
+    vdp.registers[16] = 0x0001;  /* $90: 64 cell h-scroll size */
+    vdp.registers[17] = 0x0000;  /* $91 */
+    vdp.registers[18] = 0x0000;  /* $92 */
+    vdp.registers[19] = 0x00FF;  /* $93: DMA length */
+    vdp.registers[20] = 0x0000;  /* $94-95: DMA source */
+    vdp.registers[21] = 0x0000;
+    vdp.registers[22] = 0x0080;  /* $97: DMA mode */
+
+    /* Clear VRAM, CRAM, VSRAM */
+    memset(vdp.vram, 0, VRAM_SIZE);
+    memset(vdp.cram, 0, sizeof(vdp.cram));
+    memset(vdp.vsram, 0, sizeof(vdp.vsram));
+    vdp.status = 0;
+    vdp.vdp_cmd = 0;
+}
+
+void VDP_WriteVRAM(const uint8_t *src, uint32_t vram_addr, uint32_t len) {
+    if (vram_addr + len > VRAM_SIZE) {
+        len = VRAM_SIZE - vram_addr;
+    }
+    memcpy(&vdp.vram[vram_addr], src, len);
+}
+
+void VDP_WriteCRAM(const uint8_t *src, uint32_t cram_addr, uint32_t len) {
+    uint32_t words = len / 2;
+    for (uint32_t i = 0; i < words && (cram_addr + i) < CRAM_SIZE; i++) {
+        uint16_t color = ((uint16_t)src[i * 2] << 8) | src[i * 2 + 1];
+        vdp.cram[cram_addr + i] = color;
+    }
+}
+
+void VDP_FillVRAM(uint8_t byte, uint32_t vram_addr, uint32_t len) {
+    if (vram_addr + len > VRAM_SIZE) {
+        len = VRAM_SIZE - vram_addr;
+    }
+    memset(&vdp.vram[vram_addr], byte, len);
+}
+
+void VDP_SetRegister(uint8_t reg, uint16_t value) {
+    if (reg < 24) {
+        vdp.registers[reg] = value;
+    }
+}
+
+void VDP_ClearScreen(void) {
+    /* Clear FG nametable (vram_fg to vram_fg + plane_size_64x32) */
+    VDP_FillVRAM(0, vram_fg, 64 * 32 * 2);
+    /* Clear BG nametable (vram_bg to vram_bg + plane_size_64x32) */
+    VDP_FillVRAM(0, vram_bg, 64 * 32 * 2);
+
+    /* Clear scroll position buffers */
+    v_scrposy_vdp = 0;
+    v_scrposx_vdp = 0;
+
+    /* Clear sprite table buffer */
+    memset(&ram[v_spritetablebuffer], 0, 0x400);
+    /* Clear H-scroll table buffer */
+    memset(&ram[v_hscrolltablebuffer], 0, 0x400);
+}
+
+void VDP_TransferPalette(void) {
+    memcpy(palette_main, RAM_ADDR(v_palette), sizeof(palette_main));
+}
+
+void VDP_CopyTilemapToVRAM(const uint16_t *source, uint32_t vram_dest,
+                            int width, int height) {
+    for (int row = 0; row < height; row++) {
+        uint32_t dest = vram_dest + (row * 128); /* 64 cells * 2 bytes = 128 bytes per row */
+        for (int col = 0; col < width; col++) {
+            uint16_t tile_entry = source[row * width + col];
+            /* Store big-endian into VRAM (MSB first, like the MD VDP) */
+            vdp.vram[dest + col * 2]     = (uint8_t)(tile_entry >> 8);
+            vdp.vram[dest + col * 2 + 1] = (uint8_t)(tile_entry & 0xFF);
+        }
+    }
+}
+
+/* Render one 32x32-tile nametable plane to a pixel buffer */
+static void render_plane(const uint8_t *nametable, uint16_t *palette,
+                         int scroll_x, int scroll_y,
+                         uint32_t *pixels, int pitch,
+                         int plane_w, int plane_h) {
+    /* nametable: 64x32 entries of 2 bytes each (tile index + flags) */
+    /* Each nametable entry: bits 0-10 = tile number, bit 11 = Y flip,
+       bit 12 = X flip, bit 13-14 = palette, bit 15 = priority */
+
+    for (int ty = 0; ty < plane_h; ty++) {
+        for (int tx = 0; tx < plane_w; tx++) {
+            int idx = (ty * plane_w + tx) * 2;
+            uint16_t tile_entry = ((uint16_t)nametable[idx] << 8) | nametable[idx + 1];
+
+            uint16_t tile_num  = tile_entry & 0x7FF;
+            int x_flip         = (tile_entry >> 11) & 1;
+            int y_flip         = (tile_entry >> 12) & 1;
+            int pal_line       = (tile_entry >> 13) & 3;
+
+            /* Tile art is at tile_num * 32 bytes in VRAM (4bpp, 8x8 = 32 bytes) */
+            const uint8_t *tile_data = &vdp.vram[tile_num * 32];
+
+            /* Render 8x8 pixels of this tile */
+            for (int py = 0; py < 8; py++) {
+                int src_y = y_flip ? (7 - py) : py;
+                /* Each row of a 4bpp tile is 4 bytes (8 pixels, 4 bits each) */
+                const uint8_t *row = &tile_data[src_y * 4];
+
+                for (int px = 0; px < 8; px++) {
+                    int src_x = x_flip ? (7 - px) : px;
+                    /* Extract 4-bit pixel: high nibble of first byte, etc. */
+                    int bitplane = (row[src_x / 2]);
+                    int color_idx;
+                    if (src_x & 1) {
+                        color_idx = bitplane & 0x0F;
+                    } else {
+                        color_idx = (bitplane >> 4) & 0x0F;
+                    }
+
+                    if (color_idx == 0) continue; /* transparent */
+
+                    int screen_x = tx * 8 + px - scroll_x;
+                    int screen_y = ty * 8 + py - scroll_y;
+
+                    if (screen_x < 0 || screen_x >= SCREEN_WIDTH) continue;
+                    if (screen_y < 0 || screen_y >= SCREEN_HEIGHT) continue;
+
+                    uint16_t md_color = palette[pal_line * 16 + color_idx];
+                    pixels[screen_y * (pitch / 4) + screen_x] = MD_ColorToRGBA(md_color);
+                }
+            }
+        }
+    }
+}
+
+void VDP_RenderFrame(SDL_Renderer *renderer) {
+    /* Create or update texture */
+    if (!vdp.framebuffer) {
+        vdp.framebuffer = SDL_CreateTexture(renderer,
+            SDL_PIXELFORMAT_ARGB8888,
+            SDL_TEXTUREACCESS_STREAMING,
+            SCREEN_WIDTH, SCREEN_HEIGHT);
+    }
+
+    void *pixels;
+    int pitch;
+    SDL_LockTexture(vdp.framebuffer, NULL, &pixels, &pitch);
+
+    /* Clear to black */
+    uint32_t *pix = (uint32_t *)pixels;
+    for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
+        pix[i] = 0xFF000000; /* black */
+    }
+
+    /* Get scroll values from hscroll buffer */
+    int16_t fg_scroll_x = RAM_SWORD(v_hscrolltablebuffer);
+    int16_t fg_scroll_y = (int16_t)v_scrposy_vdp;
+    int16_t bg_scroll_x = RAM_SWORD(v_hscrolltablebuffer + 2);
+    int16_t bg_scroll_y = (int16_t)v_bgscrposy_vdp;
+
+    /* Render BG plane (nametable at $E000 in VRAM = offset 0xE000) */
+    render_plane(&vdp.vram[vram_bg], palette_main,
+                 bg_scroll_x, bg_scroll_y,
+                 pix, pitch, 64, 32);
+
+    /* Render FG plane (nametable at $C000 in VRAM = offset 0xC000) */
+    render_plane(&vdp.vram[vram_fg], palette_main,
+                 fg_scroll_x, fg_scroll_y,
+                 pix, pitch, 64, 32);
+
+    /* Optional test overlay: draw a counter as colored bars (debug/title test) */
+    if (vdp_test_counter >= 0) {
+        int w = SCREEN_WIDTH - 20;
+        int bar_w = (vdp_test_counter * w) / 600; /* 0..600 -> 0..full */
+        if (bar_w > w) bar_w = w;
+        for (int y = 20; y < 60 && y < SCREEN_HEIGHT; y++) {
+            for (int x = 10; x < 10 + bar_w && x < SCREEN_WIDTH; x++) {
+                pix[y * SCREEN_WIDTH + x] = 0xFF00FF00; /* green bar */
+            }
+        }
+        /* Also tint the background to prove frames are advancing */
+        if (vdp_test_counter % 60 < 30) {
+            pix[0] = 0xFFFFFFFF;
+        }
+    }
+
+    /* Persist frame for VDP_SaveScreenshot */
+    memcpy(last_frame, pix, SCREEN_WIDTH * SCREEN_HEIGHT * 4);
+
+    SDL_UnlockTexture(vdp.framebuffer);
+
+    /* Present */
+    SDL_RenderCopy(renderer, vdp.framebuffer, NULL, NULL);
+    SDL_RenderPresent(renderer);
+}
+
+void VDP_SaveScreenshot(const char *path) {
+    FILE *f = fopen(path, "wb");
+    if (!f) return;
+    fprintf(f, "P6\n%d %d\n255\n", SCREEN_WIDTH, SCREEN_HEIGHT);
+    for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
+        uint32_t c = last_frame[i];
+        uint8_t r = (c >> 16) & 0xFF;
+        uint8_t g = (c >> 8) & 0xFF;
+        uint8_t b = (c >> 0) & 0xFF;
+        fputc(r, f); fputc(g, f); fputc(b, f);
+    }
+    fclose(f);
+}
