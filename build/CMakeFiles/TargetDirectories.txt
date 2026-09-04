@@ -1,3 +1,0 @@
-/media/nyper/FuckYouMS/Github/GensToPC/Sonic1/sonic1_pc/build/CMakeFiles/sonic1.dir
-/media/nyper/FuckYouMS/Github/GensToPC/Sonic1/sonic1_pc/build/CMakeFiles/edit_cache.dir
-/media/nyper/FuckYouMS/Github/GensToPC/Sonic1/sonic1_pc/build/CMakeFiles/rebuild_cache.dir
