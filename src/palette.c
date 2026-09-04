@@ -27,19 +27,19 @@ static PalEntry pal_index[4];
 void Palette_Init(void) {
     pal_index[0].data = Pal_SegaBG;
     pal_index[0].target_ram_offset = v_palette_line_1;
-    pal_index[0].count = (128 / 4) - 1;
+    pal_index[0].count = (128 / 2) - 1;
 
     pal_index[1].data = Pal_Title;
     pal_index[1].target_ram_offset = v_palette_line_1;
-    pal_index[1].count = (128 / 4) - 1;
+    pal_index[1].count = (128 / 2) - 1;
 
     pal_index[2].data = Pal_LevelSel;
     pal_index[2].target_ram_offset = v_palette_line_1;
-    pal_index[2].count = (128 / 4) - 1;
+    pal_index[2].count = (128 / 2) - 1;
 
     pal_index[3].data = Pal_Sonic;
     pal_index[3].target_ram_offset = v_palette_line_1;
-    pal_index[3].count = (128 / 4) - 1;
+    pal_index[3].count = (128 / 2) - 1;
 }
 
 void PalLoad(int index) {
@@ -49,15 +49,9 @@ void PalLoad(int index) {
     if (!e->data) return;
 
     uint16_t *dest = (uint16_t *)RAM_ADDR(e->target_ram_offset);
-    int longwords = e->count + 1;
-    for (int i = 0; i < longwords * 2; i += 2) {
-        /* Each longword = 2 colors = 4 bytes */
-        uint8_t b0 = e->data[i * 2];
-        uint8_t b1 = e->data[i * 2 + 1];
-        uint8_t b2 = e->data[i * 2 + 2];
-        uint8_t b3 = e->data[i * 2 + 3];
-        dest[i]     = ((uint16_t)b0 << 8) | b1;
-        dest[i + 1] = ((uint16_t)b2 << 8) | b3;
+    int words = e->count + 1;
+    for (int i = 0; i < words; i++) {
+        dest[i] = ((uint16_t)e->data[i * 2] << 8) | e->data[i * 2 + 1];
     }
 }
 
@@ -68,14 +62,9 @@ void PalLoad_Fade(int index) {
     if (!e->data) return;
 
     uint16_t *dest = (uint16_t *)RAM_ADDR(v_palette_fading);
-    int longwords = e->count + 1;
-    for (int i = 0; i < longwords * 2; i += 2) {
-        uint8_t b0 = e->data[i * 2];
-        uint8_t b1 = e->data[i * 2 + 1];
-        uint8_t b2 = e->data[i * 2 + 2];
-        uint8_t b3 = e->data[i * 2 + 3];
-        dest[i]     = ((uint16_t)b0 << 8) | b1;
-        dest[i + 1] = ((uint16_t)b2 << 8) | b3;
+    int words = e->count + 1;
+    for (int i = 0; i < words; i++) {
+        dest[i] = ((uint16_t)e->data[i * 2] << 8) | e->data[i * 2 + 1];
     }
 }
 

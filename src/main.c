@@ -48,8 +48,8 @@ static SDL_Renderer *renderer = NULL;
 int running = 1;
 
 /* ===================================================================
-   Forward declarations for game mode functions
-   =================================================================== */
+    Forward declarations for game mode functions
+    =================================================================== */
 static void GM_Sega_Screen(void);
 static void GM_Title_Screen(void);
 static void GM_Level_Process(void);
@@ -57,6 +57,10 @@ static void GM_Special_Stage(void);
 static void GM_Continue_Screen(void);
 static void GM_Ending_Screen(void);
 static void GM_Credits_Screen(void);
+
+/* Level select */
+static void LevSelTextLoad(void);
+static void LevSelControls(void);
 
 /* ===================================================================
    RAM initialization (from GameInit in sonic.asm)
@@ -306,16 +310,6 @@ static void NewPLC(int id) {
     /* TODO: Implement PLC */
 }
 
-/* Stub: Level select text load */
-static void LevSelTextLoad(void) {
-    /* TODO: Implement level select text */
-}
-
-/* Stub: Level select controls */
-static void LevSelControls(void) {
-    /* TODO: Implement level select controls */
-}
-
 /* Stub: Goto demo mode */
 static void GotoDemo(void) {
     v_gamemode = GM_Sega;
@@ -381,6 +375,17 @@ static void GM_Title_Screen(void) {
             NemDecToVRAM(Nem_TitleTM, ArtTile_Title_Trademark * 32);
         }
 
+        /* Load level select font */
+        if (Art_Text) {
+            uint16_t vram_addr = ArtTile_Level_Select_Font * 32;
+            uint16_t words = (uint16_t)(Art_Text_len / 2 - 1);
+            for (uint16_t i = 0; i <= words; i++) {
+                uint16_t word = ((uint16_t)Art_Text[i * 2] << 8) | Art_Text[i * 2 + 1];
+                vdp.vram[vram_addr + i * 2] = (uint8_t)(word >> 8);
+                vdp.vram[vram_addr + i * 2 + 1] = (uint8_t)(word & 0xFF);
+            }
+        }
+
         /* Decompress and load title tilemap */
         if (Eni_Title) {
             EniDec(Eni_Title, (uint16_t *)RAM_ADDR(v_ram_start), ArtTile_Level);
@@ -421,6 +426,66 @@ static void GM_Title_Screen(void) {
     }
 
     if (v_jpadpress1 & btnStart) {
+        if (f_levselcheat && (v_jpadhold1 & btnA)) {
+            fprintf(stderr, "[Title] Level select activated\n");
+            v_vblank_routine = id_VBlank_Title;
+            WaitForVBlank();
+            fprintf(stderr, "[Title] Pal_LevelSel=%p Art_Text=%p\n", (void *)Pal_LevelSel, (void *)Art_Text);
+            PalLoad(palid_LevelSel);
+            Palette_Update();
+            memset(RAM_ADDR(v_hscrolltablebuffer), 0, 0x400);
+            v_scrposy_vdp = 0;
+            v_scrposx_vdp = 0;
+
+            VDP_FillVRAM(0, vram_bg, plane_size_64x32);
+
+            LevSelTextLoad();
+
+            for (;;) {
+                v_vblank_routine = id_VBlank_Title;
+                WaitForVBlank();
+                LevSelControls();
+                RunPLC();
+
+                if (v_jpadpress1 & (btnA | btnB | btnC | btnStart)) {
+                    if (v_levselitem == levsel_sndtest_row) {
+                        int sound = v_levselsound + 0x80;
+                        if (f_creditscheat && sound == 0x9F) {
+                            v_gamemode = GM_Ending;
+                            v_zone_act = id_EndZ_good;
+                            init_done = 0;
+                            return;
+                        }
+                        if (f_creditscheat && sound == 0x9E) {
+                            v_gamemode = GM_Credits;
+                            QueueSound2(bgm_Credits);
+                            v_creditsnum = 0;
+                            init_done = 0;
+                            return;
+                        }
+                        Sound_Queue(sound);
+                    } else {
+                        uint16_t sel = v_levselitem;
+                        if (sel < LevSel_Ptrs_len / 2) {
+                            uint16_t ptr = LevSel_Ptrs[sel];
+                            if (ptr == (0x8000 | id_SS)) {
+                                v_gamemode = GM_Special;
+                                v_zone_act = 0;
+                                v_lives = 3;
+                                v_rings = 0;
+                                v_time = 0;
+                                v_score = 0;
+                                init_done = 0;
+                                return;
+                            }
+                            v_zone_act = ptr & 0x3FFF;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
         PlayLevel();
         v_lives = 3;
         v_rings = 0;
@@ -438,6 +503,25 @@ static void GM_Title_Screen(void) {
 
     /* Continue looping */
     v_generictimer--;
+
+    /* --- Level select cheat code (D-Pad) --- */
+    {
+        const uint8_t *code = (v_megadrive >= 0) ? LevSelCode_US : LevSelCode_J;
+        uint16_t dcount = v_title_dcount;
+        uint8_t pressed = v_jpadpress1 & btnDir;
+        if (pressed == code[dcount]) {
+            dcount++;
+            if (code[dcount] == 0xFF) {
+                f_levselcheat = 1;
+                dcount = 0;
+                Sound_Queue(sfx_Ring);
+                fprintf(stderr, "[Title] Level select cheat activated\n");
+            }
+            v_title_dcount = dcount;
+        } else if (pressed != 0) {
+            v_title_dcount = 0;
+        }
+    }
 }
 
 static void GM_Level_Process(void) {
@@ -464,8 +548,129 @@ static void GM_Credits_Screen(void) {
 }
 
 /* ===================================================================
-   Game mode array (matches GameModeArray in sonic.asm)
-   =================================================================== */
+    Level Select helpers (from sonic.asm GM_Title)
+    =================================================================== */
+
+static void LevSel_ChgSnd(uint16_t vram_addr, uint16_t tile_attr, uint16_t d0) {
+    d0 &= 0xF;
+    if (d0 >= 0xA) {
+        d0 += 7;
+    }
+    uint16_t tile = d0 | tile_attr;
+    vdp.vram[vram_addr] = (uint8_t)(tile >> 8);
+    vdp.vram[vram_addr + 1] = (uint8_t)(tile & 0xFF);
+}
+
+static void LevSel_ChgLine(const uint8_t *text, uint16_t vram_base, uint16_t tile_attr) {
+    for (int i = 0; i < levsel_line_length; i++) {
+        uint16_t vram_addr = vram_base + i * 2;
+        uint8_t ch = text[i];
+        uint16_t tile;
+        if (ch >= 0x80) {
+            tile = 0;
+        } else {
+            tile = ch | tile_attr;
+        }
+        vdp.vram[vram_addr] = (uint8_t)(tile >> 8);
+        vdp.vram[vram_addr + 1] = (uint8_t)(tile & 0xFF);
+    }
+}
+
+static const uint8_t LevelMenuText[levsel_line_count * levsel_line_length] = {
+    0x17,0x1D,0x0E,0x0E,0x1C,0xFF,0x18,0x19,0x1B,0x1B,0xFF,0x10,0x1D,0x1C,0x0E,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x01,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x02,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x03,
+    0x1D,0x11,0x1D,0x12,0x1B,0x0E,0xFF,0x10,0x1D,0x1C,0x0E,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x01,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x02,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x03,
+    0x1F,0x1E,0x1D,0x19,0x1C,0x17,0xFF,0x0F,0x11,0x1D,0x14,0xFF,0x10,0x1D,0x1C,0x0E,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x01,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x02,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x03,
+    0x1B,0x11,0x12,0x0F,0x1D,0x19,0x1C,0x20,0x18,0xFF,0x10,0x1D,0x1C,0x0E,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x01,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x02,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x03,
+    0x1F,0x20,0x11,0x1D,0xFF,0x1B,0x19,0x17,0x18,0x20,0xFF,0x10,0x1D,0x1C,0x0E,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x01,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x02,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x03,
+    0x1F,0x13,0x1D,0x11,0x1E,0xFF,0x12,0x1D,0x11,0x19,0x1C,0xFF,0x10,0x1D,0x1C,0x0E,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x01,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x02,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0x03,
+    0x15,0x19,0x1C,0x11,0x1B,0xFF,0x10,0x1D,0x1C,0x0E,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+    0x1F,0x1E,0x0E,0x13,0x19,0x11,0x1B,0xFF,0x1F,0x20,0x11,0x17,0x0E,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+    0x1F,0x1D,0x21,0x1C,0x14,0xFF,0x1F,0x0E,0x1B,0x0E,0x13,0x20,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF
+};
+
+static void LevSelTextLoad(void) {
+    uint16_t vram_base = levsel_vram_main;
+
+    for (int line = 0; line < levsel_line_count; line++) {
+        const uint8_t *text = LevelMenuText + line * levsel_line_length;
+        LevSel_ChgLine(text, vram_base + line * 128, levsel_white);
+    }
+
+    uint16_t selected = v_levselitem;
+    if (selected < levsel_line_count) {
+        const uint8_t *text = LevelMenuText + selected * levsel_line_length;
+        LevSel_ChgLine(text, vram_base + selected * 128, levsel_yellow);
+    }
+
+    uint16_t tile_attr = (v_levselitem == levsel_sndtest_row) ? levsel_yellow : levsel_white;
+    uint16_t vram_num = levsel_vram_sndtestnum;
+    uint16_t sound = v_levselsound + 0x80;
+
+    LevSel_ChgSnd(vram_num, tile_attr, sound >> 4);
+    LevSel_ChgSnd(vram_num + 2, tile_attr, sound & 0xF);
+}
+
+static void LevSelControls(void) {
+    uint8_t pressed = v_jpadpress1 & (btnUp | btnDn);
+    if (pressed) {
+        v_levseldelay = 11;
+        uint8_t held = v_jpadhold1 & (btnUp | btnDn);
+        if (held) {
+            uint16_t sel = v_levselitem;
+            if (v_jpadhold1 & btnUp) {
+                sel--;
+                if (sel >= levsel_line_count) sel = levsel_line_count - 1;
+            }
+            if (v_jpadhold1 & btnDn) {
+                sel++;
+                if (sel >= levsel_line_count) sel = 0;
+            }
+            v_levselitem = sel;
+            LevSelTextLoad();
+        }
+        return;
+    }
+
+    if (v_levseldelay > 0) {
+        v_levseldelay--;
+        if (v_levseldelay > 0) {
+            return;
+        }
+    }
+
+    if (v_levselitem == levsel_sndtest_row) {
+        uint8_t lr = v_jpadpress1 & (btnL | btnR);
+        if (lr) {
+            uint16_t sound = v_levselsound;
+            if (v_jpadpress1 & btnL) {
+                sound--;
+                if (sound > sfx__Last - 0x80) sound = sfx__Last - 0x80;
+            }
+            if (v_jpadpress1 & btnR) {
+                sound++;
+                if (sound > sfx__Last - 0x80) sound = 0;
+            }
+            v_levselsound = sound;
+            LevSelTextLoad();
+        }
+    }
+}
+
+/* ===================================================================
+    Game mode array (matches GameModeArray in sonic.asm)
+    =================================================================== */
 typedef void (*GameModeFunc)(void);
 
 static const GameModeFunc game_mode_table[] = {

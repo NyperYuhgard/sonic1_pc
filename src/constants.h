@@ -712,6 +712,15 @@ enum {
 
 /* Level select */
 #define levsel_sndtest_row                0x14
+#define levsel_line_count                 21
+#define levsel_line_length                24
+#define levsel_sndtest_col                (levsel_line_length - 8)
+#define levsel_start_row                  4
+#define levsel_start_col                  8
+#define levsel_vram_main                  (vram_bg + (levsel_start_row << 7) + (levsel_start_col << 1))
+#define levsel_vram_sndtestnum            (levsel_vram_main + (levsel_sndtest_row << 7) + (levsel_sndtest_col << 1))
+#define levsel_white                      (ArtTile_Level_Select_Font | Tile_Pal4 | Tile_Prio)
+#define levsel_yellow                     (ArtTile_Level_Select_Font | Tile_Pal3 | Tile_Prio)
 
 /* -- Continue Screen ----------------------------------------------------- */
 #define ArtTile_Continue_Sonic            0x500

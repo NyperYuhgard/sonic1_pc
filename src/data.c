@@ -211,6 +211,11 @@ int Data_Init(void) {
         Nem_CreditText_len = 0;
     }
 
+    if (load_asset("artunc/Level Select & Debug Text.unc", &Art_Text, &Art_Text_len) != 0) {
+        Art_Text = NULL;
+        Art_Text_len = 0;
+    }
+
     Palette_Init();
     return 0;
 }
