@@ -74,6 +74,12 @@ size_t   Eni_Title_len = 0;
 uint8_t *Nem_GHZ_1st = NULL;
 size_t   Nem_GHZ_1st_len = 0;
 
+uint8_t *Level_GHZ1 = NULL;
+size_t   Level_GHZ1_len = 0;
+
+uint8_t *Level_GHZbg = NULL;
+size_t   Level_GHZbg_len = 0;
+
 /* ============================================================================
    Asset loading
    ============================================================================ */
@@ -133,6 +139,10 @@ int Data_Init(void) {
     Eni_Title_len = 0;
     Nem_GHZ_1st = NULL;
     Nem_GHZ_1st_len = 0;
+    Level_GHZ1 = NULL;
+    Level_GHZ1_len = 0;
+    Level_GHZbg = NULL;
+    Level_GHZbg_len = 0;
 
     if (load_asset("palette/sega_bg.bin", &Pal_SegaBG, &Pal_SegaBG_len) != 0) {
         Pal_SegaBG = NULL;
@@ -214,6 +224,11 @@ int Data_Init(void) {
         Map_PSB_len = 0;
     }
 
+    if (load_asm_asset("maps/credits.asm", &Map_Cred, &Map_Cred_len, 1) != 0) {
+        Map_Cred = NULL;
+        Map_Cred_len = 0;
+    }
+
     if (load_asset("tilemaps/title.eni", &Eni_Title, &Eni_Title_len) != 0) {
         Eni_Title = NULL;
         Eni_Title_len = 0;
@@ -227,6 +242,16 @@ int Data_Init(void) {
     if (load_asset("map256/ghz.kos", &Blk256_GHZ, &Blk256_GHZ_len) != 0) {
         Blk256_GHZ = NULL;
         Blk256_GHZ_len = 0;
+    }
+
+    if (load_asset("levels/ghz1.bin", &Level_GHZ1, &Level_GHZ1_len) != 0) {
+        Level_GHZ1 = NULL;
+        Level_GHZ1_len = 0;
+    }
+
+    if (load_asset("levels/ghzbg.bin", &Level_GHZbg, &Level_GHZbg_len) != 0) {
+        Level_GHZbg = NULL;
+        Level_GHZbg_len = 0;
     }
 
     if (load_asset("artnem/jap_credits.nem", &Nem_JapNames, &Nem_JapNames_len) != 0) {
@@ -326,6 +351,9 @@ size_t   Map_TSon_len = 0;
 
 uint8_t *Map_PSB = NULL;
 size_t   Map_PSB_len = 0;
+
+uint8_t *Map_Cred = NULL;
+size_t   Map_Cred_len = 0;
 
 /* ===========================================================================
    ASM parser for original Sonic 1 anim/map assets

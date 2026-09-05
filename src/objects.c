@@ -164,12 +164,50 @@ static void PSBTM_Main(void *obj) {
 
 /* ===========================================================================
    CreditsText object (id_CreditsText = $8A)
-   "SONIC TEAM PRESENTS" text - minimal stub
+   "SONIC TEAM PRESENTS" and credits (from _incObj/8A Credits and Sonic
+   Team Presents.asm)
    =========================================================================== */
 static void CreditsText_Main(void *obj) {
     uint8_t *o = (uint8_t *)obj;
-    obFrame(o) = 0; /* static frame */
-    DisplaySprite(obj);
+
+    switch (obRoutine(o)) {
+        case 0: /* Cred_Main: routine 0 */
+            obRoutine(o) += 2; /* advance to routine 2 (Cred_Display) */
+
+            /* Set X-position to horizontally centered ($120 = (320/2)+$80) */
+            obX(o) = (int16_t)((320 / 2) + 0x80);
+            /* Set Y-position to vertically centered ($F0 = (224/2)+$80) */
+            obScreenY(o) = (int16_t)((224 / 2) + 0x80);
+
+            obMap(o) = (uint32_t)(uintptr_t)Map_Cred;
+            obGfx(o) = ArtTile_Credits_Font; /* default art tile offset */
+
+            /* Load credits page index (doesn't reset between game mode changes) */
+            obFrame(o) = (uint8_t)(RAM_WORD(v_creditsnum) & 0xFF);
+
+            /* Set to screen coordinates positioning mode, top priority */
+            obRender(o) = sprite_cam_screen;
+            obPriority(o) = 0;
+
+            if (v_gamemode == 0x04) { /* id_Title (GM_Title = $04) */
+                obGfx(o) = ArtTile_Sonic_Team_Font; /* alternate art tile for title screen */
+                obFrame(o) = 0x0A;                  /* "SONIC TEAM PRESENTS" frame */
+
+                /* Hidden Japanese credits cheat: A+B+C+Down ($72) held */
+                if (f_creditscheat && (v_jpadhold1 == (btnABC | btnDn))) {
+                    RAM_WORD(v_palette_fading_line_3)     = cWhite; /* 1st entry = white */
+                    RAM_WORD(v_palette_fading_line_3 + 2) = 0x880; /* 2nd entry = cyan */
+                    DeleteObject(obj); /* delete STP object for hidden Japanese credits */
+                    return;
+                }
+            }
+            /* fall through to Cred_Display */
+            __attribute__((fallthrough));
+
+        default: /* Cred_Display: routine 2 - just display credits sprite */
+            DisplaySprite(obj);
+            break;
+    }
 }
 
 /* ===========================================================================

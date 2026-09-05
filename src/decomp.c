@@ -313,3 +313,75 @@ void EniDec(const uint8_t *source, uint16_t *dest, uint16_t starting_art_tile) {
     #undef ENI_REFILL
     #undef ENI_INLINE
 }
+
+
+/* ===========================================================================
+   Kosinski Decompression (from _inc/Decompression/Kosinski Decompression.asm)
+   Decompresses to a RAM byte buffer. No length header.
+   Description field: 16-bit little-endian (first byte = LSB), bits LSB->MSB,
+   refilled every 16 bits. Bit 1 = literal copy; bit 0 = RLE.
+   =========================================================================== */
+
+void KosDec(const uint8_t *source, uint8_t *dest) {
+    const uint8_t *src = source;
+    uint8_t *dst = dest;
+
+    /* First description field (little-endian: src[0] is the high byte,
+       and since bits are consumed LSB first, src[1] feeds the first bit) */
+    uint16_t d5 = (uint16_t)(src[0] | ((uint16_t)src[1] << 8));
+    src += 2;
+    int d4 = 15;            /* counts down the 16 bits of the description field */
+    int bit;
+
+#define KOS_READ_BIT()                                                    \
+    ((bit = (d5 & 1)),                                                    \
+     (d5 >>= 1),                                                          \
+     ((--d4 < 0) ? (d5 = (uint16_t)(src[0] | ((uint16_t)src[1] << 8)),    \
+                    src += 2, d4 = 15, 0)                                 \
+                 : 0),                                                    \
+     (bit))
+
+    for (;;) {
+        /* Kos_Loop: literal / RLE decision bit */
+        if (KOS_READ_BIT() == 0) {
+            /* Kos_RLE */
+            int32_t d3;
+            int32_t d2;
+
+            if (KOS_READ_BIT() != 0) {
+                /* Kos_SeparateRLE: offset from two bytes (+ optional count) */
+                int d0 = *src++;
+                int d1 = *src++;
+                /* d2 = (int16)(0xE000 | (d1<<5) | d0) — negative back-reference */
+                d2 = (int16_t)(0xE000 | ((d1 & 0xF8) << 5) | d0);
+
+                if ((d1 & 7) != 0) {
+                    d3 = (d1 & 7) + 1;
+                } else {
+                    /* Kos_SeparateRLE2: read the repeat count separately */
+                    d1 = *src++;
+                    if (d1 == 0) return;      /* 0 indicates end of data */
+                    if (d1 == 1) continue;    /* 1 indicates new description field */
+                    d3 = d1;
+                }
+            } else {
+                /* Normal RLE: 2-bit repeat count + 1-byte offset */
+                d3 = KOS_READ_BIT();          /* high repeat count bit */
+                d3 = (d3 << 1) | KOS_READ_BIT(); /* low repeat count bit */
+                d3 += 1;
+                /* moveq #-1,d2; move.b (a0)+,d2 → 0xFFxx, always negative */
+                d2 = (int16_t)(0xFF00 | *src++);
+            }
+
+            /* Kos_RLELoop: copy d3+1 times from (dst + d2) */
+            do {
+                *dst++ = dst[d2];
+            } while (--d3 != -1);
+        } else {
+            /* Literal: copy byte as-is */
+            *dst++ = *src++;
+        }
+    }
+
+#undef KOS_READ_BIT
+}

@@ -68,6 +68,12 @@ extern size_t   Eni_Title_len;
 extern uint8_t *Nem_GHZ_1st;
 extern size_t   Nem_GHZ_1st_len;
 
+extern uint8_t *Level_GHZ1;
+extern size_t   Level_GHZ1_len;
+
+extern uint8_t *Level_GHZbg;
+extern size_t   Level_GHZbg_len;
+
 /* Cheat codes */
 extern const uint8_t LevSelCode_US[];
 extern const uint32_t LevSelCode_US_len;
@@ -91,6 +97,9 @@ extern size_t   Map_TSon_len;
 
 extern uint8_t *Map_PSB;
 extern size_t   Map_PSB_len;
+
+extern uint8_t *Map_Cred;
+extern size_t   Map_Cred_len;
 
 /* Initialize all assets from the assets/ directory.
    Returns 0 on success, -1 on any failure. */
