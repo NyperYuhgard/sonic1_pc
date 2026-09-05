@@ -493,8 +493,22 @@ enum {
 #define flg__Last       0xE4
 
 /* ---------------------------------------------------------------------------
-   Boss locations
-   --------------------------------------------------------------------------- */
+    Pattern Load Cue IDs
+    --------------------------------------------------------------------------- */
+#define plcid_Main             0
+#define plcid_Main2            1
+#define plcid_Explode          2
+#define plcid_GHZAnimals       0x15
+#define plcid_Signpost         0x1A
+#define plcid_SpecialStage     0x1B
+#define plcid_Boss             0x1C
+#define plcid_Ending           0x1D
+#define plcid_TryAgain         0x1E
+#define plcid_SSResult         0x1F
+
+/* ---------------------------------------------------------------------------
+    Boss locations
+    --------------------------------------------------------------------------- */
 /* Green Hill Zone */
 #define boss_ghz_x      0x2960
 #define boss_ghz_y      0x300

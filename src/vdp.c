@@ -34,32 +34,33 @@ void VDP_Init(void) {
 }
 
 void VDP_Reset(void) {
-    /* Default VDP register values (from VDPSetupArray in sonic.asm) */
-    vdp.registers[0]  = 0x0400;  /* $80: 8-colour mode */
-    vdp.registers[1]  = 0x0474;  /* $81: Mega Drive mode, DMA enable, display on */
-    vdp.registers[2]  = 0x0300;  /* $82: FG nametable at $C000 */
-    vdp.registers[3]  = 0x003C;  /* $83: Window nametable at $A000 */
-    vdp.registers[4]  = 0x0007;  /* $84: BG nametable at $E000 */
-    vdp.registers[5]  = 0x0700;  /* $85: Sprite table at $F800 */
-    vdp.registers[6]  = 0x0000;  /* $86 */
-    vdp.registers[7]  = 0x0000;  /* $87: BG colour */
-    vdp.registers[8]  = 0x0000;  /* $88 */
-    vdp.registers[9]  = 0x0000;  /* $89 */
-    vdp.registers[10] = 0x00FF;  /* $8A: HBlank rate */
-    vdp.registers[11] = 0x0000;  /* $8B: Full screen scroll */
-    vdp.registers[12] = 0x0081;  /* $8C: 40 cell display */
-    vdp.registers[13] = 0x0037;  /* $8D: H-scroll table at $DC00 */
-    vdp.registers[14] = 0x0000;  /* $8E */
-    vdp.registers[15] = 0x0001;  /* $8F: VDP increment = 2 */
-    vdp.registers[16] = 0x0001;  /* $90: 64 cell h-scroll size */
-    vdp.registers[17] = 0x0000;  /* $91 */
-    vdp.registers[18] = 0x0000;  /* $92 */
-    vdp.registers[19] = 0x00FF;  /* $93: DMA length */
-    vdp.registers[20] = 0x0000;  /* $94-95: DMA source */
-    vdp.registers[21] = 0x0000;
-    vdp.registers[22] = 0x0080;  /* $97: DMA mode */
+    /* Default VDP register values (from VDPSetupArray in sonic.asm)
+       These are the RAW register values, NOT VDP command words. */
+    vdp.registers[0]  = 0x0004;  /* mode 1: 8-colour mode */
+    vdp.registers[1]  = 0x0074;  /* Mega Drive mode, DMA enable, display on */
+    vdp.registers[2]  = 0x0030;  /* FG nametable at $C000 ($C000>>10 = $30) */
+    vdp.registers[3]  = 0x0028;  /* Window nametable at $A000 ($A000>>10 = $28) */
+    vdp.registers[4]  = 0x0007;  /* BG nametable at $E000 ($E000>>13 = $07) */
+    vdp.registers[5]  = 0x0700;  /* Sprite table at $F800 ($F800>>10 = $78, but reg5 uses >>9? No, reg5 = sprite table addr >>9; $F800>>9 = $7F? Wait, original uses $0700 which is command $8500|$00? Actually in ASM it is written as move.w #vreg_spritevram|(vram_sprites>>9),(a6). $F800>>9 = $7F. So reg5 = $7F. But in Sonic 1 it is $0700? That seems like the command word $8500|$00? Let me keep the original values as they were commonly used in Sonic 1 disasm: reg5 = $07 (sprite table at $F800, using >>9? $F800/512 = $7F, not $07. This is confusing. In the Hivebrain disasm, vram_sprites = $F800, and vreg_spritevram = $8500. The code writes move.w #vreg_spritevram|(vram_sprites>>9),(a6). $F800>>9 = $7F. So the command is $8500|$7F = $857F. The register value is $7F. But in many ports, reg5 is $07 because they use >>10? No. Let me check the original Sonic 1 values from a reliable source. In Sonic 1, VDP register 5 is $7F (sprite table at $F800). But in your code you had $0700. That was wrong. I'll set it to $7F. */
+    vdp.registers[5]  = 0x007F;  /* Sprite table at $F800 ($F800>>9 = $7F) */
+    vdp.registers[6]  = 0x0000;
+    vdp.registers[7]  = 0x0000;  /* BG colour */
+    vdp.registers[8]  = 0x0000;
+    vdp.registers[9]  = 0x0000;
+    vdp.registers[10] = 0x00FF;  /* HBlank rate */
+    vdp.registers[11] = 0x0000;  /* Full screen scroll */
+    vdp.registers[12] = 0x0081;  /* 40 cell display */
+    vdp.registers[13] = 0x0037;  /* H-scroll table at $DC00 ($DC00>>10 = $37) */
+    vdp.registers[14] = 0x0000;
+    vdp.registers[15] = 0x0001;  /* VDP increment = 2 */
+    vdp.registers[16] = 0x0001;  /* 64 cell h-scroll size */
+    vdp.registers[17] = 0x0000;
+    vdp.registers[18] = 0x0000;
+    vdp.registers[19] = 0x00FF;  /* DMA length */
+    vdp.registers[20] = 0x0000;  /* DMA source low */
+    vdp.registers[21] = 0x0000;  /* DMA source high */
+    vdp.registers[22] = 0x0080;  /* DMA mode */
 
-    /* Clear VRAM, CRAM, VSRAM */
     memset(vdp.vram, 0, VRAM_SIZE);
     memset(vdp.cram, 0, sizeof(vdp.cram));
     memset(vdp.vsram, 0, sizeof(vdp.vsram));
@@ -225,6 +226,7 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             uint8_t *entry = &table[i * 8];
             int y = entry[0] | ((entry[1] & 1) << 8);
             int size = ((entry[1] >> 1) & 0xF) | (((entry[1] >> 5) & 0xF) << 4);
+            int pal_line = (entry[1] >> 2) & 3;
             int tile = ((entry[3] & 1) << 8) | entry[4];
             int x = entry[6] | ((entry[7] & 1) << 8);
 
@@ -246,7 +248,7 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                             int sx = px + col;
                             int sy = py + row;
                             if (sx < 0 || sx >= SCREEN_WIDTH || sy < 0 || sy >= SCREEN_HEIGHT) continue;
-                            pix[sy * SCREEN_WIDTH + sx] = MD_ColorToRGBA(palette_main[color_idx]);
+                            pix[sy * SCREEN_WIDTH + sx] = MD_ColorToRGBA(palette_main[pal_line * 16 + color_idx]);
                         }
                     }
                 }

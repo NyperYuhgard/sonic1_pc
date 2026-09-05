@@ -207,13 +207,13 @@ static void GM_Sega_Screen(void) {
     VDP_ClearScreen();
 
     /* Set VDP registers for Sega screen (from GM_Sega) */
-    VDP_SetRegister(0, 0x0400 | 0x04); /* mode 1: 8-colour mode */
+    VDP_SetRegister(0, 0x04); /* mode 1: 8-colour mode */
     VDP_SetRegister(1, v_vdp_buffer1 | 0x34);
-    VDP_SetRegister(2, 0x0300);    /* FG nametable at $C000 */
-    VDP_SetRegister(3, 0x003C);    /* Window nametable at $A000 */
-    VDP_SetRegister(4, 0x0007);    /* BG nametable at $E000 */
-    VDP_SetRegister(7, 0x0000);    /* background colour */
-    VDP_SetRegister(0x0B, 0x0000); /* full-screen vertical scrolling */
+    VDP_SetRegister(2, 0x30);    /* FG nametable at $C000 */
+    VDP_SetRegister(3, 0x28);    /* Window nametable at $A000 */
+    VDP_SetRegister(4, 0x07);    /* BG nametable at $E000 */
+    VDP_SetRegister(7, 0x00);    /* background colour */
+    VDP_SetRegister(0x0B, 0x00); /* full-screen vertical scrolling */
 
     /* Decompress Sega logo tiles directly to VRAM */
     NemDecToVRAM(Nem_SegaLogo, ArtTile_Sega_Tiles * 32);
@@ -230,6 +230,7 @@ static void GM_Sega_Screen(void) {
 
     /* Load Sega screen palette directly to active palette */
     PalLoad(palid_SegaBG);
+    Palette_Update();
 
     /* Initialize palette cycle variables */
     v_pcyc_num  = (uint16_t)(int16_t)(-10);
@@ -249,7 +250,7 @@ static void GM_Sega_Screen(void) {
        Sound driver is stubbed, so this is just one frame. */
     v_vblank_routine = id_VBlank_SegaPCM;
     WaitForVBlank();
-    VDP_SaveScreenshot("/tmp/sega_final.ppm"); /* TEMP debug */
+    VDP_SaveScreenshot("../garbage/sega_final.ppm"); /* TEMP debug */
 
     /* --- Post-chant wait (30 frames or until Start pressed) --- */
     v_generictimer = 30;
@@ -332,8 +333,6 @@ static void GM_Title_Screen(void) {
     static int init_done = 0;
 
     if (!init_done) {
-        fprintf(stderr, "[Title] init start\n");
-
         /* Stop music and clear PLC */
         QueueSound2(bgm_Stop);
         ClearPLC();
@@ -341,68 +340,179 @@ static void GM_Title_Screen(void) {
         /* Fade out from previous game mode */
         Palette_FadeOut();
 
-        /* Disable display during setup */
+        /* Disable display for screen setup */
         v_vdp_buffer1 &= ~0x0040;
 
         /* Screen setup */
-        VDP_SetRegister(0, 0x0400 | 0x04); /* 8-colour mode */
+        VDP_SetRegister(0, 0x04); /* 8-colour mode */
         VDP_SetRegister(1, v_vdp_buffer1 | 0x34);
-        VDP_SetRegister(2, 0x0300);    /* FG nametable at $C000 */
-        VDP_SetRegister(3, 0x003C);    /* Window nametable at $A000 */
-        VDP_SetRegister(4, 0x0007);    /* BG nametable at $E000 */
-        VDP_SetRegister(7, 0x0000);    /* background colour */
-        VDP_SetRegister(0x0B, 0x0000); /* full-screen vertical scrolling */
-        VDP_SetRegister(0x0C, 0x0081); /* 40-cell display */
-        VDP_SetRegister(0x0D, 0x0037); /* H-scroll table at $DC00 */
+        VDP_SetRegister(2, 0x30);    /* FG nametable at $C000 */
+        VDP_SetRegister(3, 0x28);    /* Window nametable at $A000 */
+        VDP_SetRegister(4, 0x07);    /* BG nametable at $E000 */
+        VDP_SetRegister(7, 0x00);    /* background colour */
+        VDP_SetRegister(0x0B, 0x00); /* full-screen vertical scrolling */
+        VDP_SetRegister(0x0C, 0x81); /* 40-cell display */
+        VDP_SetRegister(0x0D, 0x37); /* H-scroll table at $DC00 */
 
-        /* Clear screen */
-        ClearScreen();
-
-        /* Clear object RAM */
+        /* Clear screen and object RAM */
+        VDP_ClearScreen();
         memset(RAM_ADDR(v_objspace), 0, 0x2000);
 
-        /* Load title palette */
-        PalLoad(palid_Title);
+        /* Load hidden Japanese credits patterns */
+        if (Nem_JapNames) {
+            NemDecToVRAM(Nem_JapNames, ArtTile_Title_Japanese_Text * tile_size);
+        }
 
-        /* Decompress title tile art to VRAM */
+        /* Load SONIC TEAM PRESENTS font */
+        if (Nem_CreditText) {
+            NemDecToVRAM(Nem_CreditText, ArtTile_Sonic_Team_Font * tile_size);
+        }
+
+        /* Decompress and load hidden Japanese credits tilemap */
+        if (Eni_JapNames) {
+            static uint16_t eni_buffer[40 * 28];
+            EniDec(Eni_JapNames, eni_buffer, ArtTile_Title_Japanese_Text);
+            VDP_CopyTilemapToVRAM(eni_buffer, vram_fg, 40, 28);
+        }
+
+        /* Clear palette fade buffer and load Sonic palette for fade-in */
+        memset(RAM_ADDR(v_palette_fading), 0, sizeof(palette_fading));
+        PalLoad_Fade(palid_Sonic);
+
+        /* Create SONIC TEAM PRESENTS object */
+        RAM_BYTE(v_sonicteam) = id_CreditsText;
+
+        /* Execute objects and build sprites for STP */
+        ExecuteObjects();
+        BuildSprites();
+
+        /* Fade in STP screen */
+        Palette_FadeIn();
+
+        /* -------------------------------------------------------------------
+           Load main title screen patterns while STP is shown
+           ------------------------------------------------------------------- */
         if (Nem_TitleFg) {
-            NemDecToVRAM(Nem_TitleFg, ArtTile_Title_Foreground * 32);
+            NemDecToVRAM(Nem_TitleFg, ArtTile_Title_Foreground * tile_size);
         }
         if (Nem_TitleSonic) {
-            NemDecToVRAM(Nem_TitleSonic, ArtTile_Title_Sonic * 32);
+            NemDecToVRAM(Nem_TitleSonic, ArtTile_Title_Sonic * tile_size);
         }
         if (Nem_TitleTM) {
-            NemDecToVRAM(Nem_TitleTM, ArtTile_Title_Trademark * 32);
+            NemDecToVRAM(Nem_TitleTM, ArtTile_Title_Trademark * tile_size);
         }
 
-        /* Load level select font */
+        /* Load level select font (uncompressed) */
         if (Art_Text) {
-            uint16_t vram_addr = ArtTile_Level_Select_Font * 32;
+            uint16_t vram_addr = ArtTile_Level_Select_Font * tile_size;
             uint16_t words = (uint16_t)(Art_Text_len / 2 - 1);
             for (uint16_t i = 0; i <= words; i++) {
                 uint16_t word = ((uint16_t)Art_Text[i * 2] << 8) | Art_Text[i * 2 + 1];
-                vdp.vram[vram_addr + i * 2] = (uint8_t)(word >> 8);
+                vdp.vram[vram_addr + i * 2]     = (uint8_t)(word >> 8);
                 vdp.vram[vram_addr + i * 2 + 1] = (uint8_t)(word & 0xFF);
             }
         }
 
-        /* Decompress and load title tilemap */
-        if (Eni_Title) {
-            EniDec(Eni_Title, (uint16_t *)RAM_ADDR(v_ram_start), ArtTile_Level);
-            VDP_CopyTilemapToVRAM((uint16_t *)RAM_ADDR(v_ram_start), vram_fg + 0x206, 34, 22);
+        /* Miscellaneous initializations */
+        RAM_WORD(v_lastlamp) = 0;
+        RAM_WORD(v_debuguse) = 0;
+        RAM_WORD(f_demo) = 0;
+        RAM_WORD(v_unused2) = 0;
+        v_zone_act = id_GHZ_act1;
+        v_pcyc_time = 0;
+
+        LevelSizeLoad();
+        DeformLayers();
+
+        /* Load GHZ 16x16 block mappings */
+        if (Blk16_GHZ) {
+            uint16_t *buf = (uint16_t *)RAM_ADDR(v_16x16);
+            EniDec(Blk16_GHZ, buf, ArtTile_Level);
         }
 
-        /* Setup title objects */
+        /* Load GHZ 256x256 chunk mappings */
+        if (Blk256_GHZ) {
+            uint8_t *buf = RAM_ADDR(v_256x256);
+            /* KosDec not implemented; load raw data into buffer for now */
+            size_t copy_len = Blk256_GHZ_len;
+            if (copy_len > chunk_size * 0x52) copy_len = chunk_size * 0x52;
+            memcpy(buf, Blk256_GHZ, copy_len);
+        }
+
+        LevelLayoutLoad();
+
+        /* Fade out STP screen */
+        Palette_FadeOut();
+
+        /* -------------------------------------------------------------------
+           Main title screen setup
+           ------------------------------------------------------------------- */
+        VDP_ClearScreen();
+
+        /* Draw initial background layer (GHZ chunks) */
+        DrawChunks();
+
+        /* Decompress and load title emblem tilemap */
+        if (Eni_Title) {
+            static uint16_t eni_buffer[34 * 22];
+            EniDec(Eni_Title, eni_buffer, ArtTile_Level);
+            VDP_CopyTilemapToVRAM(eni_buffer, vram_fg + 0x206, 34, 22);
+        }
+
+        /* Load GHZ patterns */
+        if (Nem_GHZ_1st) {
+            NemDecToVRAM(Nem_GHZ_1st, ArtTile_Level * tile_size);
+        }
+
+        /* Load title palette to fade buffer */
+        PalLoad_Fade(palid_Title);
+
+        /* Start title music */
+        QueueSound2(bgm_Title);
+
+        /* Disable debug mode */
+        RAM_BYTE(f_debugmode) = 0;
+
+        /* Title screen timer */
         v_generictimer = 376;
+
+        /* Clear SONIC TEAM PRESENTS object RAM (partial clear, matches original bug) */
+        memset(RAM_ADDR(v_sonicteam), 0, object_size / 2);
+
+        /* Create title screen objects */
         RAM_BYTE(v_titlesonic) = id_TitleSonic;
         RAM_BYTE(v_pressstart) = id_PSBTM;
 
-        /* Position title Sonic */
-        RAM_SET_S16(v_titlesonic + 0x08, 0x100);
-        RAM_SET_S16(v_titlesonic + 0x0C, 0x168);
+        /* On non-Japanese consoles, load TM object */
+        if (v_megadrive >= 0) {
+            RAM_BYTE(v_titletm) = id_PSBTM;
+            obFrame(&ram[v_titletm]) = 3; /* TM frame */
+        }
 
-        /* Enable display */
+        /* Masking sprites object */
+        RAM_BYTE(v_ttlsonichide) = id_PSBTM;
+        obFrame(&ram[v_ttlsonichide]) = 2; /* hide-torso frame */
+
+        /* Position v_player for background scroll (matches LevSz_StartLoc for title) */
+        obX(&ram[v_player]) = (int16_t)0x50;
+        obY(&ram[v_player]) = (int16_t)0x3B0;
+
+        /* Execute objects and build sprites before fade-in */
+        ExecuteObjects();
+        DeformLayers();
+        BuildSprites();
+
+        /* Queue main PLC (rings, etc.) */
+        NewPLC(plcid_Main);
+
+        /* Clear cheat counters */
+        v_title_dcount = 0;
+        v_title_ccount = 0;
+
+        /* Enable display and fade in */
         v_vdp_buffer1 |= 0x0040;
+        VDP_SetRegister(1, v_vdp_buffer1 | 0x34);
+        Palette_FadeIn();
 
         init_done = 1;
     }
@@ -418,20 +528,25 @@ static void GM_Title_Screen(void) {
     PalCycle_Title();
     RunPLC();
 
+    /* Move title Sonic right 2px per frame (ASM uses v_player+obX) */
+    {
+        uint16_t x = (uint16_t)obX(&ram[v_player]);
+        x += 2;
+        obX(&ram[v_player]) = (int16_t)x;
+    }
+
     /* --- Timer / Start / Demo --- */
     if (v_generictimer == 0) {
         GotoDemo();
+        init_done = 0;
         init_done = 0;
         return;
     }
 
     if (v_jpadpress1 & btnStart) {
         if (f_levselcheat && (v_jpadhold1 & btnA)) {
-            fprintf(stderr, "[Title] Level select activated\n");
             v_vblank_routine = id_VBlank_Title;
             WaitForVBlank();
-            fprintf(stderr, "[Title] Pal_LevelSel=%p Art_Text=%p\n", (void *)Pal_LevelSel, (void *)Art_Text);
-            PalLoad(palid_LevelSel);
             Palette_Update();
             memset(RAM_ADDR(v_hscrolltablebuffer), 0, 0x400);
             v_scrposy_vdp = 0;
@@ -454,12 +569,14 @@ static void GM_Title_Screen(void) {
                             v_gamemode = GM_Ending;
                             v_zone_act = id_EndZ_good;
                             init_done = 0;
+                            init_done = 0;
                             return;
                         }
                         if (f_creditscheat && sound == 0x9E) {
                             v_gamemode = GM_Credits;
                             QueueSound2(bgm_Credits);
                             v_creditsnum = 0;
+                            init_done = 0;
                             init_done = 0;
                             return;
                         }
@@ -475,6 +592,7 @@ static void GM_Title_Screen(void) {
                                 v_rings = 0;
                                 v_time = 0;
                                 v_score = 0;
+                                init_done = 0;
                                 init_done = 0;
                                 return;
                             }
@@ -493,10 +611,11 @@ static void GM_Title_Screen(void) {
         v_score = 0;
         v_lastspecial = 0;
         v_emeralds = 0;
-        RAM_SET_U32(v_emldlist, 0);
-        RAM_SET_U32(v_emldlist + 4, 0);
+        RAM_SET_U32((uint32_t)v_emldlist, 0);
+        RAM_SET_U32((uint32_t)(v_emldlist + 4), 0);
         v_continues = 0;
         QueueSound2(bgm_Fade);
+        init_done = 0;
         init_done = 0;
         return;
     }
@@ -515,7 +634,6 @@ static void GM_Title_Screen(void) {
                 f_levselcheat = 1;
                 dcount = 0;
                 Sound_Queue(sfx_Ring);
-                fprintf(stderr, "[Title] Level select cheat activated\n");
             }
             v_title_dcount = dcount;
         } else if (pressed != 0) {

@@ -78,6 +78,20 @@ extern const uint32_t LevSelCode_J_len;
 extern const uint16_t LevSel_Ptrs[];
 extern const uint32_t LevSel_Ptrs_len;
 
+/* Title screen animation scripts and sprite mappings
+   Loaded at runtime from assets/ */
+extern uint8_t *Ani_TSon;
+extern size_t   Ani_TSon_len;
+
+extern uint8_t *Ani_PSBTM;
+extern size_t   Ani_PSBTM_len;
+
+extern uint8_t *Map_TSon;
+extern size_t   Map_TSon_len;
+
+extern uint8_t *Map_PSB;
+extern size_t   Map_PSB_len;
+
 /* Initialize all assets from the assets/ directory.
    Returns 0 on success, -1 on any failure. */
 int Data_Init(void);

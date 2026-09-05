@@ -2,6 +2,7 @@
 #include "ram.h"
 #include "constants.h"
 #include "data.h"
+#include "vdp.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -52,6 +53,11 @@ void PalLoad(int index) {
     int words = e->count + 1;
     for (int i = 0; i < words; i++) {
         dest[i] = ((uint16_t)e->data[i * 2] << 8) | e->data[i * 2 + 1];
+    }
+
+    int cram_offset = (int)(e->target_ram_offset - v_palette);
+    if (cram_offset >= 0 && cram_offset + words * 2 <= (int)sizeof(vdp.cram)) {
+        memcpy(&vdp.cram[cram_offset], dest, words * sizeof(uint16_t));
     }
 }
 
@@ -118,40 +124,56 @@ void Palette_FadeOut(void) {
         for (int i = 0; i < num_colors; i++) {
             fade_out_dec_color(&pal_water[i]);
         }
+
+        memcpy(vdp.cram, pal, num_colors * sizeof(uint16_t));
     }
 }
 
 /* ============================================================================
-    Palette Fade In
-    ============================================================================ */
+     Palette Fade In
+     ============================================================================ */
 
-static void fade_inc_color(uint16_t *color) {
+static void fade_inc_color(uint16_t *color, uint16_t target) {
     uint16_t c = *color;
-    /* Target is the full color stored in palette_fading (or the final color).
-       For simplicity, we fade towards white by increasing the lowest component
-       that is not yet maxed. A faithful port would use the fade-in buffer. */
-    if ((c & 0x00E) != 0x00E) {
-        *color = c + 0x002;
+    if (c == target) return;
+
+    if ((c & 0x00E) != (target & 0x00E)) {
+        if ((c & 0x00E) < (target & 0x00E)) {
+            *color = c + 0x002;
+        } else {
+            *color = c - 0x002;
+        }
         return;
     }
-    if ((c & 0x0E0) != 0x0E0) {
-        *color = c + 0x020;
+    if ((c & 0x0E0) != (target & 0x0E0)) {
+        if ((c & 0x0E0) < (target & 0x0E0)) {
+            *color = c + 0x020;
+        } else {
+            *color = c - 0x020;
+        }
         return;
     }
-    if ((c & 0xE00) != 0xE00) {
-        *color = c + 0x200;
+    if ((c & 0xE00) != (target & 0xE00)) {
+        if ((c & 0xE00) < (target & 0xE00)) {
+            *color = c + 0x200;
+        } else {
+            *color = c - 0x200;
+        }
     }
 }
 
 void Palette_FadeIn(void) {
-    uint16_t *src = (uint16_t *)RAM_ADDR(v_palette_fading);
     uint16_t *dst = (uint16_t *)RAM_ADDR(v_palette);
+    uint16_t *src = (uint16_t *)RAM_ADDR(v_palette_fading);
     int num_colors = 64;
 
     for (int frame = 0; frame < 22; frame++) {
         extern void WaitForVBlank(void);
         WaitForVBlank();
-        memcpy(dst, src, num_colors * sizeof(uint16_t));
+        for (int i = 0; i < num_colors; i++) {
+            fade_inc_color(&dst[i], src[i]);
+        }
+        memcpy(vdp.cram, dst, num_colors * sizeof(uint16_t));
     }
 }
 
