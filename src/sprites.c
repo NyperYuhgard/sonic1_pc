@@ -76,9 +76,19 @@ void BuildSprites(void) {
 
     int sprite_index = 0;
 
-    for (int i = 0; i < sprite_queue_count && sprite_index < sprites_max; i++) {
-        uint8_t *obj = sprite_queue[i];
-        if (!obj || obID(obj) == 0) continue;
+    /* The MD fills the sprite table one priority layer at a time: all
+       obPriority-0 objects first (lowest link / drawn on top, since the VDP
+       follows the list front-to-back), then priority 1 ... 7. Within a layer
+       DisplaySprite FIFO order is kept. This ordering is exactly what makes
+       the title screen's "hide torso" trick work: the 30 filler sprites
+       (priority 0) land BEFORE Sonic's pieces (priority 1), so on scanlines
+       where the fillers + PRESS START + Sonic exceed the 20-sprite hardware
+       limit, Sonic's trailing pieces are the ones dropped. */
+    for (int layer = 0; layer < 8 && sprite_index < sprites_max; layer++) {
+        for (int i = 0; i < sprite_queue_count && sprite_index < sprites_max; i++) {
+            uint8_t *obj = sprite_queue[i];
+            if (!obj || obID(obj) == 0) continue;
+            if ((obPriority(obj) & 7) != layer) continue;
 
         /* --- Coordinate system (ASM BuildSprites:40-95) --- */
         uint8_t render = obRender(obj);
@@ -153,6 +163,7 @@ void BuildSprites(void) {
         }
 
         obRender(obj) |= sprite_rendered; /* ASM: bset #sprite_rendered_bit (bit 7) */
+        }
     }
 
     v_spritecount = (uint8_t)sprite_index;

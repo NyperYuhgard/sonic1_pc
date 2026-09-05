@@ -335,48 +335,88 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                  fg_scroll_x, fg_scroll_y,
                  pix, pitch, 64, 32);
 
-    /* Render sprites from sprite table buffer.
+    /* Render sprites from the sprite table buffer, honouring the Mega Drive
+       hardware limits that Sonic 1 games exploit:
+         - 80 sprite entries max per frame (indices >= 80 are ignored).
+         - 20 sprites max per scanline; when more than 20 cross a line, the
+           excess is dropped, lowest sprite-priority (farthest in the link
+           list / highest index) first.
+         - 320 pixels of sprite width max per scanline (H40); when sprites
+           crossing a line accumulate past 320 px (in table order), the rest
+           of the line's sprites are dropped. Off-screen sprites still count,
+           which is exactly how the title screen's 32px-wide "sprite line
+           limiter" fillers hide Sonic's lower body behind the ribbon:
+           10 fillers x 32px = the full 320px budget for that scanline.
        The MD follows the sprite list front-to-back: the FIRST sprite in the
-       table is on TOP of later ones. Blit from the tail so earlier entries
-       end up over later entries. Two passes: priority sprites (pattern bit
-       15) always draw above non-priority ones. */
+       table is on TOP of later ones. Each scanline is composited by blitting
+       the surviving sprites from the tail to the head so earlier entries end
+       up over later entries. Two passes: priority sprites (pattern bit 15)
+       always draw above non-priority ones. */
     {
         uint8_t *table = &ram[v_spritetablebuffer];
-        for (int pass = 0; pass < 2; pass++) {
-            for (int i = v_spritecount - 1; i >= 0; i--) {
-                if (i >= sprites_max) continue;
-                uint8_t *entry = &table[i * 8];
-                int y = ((int)(entry[0] | (entry[1] << 8)) & 0x1FF) - 0x80;
-                int width_tiles = (entry[2] >> 4) + 1;
-                int height_tiles = (entry[2] & 0x0F) + 1;
-                uint16_t pattern = (uint16_t)(entry[4] | (entry[5] << 8));
-                int tile = pattern & 0x7FF;
-                int pal_line = (pattern >> 13) & 3;
-                int pri = (pattern >> 15) & 1;
-                int x = ((int)(entry[6] | (entry[7] << 8)) & 0x1FF) - 0x80;
+        int n = v_spritecount;
+        if (n > 80) n = 80;        /* hardware: never render entries >= 80 */
+        if (n > sprites_max) n = sprites_max;
 
-                if (pri != pass) continue;
+        /* Screen-space Y band and pixel width of each sprite */
+        int sy[80], sh[80], sw[80];
+        for (int i = 0; i < n; i++) {
+            uint8_t *entry = &table[i * 8];
+            sy[i] = ((int)(entry[0] | (entry[1] << 8)) & 0x1FF) - 0x80;
+            sh[i] = ((entry[2] & 0x0F) + 1) * 8;
+            sw[i] = ((entry[2] >> 4) + 1) * 8;
+        }
 
-                for (int ty = 0; ty < height_tiles; ty++) {
+        for (int row = 0; row < SCREEN_HEIGHT; row++) {
+            /* Sprites crossing this scanline, in table order. The first to
+               fill either the 20-sprite or the 320px budget win; anything
+               later on the line is dropped. */
+            int list[20], list_len = 0;
+            int px_budget = 0;
+            for (int i = 0; i < n && list_len < 20; i++) {
+                if (row >= sy[i] && row < sy[i] + sh[i]) {
+                    if (px_budget + sw[i] > 320) break;
+                    px_budget += sw[i];
+                    list[list_len++] = i;
+                }
+            }
+
+            for (int pass = 0; pass < 2; pass++) {
+                for (int k = list_len - 1; k >= 0; k--) {
+                    int i = list[k];
+                    uint8_t *entry = &table[i * 8];
+                    int y = sy[i];
+                    int height_tiles = (entry[2] & 0x0F) + 1;
+                    int width_tiles = (entry[2] >> 4) + 1;
+                    uint16_t pattern = (uint16_t)(entry[4] | (entry[5] << 8));
+                    int tile = pattern & 0x7FF;
+                    int pal_line = (pattern >> 13) & 3;
+                    int pri = (pattern >> 15) & 1;
+                    int x = ((int)(entry[6] | (entry[7] << 8)) & 0x1FF) - 0x80;
+
+                    if (pri != pass) continue;
+
+                    /* Only the tile-row that covers this scanline */
+                    int ty = (row - y) >> 3;
+                    int prow = (row - y) & 7;
+                    if (ty < 0 || ty >= height_tiles) continue;
+
                     for (int tx = 0; tx < width_tiles; tx++) {
-                        /* MD sprite pattern indices are ordered down a column
-                           first, then to the right (stride = height) */
+                        /* MD sprite pattern indices run down a column first,
+                           then to the right (stride = height) */
                         int tile_idx = tile + tx * height_tiles + ty;
                         if (tile_idx >= 0x800) continue;
-                        const uint8_t *tile_data = &vdp.vram[tile_idx * 32];
+                        const uint8_t *r = &vdp.vram[tile_idx * 32 + prow * 4];
                         int px = x + tx * 8;
-                        int py = y + ty * 8;
 
-                        for (int row = 0; row < 8; row++) {
-                            const uint8_t *r = &tile_data[row * 4];
-                            for (int col = 0; col < 8; col++) {
-                                int color_idx = (col & 1) ? (r[col >> 1] & 0xF) : ((r[col >> 1] >> 4) & 0xF);
-                                if (color_idx == 0) continue;
-                                int sx = px + col;
-                                int sy = py + row;
-                                if (sx < 0 || sx >= SCREEN_WIDTH || sy < 0 || sy >= SCREEN_HEIGHT) continue;
-                                pix[sy * SCREEN_WIDTH + sx] = MD_ColorToRGBA(palette_main[pal_line * 16 + color_idx]);
-                            }
+                        for (int col = 0; col < 8; col++) {
+                            int color_idx = (col & 1) ? (r[col >> 1] & 0xF)
+                                                      : ((r[col >> 1] >> 4) & 0xF);
+                            if (color_idx == 0) continue;
+                            int sx = px + col;
+                            if (sx < 0 || sx >= SCREEN_WIDTH) continue;
+                            pix[row * SCREEN_WIDTH + sx] =
+                                MD_ColorToRGBA(palette_main[pal_line * 16 + color_idx]);
                         }
                     }
                 }

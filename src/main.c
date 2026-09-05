@@ -548,6 +548,35 @@ static void GM_Title_Screen(void) {
             if (f) { fwrite(blobs[i].data, 1, blobs[i].len, f); fclose(f); }
         }
     }
+
+    /* Headless frame captures: with SONIC_DUMP_FRAMES=1, save the finished
+       frame (PPM) + raw sprite table each title frame while v_generictimer is
+       inside SONIC_DUMP_TMIN..SONIC_DUMP_TMAX (default 300..376). Used to
+       verify the 20-sprites-per-scanline drop behaviour. */
+    if (getenv("SONIC_DUMP_FRAMES")) {
+        long tmin = getenv("SONIC_DUMP_TMIN") ? atol(getenv("SONIC_DUMP_TMIN")) : 300;
+        long tmax = getenv("SONIC_DUMP_TMAX") ? atol(getenv("SONIC_DUMP_TMAX")) : 376;
+        if (v_generictimer >= tmin && v_generictimer <= tmax) {
+            const char *gd = getenv("SONIC_GARBAGE");
+            if (!gd) gd = "/media/nyper/FuckYouMS/Github/GensToPC/Sonic1/garbage/";
+            char p[512];
+            static int iter = 0;
+            iter++;
+            uint8_t *po = &ram[v_pressstart];
+            uint8_t *so = &ram[v_titlesonic];
+            fprintf(stderr,
+                    "DBG iter=%d timer=%d | son:r=%d f=%d an=%d y=%d dly=%d | press:r=%d f=%d an=%d y=%d\n",
+                    iter, (int)v_generictimer,
+                    (int)obRoutine(so), (int)obFrame(so), (int)obAnim(so), (int)obScreenY(so), (int)obDelayAni(so),
+                    (int)obRoutine(po), (int)obFrame(po), (int)obAnim(po), (int)obScreenY(po));
+            snprintf(p, sizeof(p), "%s/frame_%04ld.ppm", gd, (long)v_generictimer);
+            VDP_RenderFrame(renderer);
+            VDP_SaveScreenshot(p);
+            snprintf(p, sizeof(p), "%s/sprites_%04ld.bin", gd, (long)v_generictimer);
+            FILE *f = fopen(p, "wb");
+            if (f) { fwrite(&ram[v_spritetablebuffer], 1, 80 * 8, f); fclose(f); }
+        }
+    }
     PalCycle_Title();
     RunPLC();
 
