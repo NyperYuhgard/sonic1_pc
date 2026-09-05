@@ -16,9 +16,13 @@ static void build_sprite_piece(uint8_t *sprite_table, int *sprite_index,
 
     const uint8_t *p = *data;
     int y_off = (int8_t)p[0];
-    int width_code = p[1] >> 4;
-    int height_code = p[1] & 0x0F;
-    uint16_t tile = ((uint16_t)p[2] << 8) | p[3];
+    int width_code = (p[1] >> 2) & 3;      /* width-1 (Sonic 1: 2 bits) */
+    int height_code = p[1] & 3;            /* height-1 */
+    uint8_t mflags = p[2];
+    int m_pri   = (mflags >> 7) & 1;       /* priority flag */
+    int m_yflip = (mflags >> 4) & 1;       /* per-piece Y flip */
+    int m_xflip = (mflags >> 3) & 1;       /* per-piece X flip */
+    uint16_t tile = ((uint16_t)(mflags & 7) << 8) | p[3]; /* 11-bit tile */
     int x_off = (int8_t)p[4];
     *data = p + 5;
 
@@ -37,8 +41,13 @@ static void build_sprite_piece(uint8_t *sprite_table, int *sprite_index,
     if (x == 0) x = 1;
 
     uint16_t pattern = (uint16_t)gfx + tile;
-    if (xflip) pattern ^= 1 << 11;   /* toggle X-flip in VDP word */
-    if (yflip) pattern ^= 1 << 12;   /* toggle Y-flip in VDP word */
+    /* Per-piece mapping flags (obGfx already carries the palette bits) */
+    if (m_xflip) pattern |= 1 << 11;   /* set X-flip in VDP word */
+    if (m_yflip) pattern |= 1 << 12;   /* set Y-flip in VDP word */
+    if (m_pri)   pattern |= 1 << 15;   /* priority: draws above planes/others */
+    /* Object-level flips (obRender) toggle on top of the mapping flags */
+    if (xflip) pattern ^= 1 << 11;
+    if (yflip) pattern ^= 1 << 12;
 
     uint8_t *entry = &sprite_table[*sprite_index * 8];
     entry[0] = (uint8_t)(y & 0xFF);

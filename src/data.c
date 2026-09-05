@@ -643,16 +643,26 @@ static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len
             long w = parse_asm_number(args[2], NULL);
             long h = parse_asm_number(args[3], NULL);
             long tile = parse_asm_number(args[4], NULL);
+            long xflip = (arg_idx > 5) ? parse_asm_number(args[5], NULL) : 0;
+            long yflip = (arg_idx > 6) ? parse_asm_number(args[6], NULL) : 0;
+            long pal   = (arg_idx > 7) ? parse_asm_number(args[7], NULL) : 0;
+            long pri   = (arg_idx > 8) ? parse_asm_number(args[8], NULL) : 0;
 
+            /* Sonic 1 sprite piece layout (spritePiece macro, ver 1):
+               byte0 = ypos, byte1 = ((w-1)&3)<<2 | (h-1)&3,
+               byte2 = (pri<<7)|(pal<<5)|(yflip<<4)|(xflip<<3)|tile>>8,
+               byte3 = tile&$FF, byte4 = xpos */
             if (w < 1) w = 1;
             if (h < 1) h = 1;
-            if (w > 16) w = 16;
-            if (h > 16) h = 16;
+            if (w > 4) w = 4;
+            if (h > 4) h = 4;
 
             uint8_t piece[5];
             piece[0] = (uint8_t)(y & 0xFF);
-            piece[1] = (uint8_t)((((w - 1) & 0xF) << 4) | ((h - 1) & 0xF));
-            piece[2] = (uint8_t)((tile >> 8) & 0xFF);
+            piece[1] = (uint8_t)((((w - 1) & 3) << 2) | ((h - 1) & 3));
+            piece[2] = (uint8_t)(((pri & 1) << 7) | ((pal & 3) << 5) |
+                                 ((yflip & 1) << 4) | ((xflip & 1) << 3) |
+                                 ((tile >> 8) & 7));
             piece[3] = (uint8_t)(tile & 0xFF);
             piece[4] = (uint8_t)(x & 0xFF);
 

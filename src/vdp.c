@@ -335,38 +335,48 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                  fg_scroll_x, fg_scroll_y,
                  pix, pitch, 64, 32);
 
-    /* Render sprites from sprite table buffer */
+    /* Render sprites from sprite table buffer.
+       The MD follows the sprite list front-to-back: the FIRST sprite in the
+       table is on TOP of later ones. Blit from the tail so earlier entries
+       end up over later entries. Two passes: priority sprites (pattern bit
+       15) always draw above non-priority ones. */
     {
         uint8_t *table = &ram[v_spritetablebuffer];
-        for (int i = 0; i < v_spritecount && i < sprites_max; i++) {
-            uint8_t *entry = &table[i * 8];
-            int y = ((int)(entry[0] | (entry[1] << 8)) & 0x1FF) - 0x80;
-            int width_tiles = (entry[2] >> 4) + 1;
-            int height_tiles = (entry[2] & 0x0F) + 1;
-            uint16_t pattern = (uint16_t)(entry[4] | (entry[5] << 8));
-            int tile = pattern & 0x7FF;
-            int pal_line = (pattern >> 13) & 3;
-            int x = ((int)(entry[6] | (entry[7] << 8)) & 0x1FF) - 0x80;
+        for (int pass = 0; pass < 2; pass++) {
+            for (int i = v_spritecount - 1; i >= 0; i--) {
+                if (i >= sprites_max) continue;
+                uint8_t *entry = &table[i * 8];
+                int y = ((int)(entry[0] | (entry[1] << 8)) & 0x1FF) - 0x80;
+                int width_tiles = (entry[2] >> 4) + 1;
+                int height_tiles = (entry[2] & 0x0F) + 1;
+                uint16_t pattern = (uint16_t)(entry[4] | (entry[5] << 8));
+                int tile = pattern & 0x7FF;
+                int pal_line = (pattern >> 13) & 3;
+                int pri = (pattern >> 15) & 1;
+                int x = ((int)(entry[6] | (entry[7] << 8)) & 0x1FF) - 0x80;
 
-            for (int ty = 0; ty < height_tiles; ty++) {
-                for (int tx = 0; tx < width_tiles; tx++) {
-                    /* MD sprite pattern indices are ordered down a column
-                       first, then to the right (stride = height) */
-                    int tile_idx = tile + tx * height_tiles + ty;
-                    if (tile_idx >= 0x800) continue;
-                    const uint8_t *tile_data = &vdp.vram[tile_idx * 32];
-                    int px = x + tx * 8;
-                    int py = y + ty * 8;
+                if (pri != pass) continue;
 
-                    for (int row = 0; row < 8; row++) {
-                        const uint8_t *r = &tile_data[row * 4];
-                        for (int col = 0; col < 8; col++) {
-                            int color_idx = (col & 1) ? (r[col >> 1] & 0xF) : ((r[col >> 1] >> 4) & 0xF);
-                            if (color_idx == 0) continue;
-                            int sx = px + col;
-                            int sy = py + row;
-                            if (sx < 0 || sx >= SCREEN_WIDTH || sy < 0 || sy >= SCREEN_HEIGHT) continue;
-                            pix[sy * SCREEN_WIDTH + sx] = MD_ColorToRGBA(palette_main[pal_line * 16 + color_idx]);
+                for (int ty = 0; ty < height_tiles; ty++) {
+                    for (int tx = 0; tx < width_tiles; tx++) {
+                        /* MD sprite pattern indices are ordered down a column
+                           first, then to the right (stride = height) */
+                        int tile_idx = tile + tx * height_tiles + ty;
+                        if (tile_idx >= 0x800) continue;
+                        const uint8_t *tile_data = &vdp.vram[tile_idx * 32];
+                        int px = x + tx * 8;
+                        int py = y + ty * 8;
+
+                        for (int row = 0; row < 8; row++) {
+                            const uint8_t *r = &tile_data[row * 4];
+                            for (int col = 0; col < 8; col++) {
+                                int color_idx = (col & 1) ? (r[col >> 1] & 0xF) : ((r[col >> 1] >> 4) & 0xF);
+                                if (color_idx == 0) continue;
+                                int sx = px + col;
+                                int sy = py + row;
+                                if (sx < 0 || sx >= SCREEN_WIDTH || sy < 0 || sy >= SCREEN_HEIGHT) continue;
+                                pix[sy * SCREEN_WIDTH + sx] = MD_ColorToRGBA(palette_main[pal_line * 16 + color_idx]);
+                            }
                         }
                     }
                 }
