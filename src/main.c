@@ -250,7 +250,6 @@ static void GM_Sega_Screen(void) {
        Sound driver is stubbed, so this is just one frame. */
     v_vblank_routine = id_VBlank_SegaPCM;
     WaitForVBlank();
-    VDP_SaveScreenshot("../garbage/sega_final.ppm"); /* TEMP debug */
 
     /* --- Post-chant wait (30 frames or until Start pressed) --- */
     v_generictimer = 30;
@@ -525,6 +524,30 @@ static void GM_Title_Screen(void) {
     ExecuteObjects();
     DeformLayers();
     BuildSprites();
+
+    /* One-shot VRAM/CRAM/RAM dump after title sprites are built
+       (diagnostics; set SONIC_DUMP_VRAM=1) */
+    static int vram_dumped = 0;
+    if (!vram_dumped && getenv("SONIC_DUMP_VRAM") && v_generictimer <= 286) {
+        vram_dumped = 1;
+        const char *gd = getenv("SONIC_GARBAGE");
+        if (!gd) gd = "/media/nyper/FuckYouMS/Github/GensToPC/Sonic1/garbage/";
+        char p[512];
+        struct {
+            const char *name;
+            void *data;
+            size_t len;
+        } blobs[] = {
+            {"vram.bin",  vdp.vram, 0x10000},
+            {"cram.bin",  vdp.cram, 0x80},
+            {"ram.bin",   &ram[0],  0x10000},
+        };
+        for (size_t i = 0; i < 3; i++) {
+            snprintf(p, sizeof(p), "%s%s", gd, blobs[i].name);
+            FILE *f = fopen(p, "wb");
+            if (f) { fwrite(blobs[i].data, 1, blobs[i].len, f); fclose(f); }
+        }
+    }
     PalCycle_Title();
     RunPLC();
 

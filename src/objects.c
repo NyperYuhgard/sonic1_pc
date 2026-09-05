@@ -83,18 +83,19 @@ static void TitleSonic_Main(void *obj) {
             obGfx(o) = (uint16_t)(ArtTile_Title_Sonic | Tile_Pal2);
             obPriority(o) = 1;
             obDelayAni(o) = 30 - 1;
-            obAniFrame(o) = 0;
-            obFrame(o) = 0;
-            obPrevAni(o) = 0xFF; /* force animation reset on first AnimateSprite call */
-            break;
+            if (Ani_TSon) {
+                AnimateSprite(obj, Ani_TSon); /* matches ASM: lea (Ani_TSon).l,a1 / bsr AnimateSprite */
+            }
+            return; /* no display (ASM TSon_Main ends after AnimateSprite) */
         }
         case 2: {
             obDelayAni(o)--;
             if ((int8_t)obDelayAni(o) >= 0) {
-                break;
+                return; /* ASM TSon_Delay .wait: rts -> no display while waiting */
             }
             obRoutine(o) = 4;
-            /* fall through */
+            DisplaySprite(obj); /* ASM: bra DisplaySprite on delay expiry (no move this frame) */
+            return;
         }
         case 4: {
             int16_t y = obScreenY(o);
@@ -103,13 +104,15 @@ static void TitleSonic_Main(void *obj) {
                 obRoutine(o) = 6;
             }
             obScreenY(o) = y;
-            break;
+            DisplaySprite(obj);
+            return;
         }
         case 6: {
             if (Ani_TSon) {
                 AnimateSprite(obj, Ani_TSon);
             }
-            break;
+            DisplaySprite(obj);
+            return;
         }
     }
     DisplaySprite(obj);

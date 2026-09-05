@@ -184,6 +184,122 @@ static void render_plane(const uint8_t *nametable, uint16_t *palette,
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Real-time VRAM viewer window                                       */
+/* ------------------------------------------------------------------ */
+#define VRAM_VIEW_COLS   128   /* 128 cols x 16 rows = 2048 tiles      */
+#define VRAM_VIEW_ROWS   16
+#define VRAM_VIEW_SCALE  2     /* 8x8 tile x2 = 16 px per cell         */
+#define VRAM_VIEW_CELL   (8 * VRAM_VIEW_SCALE)
+#define VRAM_VIEW_STRIP  32    /* CRAM strip height (bottom of window) */
+#define VRAM_VIEW_W      (VRAM_VIEW_COLS * VRAM_VIEW_CELL)
+#define VRAM_VIEW_H      (VRAM_VIEW_ROWS * VRAM_VIEW_CELL + VRAM_VIEW_STRIP)
+
+static SDL_Window   *g_vram_win = NULL;
+static SDL_Renderer *g_vram_ren = NULL;
+static SDL_Texture  *g_vram_tex = NULL;
+
+void VDP_ToggleVRAMViewer(void) {
+    if (g_vram_win) {
+        SDL_DestroyTexture(g_vram_tex);
+        SDL_DestroyRenderer(g_vram_ren);
+        SDL_DestroyWindow(g_vram_win);
+        g_vram_tex = NULL;
+        g_vram_ren = NULL;
+        g_vram_win = NULL;
+        return;
+    }
+    g_vram_win = SDL_CreateWindow("VRAM Viewer [P]",
+                                SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                VRAM_VIEW_W, VRAM_VIEW_H,
+                                SDL_WINDOW_RESIZABLE);
+    if (!g_vram_win) return;
+    g_vram_ren = SDL_CreateRenderer(g_vram_win, -1, 0);
+    if (!g_vram_ren) {
+        SDL_DestroyWindow(g_vram_win);
+        g_vram_win = NULL;
+        return;
+    }
+    g_vram_tex = SDL_CreateTexture(g_vram_ren, SDL_PIXELFORMAT_ARGB8888,
+                                 SDL_TEXTUREACCESS_STREAMING,
+                                 VRAM_VIEW_W, VRAM_VIEW_H);
+}
+
+/* SDL window ID of the viewer (-1 when closed). Lets the event loop
+   rebuild/destroy it when the user closes the window via the WM. */
+int VDP_ViewerWindowID(void) {
+    return g_vram_win ? (int)SDL_GetWindowID(g_vram_win) : -1;
+}
+
+static void render_vram_viewer(void) {
+    if (!g_vram_win) return;
+
+    void *pixels;
+    int pitch;
+    SDL_LockTexture(g_vram_tex, NULL, &pixels, &pitch);
+    uint32_t *px = (uint32_t *)pixels;
+
+    /* Checker background so empty VRAM is obvious */
+    for (int y = 0; y < VRAM_VIEW_H; y++) {
+        for (int x = 0; x < VRAM_VIEW_W; x++) {
+            int cc = ((x >> 2) + (y >> 2)) & 1;
+            px[y * (pitch / 4) + x] = cc ? 0xFF3A3A3A : 0xFF525252;
+        }
+    }
+
+    /* Draw all 2048 tiles. Tile number = row * 128 + col. */
+    for (int t = 0; t < 2048; t++) {
+        int col = t % VRAM_VIEW_COLS;
+        int row = t / VRAM_VIEW_COLS;
+        const uint8_t *td = &vdp.vram[t * 32];
+
+        for (int ty = 0; ty < 8; ty++) {
+            for (int tx = 0; tx < 8; tx++) {
+                int idx = (tx & 1) ? (td[ty * 4 + (tx >> 1)] & 0xF)
+                                   : ((td[ty * 4 + (tx >> 1)] >> 4) & 0xF);
+                if (idx == 0) continue; /* transparent -> checker stays */
+
+                uint32_t c = MD_ColorToRGBA(palette_main[idx]);
+                int ox = col * VRAM_VIEW_CELL + tx * VRAM_VIEW_SCALE;
+                int oy = row * VRAM_VIEW_CELL + ty * VRAM_VIEW_SCALE;
+                for (int s = 0; s < VRAM_VIEW_SCALE; s++) {
+                    for (int r = 0; r < VRAM_VIEW_SCALE; r++) {
+                        px[(oy + r) * (pitch / 4) + ox + s] = c;
+                    }
+                }
+            }
+        }
+    }
+
+    /* Grid lines every tile */
+    for (int y = 0; y < VRAM_VIEW_ROWS * VRAM_VIEW_CELL; y++) {
+        for (int x = 0; x < VRAM_VIEW_W; x++) {
+            if (x % VRAM_VIEW_CELL == 0 || y % VRAM_VIEW_CELL == 0) {
+                px[y * (pitch / 4) + x] = 0xFF101010;
+            }
+        }
+    }
+
+    /* CRAM strip at the bottom (64 colors, shown with current palette) */
+    for (int i = 0; i < 64; i++) {
+        uint32_t c = MD_ColorToRGBA(vdp.cram[i]);
+        int x0 = i * VRAM_VIEW_W / 64;
+        int x1 = (i + 1) * VRAM_VIEW_W / 64;
+        for (int y = VRAM_VIEW_ROWS * VRAM_VIEW_CELL; y < VRAM_VIEW_H; y++) {
+            for (int x = x0; x < x1; x++) {
+                px[y * (pitch / 4) + x] = c;
+            }
+        }
+    }
+
+    SDL_UnlockTexture(g_vram_tex);
+
+    SDL_SetRenderDrawColor(g_vram_ren, 0, 0, 0, 255);
+    SDL_RenderClear(g_vram_ren);
+    SDL_RenderCopy(g_vram_ren, g_vram_tex, NULL, NULL);
+    SDL_RenderPresent(g_vram_ren);
+}
+
 void VDP_RenderFrame(SDL_Renderer *renderer) {
     /* Create or update texture */
     if (!vdp.framebuffer) {
@@ -224,18 +340,20 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
         uint8_t *table = &ram[v_spritetablebuffer];
         for (int i = 0; i < v_spritecount && i < sprites_max; i++) {
             uint8_t *entry = &table[i * 8];
-            int y = entry[0] | ((entry[1] & 1) << 8);
-            int size = ((entry[1] >> 1) & 0xF) | (((entry[1] >> 5) & 0xF) << 4);
-            int pal_line = (entry[1] >> 2) & 3;
-            int tile = ((entry[3] & 1) << 8) | entry[4];
-            int x = entry[6] | ((entry[7] & 1) << 8);
-
-            int width_tiles = (size & 0xF) ? (size & 0xF) : 1;
-            int height_tiles = (size >> 4) ? (size >> 4) : 1;
+            int y = ((int)(entry[0] | (entry[1] << 8)) & 0x1FF) - 0x80;
+            int width_tiles = (entry[2] >> 4) + 1;
+            int height_tiles = (entry[2] & 0x0F) + 1;
+            uint16_t pattern = (uint16_t)(entry[4] | (entry[5] << 8));
+            int tile = pattern & 0x7FF;
+            int pal_line = (pattern >> 13) & 3;
+            int x = ((int)(entry[6] | (entry[7] << 8)) & 0x1FF) - 0x80;
 
             for (int ty = 0; ty < height_tiles; ty++) {
                 for (int tx = 0; tx < width_tiles; tx++) {
-                    int tile_idx = tile + ty * 2 + tx;
+                    /* MD sprite pattern indices are ordered down a column
+                       first, then to the right (stride = height) */
+                    int tile_idx = tile + tx * height_tiles + ty;
+                    if (tile_idx >= 0x800) continue;
                     const uint8_t *tile_data = &vdp.vram[tile_idx * 32];
                     int px = x + tx * 8;
                     int py = y + ty * 8;
@@ -280,6 +398,9 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
     /* Present */
     SDL_RenderCopy(renderer, vdp.framebuffer, NULL, NULL);
     SDL_RenderPresent(renderer);
+
+    /* Refresh the debug VRAM viewer window (no-op when closed) */
+    render_vram_viewer();
 }
 
 void VDP_SaveScreenshot(const char *path) {

@@ -1,6 +1,7 @@
 #include "input.h"
 #include "ram.h"
 #include "constants.h"
+#include "vdp.h"
 #include <SDL2/SDL.h>
 #include <string.h>
 
@@ -8,6 +9,7 @@ uint8_t joypad_hold[2]  = {0, 0};
 uint8_t joypad_press[2] = {0, 0};
 
 static uint8_t prev_state[2] = {0, 0};
+static int prev_vram_key = 0;
 
 void Input_Init(void) {
     memset(joypad_hold, 0, sizeof(joypad_hold));
@@ -23,10 +25,22 @@ void Input_Read(void) {
             extern int running;
             running = 0;
         }
+        /* Closing the VRAM viewer window via the WM stays valid */
+        if (event.type == SDL_WINDOWEVENT &&
+            event.window.event == SDL_WINDOWEVENT_CLOSE &&
+            (int)event.window.windowID == VDP_ViewerWindowID()) {
+            VDP_ToggleVRAMViewer();
+        }
     }
 
     /* Read keyboard state directly (more reliable than event-based for games) */
     const uint8_t *keys = SDL_GetKeyboardState(NULL);
+
+    /* Debug: P toggles the real-time VRAM viewer window (down-edge only) */
+    if (keys[SDL_SCANCODE_P] && !prev_vram_key) {
+        VDP_ToggleVRAMViewer();
+    }
+    prev_vram_key = keys[SDL_SCANCODE_P];
 
     uint8_t new_state[2] = {0, 0};
 

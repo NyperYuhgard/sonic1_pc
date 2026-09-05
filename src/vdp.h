@@ -49,6 +49,14 @@ void VDP_TransferPalette(void);
 /* Save the last rendered framebuffer to a PPM file (debug only) */
 void VDP_SaveScreenshot(const char *path);
 
+/* Debug VRAM viewer: toggle a second SDL window that renders the whole
+   VRAM tile sheet (tiles $000-$7FF) + a CRAM strip, refreshed every
+   frame. Call once per key press (down-edge). */
+void VDP_ToggleVRAMViewer(void);
+
+/* SDL window ID of the open VRAM viewer (-1 when closed). */
+int VDP_ViewerWindowID(void);
+
 /* Debug/test overlay: when >= 0, draw a counter bar in VDP_RenderFrame.
    Set to -1 to disable (normal operation). */
 extern int vdp_test_counter;
