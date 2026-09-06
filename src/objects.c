@@ -183,7 +183,7 @@ static void CreditsText_Main(void *obj) {
             obGfx(o) = ArtTile_Credits_Font; /* default art tile offset */
 
             /* Load credits page index (doesn't reset between game mode changes) */
-            obFrame(o) = (uint8_t)(RAM_WORD(v_creditsnum) & 0xFF);
+            obFrame(o) = (uint8_t)(v_creditsnum & 0xFF);
 
             /* Set to screen coordinates positioning mode, top priority */
             obRender(o) = sprite_cam_screen;

@@ -14,6 +14,7 @@
 #include "sound.h"
 #include "data.h"
 #include "decomp.h"
+#include "deform.h"
 
 /* ===================================================================
    Game Mode IDs (from sonic.asm GameModeArray)
@@ -278,13 +279,6 @@ static void QueueSound2(int id) {
     Sound_Queue(id);
 }
 
-/* Stub: Deform background layers */
-static void DeformLayers(void) {
-    if (v_generictimer > 0) {
-        v_generictimer--;
-    }
-}
-
 /* Stub: Run PLC (load pending patterns) */
 static void RunPLC(void) {
     /* TODO: Implement PLC runner */
@@ -333,8 +327,8 @@ static void LevelSizeLoad(void) {
         v_limitleft3    = v_limitleft2 + 0x240;
 
         /* Trigger drawing of a whole column on next frame */
-        RAM_BYTE(v_fg_xblock) = 0x10;
-        RAM_BYTE(v_fg_yblock) = 0x10;
+        v_fg_xblock = 0x10;
+        v_fg_yblock = 0x10;
     }
 
     /* Start location. The title screen (FixBugs) uses a fixed spot to avoid
@@ -599,9 +593,9 @@ static void GM_Title_Screen(void) {
 
         /* Miscellaneous initializations */
         RAM_WORD(v_lastlamp) = 0;
-        RAM_WORD(v_debuguse) = 0;
-        RAM_WORD(f_demo) = 0;
-        RAM_WORD(v_unused2) = 0;
+        v_debuguse = 0;
+        f_demo = 0;
+        v_unused2 = 0;
         v_zone_act = id_GHZ_act1;
         v_pcyc_time = 0;
 
@@ -652,7 +646,7 @@ static void GM_Title_Screen(void) {
         QueueSound2(bgm_Title);
 
         /* Disable debug mode */
-        RAM_BYTE(f_debugmode) = 0;
+        f_debugmode = 0;
 
         /* Title screen timer */
         v_generictimer = 376;
@@ -1081,6 +1075,11 @@ static int InitSDL(void) {
 
     renderer = SDL_CreateRenderer(window, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+
+    if (!renderer) {
+        /* Headless/dummy runs: fall back to a software renderer. */
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    }
 
     if (!renderer) {
         fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());

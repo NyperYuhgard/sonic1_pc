@@ -21,6 +21,7 @@ set(SOURCES
     src/decomp.c
     src/data.c
     src/assets.c
+    src/deform.c
 )
 
 # Executable

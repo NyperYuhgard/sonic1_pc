@@ -724,6 +724,21 @@ enum {
 #define id_PSBTM                          0x0F
 #define id_CreditsText                    0x8A
 
+/* Boss object IDs (from disasm "Object Pointers.asm") */
+#define id_BossGreenHill                  0x3D
+#define id_BossMarble                     0x73
+#define id_BossSpringYard                 0x75
+#define id_BossBlock                      0x76
+#define id_BossLabyrinth                  0x77
+#define id_BossStarLight                  0x7A
+#define id_ScrapEggman                    0x82
+#define id_FalseFloor                     0x83
+#define id_BossFinal                      0x85
+
+/* PLC IDs for bosses (from disasm "_inc/Pattern Load Cues.asm") */
+#define plcid_EggmanSBZ2                  0x1E
+#define plcid_FZBoss                      0x1F
+
 /* Level select */
 #define levsel_sndtest_row                0x14
 #define levsel_line_count                 21

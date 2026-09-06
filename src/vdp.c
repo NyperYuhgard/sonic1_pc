@@ -130,57 +130,37 @@ void VDP_CopyTilemapToVRAM(const uint16_t *source, uint32_t vram_dest,
 }
 
 /* Render one 32x32-tile nametable plane to a pixel buffer */
-static void render_plane(const uint8_t *nametable, uint16_t *palette,
-                         int scroll_x, int scroll_y,
-                         uint32_t *pixels, int pitch,
-                         int plane_w, int plane_h) {
-    /* nametable: 64x32 entries of 2 bytes each (tile index + flags) */
-    /* Each nametable entry: bits 0-10 = tile number, bit 11 = Y flip,
-       bit 12 = X flip, bit 13-14 = palette, bit 15 = priority */
+/* Render one screen row of a plane.
+   MD semantics: the 64x32-tile nametable (512x256 px) is cyclic on both axes,
+   horizontal scroll is per-scanline (from the hscroll table) and vertical
+   scroll is per-plane. screen_y selects the output row in [0,224). */
+static void render_plane_scanline(const uint8_t *nametable, uint16_t *palette,
+                                  int scroll_x, int scroll_y, int screen_y,
+                                  uint32_t *pixels, int pitch) {
+    uint32_t *out = pixels + screen_y * (pitch / 4);
+    int plane_y = (screen_y + scroll_y) & 0xFF;      /* wrap 0..255 */
+    int ty = plane_y >> 3;                           /* tile row */
+    int py = plane_y & 7;                            /* pixel within tile */
 
-    for (int ty = 0; ty < plane_h; ty++) {
-        for (int tx = 0; tx < plane_w; tx++) {
-            int idx = (ty * plane_w + tx) * 2;
-            uint16_t tile_entry = ((uint16_t)nametable[idx] << 8) | nametable[idx + 1];
+    for (int sx = 0; sx < SCREEN_WIDTH; sx++) {
+        int plane_x = (sx + scroll_x) & 0x1FF;       /* wrap 0..511 */
+        int tx = plane_x >> 3;                       /* tile column */
+        int px = plane_x & 7;                        /* pixel within tile */
 
-            uint16_t tile_num  = tile_entry & 0x7FF;
-            int x_flip         = (tile_entry >> 11) & 1;
-            int y_flip         = (tile_entry >> 12) & 1;
-            int pal_line       = (tile_entry >> 13) & 3;
+        int idx = (ty * 64 + tx) * 2;
+        uint16_t tile_entry = ((uint16_t)nametable[idx] << 8) | nametable[idx + 1];
+        uint16_t tile_num  = tile_entry & 0x7FF;
+        int x_flip         = (tile_entry >> 11) & 1;
+        int y_flip         = (tile_entry >> 12) & 1;
+        int pal_line       = (tile_entry >> 13) & 3;
 
-            /* Tile art is at tile_num * 32 bytes in VRAM (4bpp, 8x8 = 32 bytes) */
-            const uint8_t *tile_data = &vdp.vram[tile_num * 32];
-
-            /* Render 8x8 pixels of this tile */
-            for (int py = 0; py < 8; py++) {
-                int src_y = y_flip ? (7 - py) : py;
-                /* Each row of a 4bpp tile is 4 bytes (8 pixels, 4 bits each) */
-                const uint8_t *row = &tile_data[src_y * 4];
-
-                for (int px = 0; px < 8; px++) {
-                    int src_x = x_flip ? (7 - px) : px;
-                    /* Extract 4-bit pixel: high nibble of first byte, etc. */
-                    int bitplane = (row[src_x / 2]);
-                    int color_idx;
-                    if (src_x & 1) {
-                        color_idx = bitplane & 0x0F;
-                    } else {
-                        color_idx = (bitplane >> 4) & 0x0F;
-                    }
-
-                    if (color_idx == 0) continue; /* transparent */
-
-                    int screen_x = tx * 8 + px - scroll_x;
-                    int screen_y = ty * 8 + py - scroll_y;
-
-                    if (screen_x < 0 || screen_x >= SCREEN_WIDTH) continue;
-                    if (screen_y < 0 || screen_y >= SCREEN_HEIGHT) continue;
-
-                    uint16_t md_color = palette[pal_line * 16 + color_idx];
-                    pixels[screen_y * (pitch / 4) + screen_x] = MD_ColorToRGBA(md_color);
-                }
-            }
-        }
+        /* Tile art at tile_num * 32 bytes in VRAM (4bpp, 8x8 = 32 bytes) */
+        const uint8_t *row = &vdp.vram[tile_num * 32 + (y_flip ? (7 - py) : py) * 4];
+        int src_x = x_flip ? (7 - px) : px;
+        int color_idx = (src_x & 1) ? (row[src_x >> 1] & 0x0F)
+                                    : ((row[src_x >> 1] >> 4) & 0x0F);
+        if (color_idx == 0) continue;                /* transparent */
+        out[sx] = MD_ColorToRGBA(palette[pal_line * 16 + color_idx]);
     }
 }
 
@@ -319,21 +299,24 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
         pix[i] = 0xFF000000; /* black */
     }
 
-    /* Get scroll values from hscroll buffer */
-    int16_t fg_scroll_x = RAM_SWORD(v_hscrolltablebuffer);
+    /* Vertical scroll is per-plane (MD VSRAM); horizontal scroll is
+       per-scanline from the 224-row hscroll table. The hscroll buffer holds
+       4 bytes per row: word 0 = FG plane scroll, word 2 = BG plane scroll. */
     int16_t fg_scroll_y = (int16_t)v_scrposy_vdp;
-    int16_t bg_scroll_x = RAM_SWORD(v_hscrolltablebuffer + 2);
     int16_t bg_scroll_y = (int16_t)v_bgscrposy_vdp;
 
-    /* Render BG plane (nametable at $E000 in VRAM = offset 0xE000) */
-    render_plane(&vdp.vram[vram_bg], palette_main,
-                 bg_scroll_x, bg_scroll_y,
-                 pix, pitch, 64, 32);
+    for (int row = 0; row < SCREEN_HEIGHT; row++) {
+        const uint8_t *h = &ram[v_hscrolltablebuffer + row * 4];
+        int16_t fg_scroll_x = (int16_t)((uint16_t)h[0] | ((uint16_t)h[1] << 8));
+        int16_t bg_scroll_x = (int16_t)((uint16_t)h[2] | ((uint16_t)h[3] << 8));
 
-    /* Render FG plane (nametable at $C000 in VRAM = offset 0xC000) */
-    render_plane(&vdp.vram[vram_fg], palette_main,
-                 fg_scroll_x, fg_scroll_y,
-                 pix, pitch, 64, 32);
+        /* BG plane first (nametable at $E000 = offset 0xE000), then FG
+           (nametable at $C000 = offset 0xC000) on top of it. */
+        render_plane_scanline(&vdp.vram[vram_bg], palette_main,
+                              bg_scroll_x, bg_scroll_y, row, pix, pitch);
+        render_plane_scanline(&vdp.vram[vram_fg], palette_main,
+                              fg_scroll_x, fg_scroll_y, row, pix, pitch);
+    }
 
     /* Render sprites from the sprite table buffer, honouring the Mega Drive
        hardware limits that Sonic 1 games exploit:
