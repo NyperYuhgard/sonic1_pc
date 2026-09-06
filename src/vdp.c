@@ -143,7 +143,7 @@ static void render_plane_scanline(const uint8_t *nametable, uint16_t *palette,
     int py = plane_y & 7;                            /* pixel within tile */
 
     for (int sx = 0; sx < SCREEN_WIDTH; sx++) {
-        int plane_x = (sx + scroll_x) & 0x1FF;       /* wrap 0..511 */
+        int plane_x = (sx - scroll_x) & 0x1FF;       /* wrap 0..511 */
         int tx = plane_x >> 3;                       /* tile column */
         int px = plane_x & 7;                        /* pixel within tile */
 

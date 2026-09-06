@@ -70,20 +70,6 @@ static void SetScreenX(int16_t old_sx, int32_t d0w) {
 }
 
 static void MoveScreenHoriz(void) {
-    /* On the title screen the whole background must drift LEFT (-x) so the
-       emblem appears to glide right; the +x track of v_player+obX in
-       Tit_MainLoop is a demo failsafe, not a camera target. Drive the camera
-       the other way at the same 2px/frame rate Tit_MainLoop advances obX,
-       so v_scrshiftx < 0 makes Deform_GHZ decrement bg3x/bg2x and every
-       parallax layer (clouds, mountains, hills, water) rolls -x through the
-       normal MoveScreenHoriz -> scrshiftx -> BGScroll_Block3/2 pipeline.
-       The FG plane is force-scrolled to 0 in Deform_GHZ and the title
-       sprites use screen coordinates, so the emblem stays put. */
-    if (v_gamemode == GM_Title) {
-        SetScreenX(cam_int(0xF700), (int32_t)((int16_t)cam_int(0xF700) - 2));
-        return;
-    }
-
     int16_t spx = cam_int(0xF700);                /* v_screenposx */
     uint16_t a = (uint16_t)((int)obX(&ram[v_player]) - (int)spx);
 
@@ -787,10 +773,10 @@ static void Deform_GHZ(void) {
         /* FG X (forced to 0 on the title screen) */
         int16_t fgx = (v_gamemode == GM_Title) ? 0 : sx;
 
-        /* autoscroll clouds: -= $10000 / $C000 / $8000 per frame */
-        cam_setl(0xA800 + 0, cam_getl(0xA800 + 0) - 0x10000);
-        cam_setl(0xA800 + 4, cam_getl(0xA800 + 4) - 0xC000);
-        cam_setl(0xA800 + 8, cam_getl(0xA800 + 8) - 0x8000);
+        /* autoscroll clouds: += $10000 / $C000 / $8000 per frame (REV01) */
+        cam_setl(0xA800 + 0, cam_getl(0xA800 + 0) + 0x10000);
+        cam_setl(0xA800 + 4, cam_getl(0xA800 + 4) + 0xC000);
+        cam_setl(0xA800 + 8, cam_getl(0xA800 + 8) + 0x8000);
 
         uint16_t row = 0;
 
