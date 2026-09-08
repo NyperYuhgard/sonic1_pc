@@ -198,7 +198,7 @@ void WaitForVBlank(void) {
    =================================================================== */
 static void GM_Sega_Screen(void) {
     /* Stop music and fade out from previous game mode */
-    Sound_Queue(bgm_Stop);
+    Sound_Queue(bgm_Stop, false);
     Palette_FadeOut();
 
     /* Disable display for screen setup */
@@ -275,8 +275,8 @@ static void ClearPLC(void) {
 }
 
 /* Stub: Queue sound/music */
-static void QueueSound2(int id) {
-    Sound_Queue(id);
+static void QueueSound2(int id, bool loop) {
+    Sound_Queue(id, loop);
 }
 
 /* Stub: Run PLC (load pending patterns) */
@@ -512,7 +512,7 @@ static void GM_Title_Screen(void) {
 
     if (!init_done) {
         /* Stop music and clear PLC */
-        QueueSound2(bgm_Stop);
+        QueueSound2(bgm_Stop, false);
         ClearPLC();
 
         /* Fade out from previous game mode */
@@ -643,7 +643,7 @@ static void GM_Title_Screen(void) {
         PalLoad_Fade(palid_Title);
 
         /* Start title music */
-        QueueSound2(bgm_Title);
+        QueueSound2(bgm_Title, false);
 
         /* Disable debug mode */
         f_debugmode = 0;
@@ -798,18 +798,16 @@ static void GM_Title_Screen(void) {
                             v_gamemode = GM_Ending;
                             v_zone_act = id_EndZ_good;
                             init_done = 0;
-                            init_done = 0;
                             return;
                         }
                         if (f_creditscheat && sound == 0x9E) {
                             v_gamemode = GM_Credits;
-                            QueueSound2(bgm_Credits);
+                            QueueSound2(bgm_Credits, false);
                             v_creditsnum = 0;
-                            init_done = 0;
                             init_done = 0;
                             return;
                         }
-                        Sound_Queue(sound);
+                        Sound_Queue(sound, false);
                     } else {
                         uint16_t sel = v_levselitem;
                         if (sel < LevSel_Ptrs_len / 2) {
@@ -822,13 +820,13 @@ static void GM_Title_Screen(void) {
                                 v_time = 0;
                                 v_score = 0;
                                 init_done = 0;
-                                init_done = 0;
                                 return;
                             }
                             v_zone_act = ptr & 0x3FFF;
+                            init_done = 0;
+                            break;
                         }
                     }
-                    break;
                 }
             }
         }
@@ -843,7 +841,7 @@ static void GM_Title_Screen(void) {
         RAM_SET_U32((uint32_t)v_emldlist, 0);
         RAM_SET_U32((uint32_t)(v_emldlist + 4), 0);
         v_continues = 0;
-        QueueSound2(bgm_Fade);
+        QueueSound2(bgm_Fade, false);
         init_done = 0;
         init_done = 0;
         return;
@@ -862,7 +860,7 @@ static void GM_Title_Screen(void) {
             if (code[dcount] == 0xFF) {
                 f_levselcheat = 1;
                 dcount = 0;
-                Sound_Queue(sfx_Ring);
+                Sound_Queue(sfx_Ring, false);
             }
             v_title_dcount = dcount;
         } else if (pressed != 0) {

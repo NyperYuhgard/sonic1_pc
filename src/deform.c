@@ -364,7 +364,7 @@ static void DLE_SYZ(void) {
                     obID(FindFreeObj()) = id_BossSpringYard;
                     v_dle_routine += 2;
                 }
-                Sound_Queue(bgm_Boss);
+                Sound_Queue(bgm_Boss, true);
                 f_lockscreen = 1;
                 dle_AddPLC(plcid_Boss);
             }
@@ -393,7 +393,7 @@ static void DLE_SLZ(void) {
         case 0x02: {                             /* DLE_SLZ3_Boss */
             if (cam_int(0xF700) >= boss_slz_x) {
                 if (FindFreeObj()) obID(FindFreeObj()) = id_BossStarLight;
-                Sound_Queue(bgm_Boss);
+                Sound_Queue(bgm_Boss, true);
                 f_lockscreen = 1;
                 v_dle_routine += 2;
                 dle_AddPLC(plcid_Boss);
@@ -479,7 +479,7 @@ static void DLE_MZ(void) {
                     obX(boss) = (int16_t)(boss_mz_x + 0x1F0);
                     obY(boss) = (int16_t)(boss_mz_y + 0x1C);
                 }
-                Sound_Queue(bgm_Boss);
+                Sound_Queue(bgm_Boss, true);
                 f_lockscreen = 1;
                 v_dle_routine += 2;
                 dle_AddPLC(plcid_Boss);
@@ -505,14 +505,14 @@ static void DLE_LZ(void) {
             uint8_t *chunk = &ram[v_lvllayout_fg + (layout_row * 2) + 6];
             if (*chunk != 7) {
                 *chunk = 7;
-                Sound_Queue(sfx_Rumbling);
+                Sound_Queue(sfx_Rumbling, false);
             }
         }
         if (v_dle_routine != 0) return;   /* boss already loaded */
         if (cam_int(0xF700) >= boss_lz_x - 0x140 /* FixBugs=0 */
             && cam_int(0xF704) < boss_lz_y + 0x540) {
             if (FindFreeObj()) obID(FindFreeObj()) = id_BossLabyrinth;
-            Sound_Queue(bgm_Boss);
+            Sound_Queue(bgm_Boss, true);
             f_lockscreen = 1;
             v_dle_routine += 2;
             dle_AddPLC(plcid_Boss);
@@ -578,7 +578,7 @@ static void DLE_GHZ(void) {
                     obX(boss) = (int16_t)(boss_ghz_x + 0x100);
                     obY(boss) = (int16_t)(boss_ghz_y - 0x80);
                 }
-                Sound_Queue(bgm_Boss);
+                Sound_Queue(bgm_Boss, true);
                 f_lockscreen = 1;
                 v_dle_routine += 2;
                 dle_AddPLC(plcid_Boss);

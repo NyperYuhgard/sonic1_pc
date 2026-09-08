@@ -7,6 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Find SDL2
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2 REQUIRED sdl2)
+pkg_check_modules(SDL2_mixer REQUIRED SDL2_mixer)
 
 # Sources
 set(SOURCES
@@ -30,14 +31,17 @@ add_executable(sonic1 ${SOURCES})
 target_include_directories(sonic1 PRIVATE
     src
     ${SDL2_INCLUDE_DIRS}
+    ${SDL2_mixer_INCLUDE_DIRS}
 )
 
 target_link_libraries(sonic1
     ${SDL2_LIBRARIES}
+    ${SDL2_mixer_LIBRARIES}
 )
 
 target_compile_options(sonic1 PRIVATE
     ${SDL2_CFLAGS_OTHER}
+    ${SDL2_mixer_CFLAGS_OTHER}
     -Wall
     -Wextra
     -Wno-unused-parameter

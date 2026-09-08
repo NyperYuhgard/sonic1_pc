@@ -292,11 +292,13 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
     void *pixels;
     int pitch;
     SDL_LockTexture(vdp.framebuffer, NULL, &pixels, &pitch);
-
-    /* Clear to black */
     uint32_t *pix = (uint32_t *)pixels;
+    /* Clear to black */
+    uint16_t bg_cram_index = vdp.registers[7] & 0x3F;
+    uint32_t bg_color = MD_ColorToRGBA(vdp.cram[bg_cram_index]);
+
     for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
-        pix[i] = 0xFF000000; /* black */
+        pix[i] = bg_color; /* Color de fondo real de la Mega Drive */
     }
 
     /* Vertical scroll is per-plane (MD VSRAM); horizontal scroll is
