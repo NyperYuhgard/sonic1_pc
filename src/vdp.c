@@ -374,15 +374,30 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             int pal_line = (pattern >> 13) & 3;
             int x = ((int)(entry[6] | (entry[7] << 8)) & 0x1FF) - 0x80;
 
+            /* Pattern word bits 11/12 are the VDP X/Y flip flags; they flip
+               the whole sprite piece (tile order AND per-tile pixels). */
+            int xflip = (pattern >> 11) & 1;
+            int yflip = (pattern >> 12) & 1;
+
             /* Only the tile-row that covers this scanline */
-            int ty = (row - y) >> 3;
-            int prow = (row - y) & 7;
+            int dy = row - y;
+            int ty;
+            int prow;
+            if (yflip) {
+                dy = height_tiles * 8 - 1 - dy;
+                ty = dy >> 3;
+                prow = dy & 7;
+            } else {
+                ty = dy >> 3;
+                prow = dy & 7;
+            }
             if (ty < 0 || ty >= height_tiles) continue;
 
             for (int tx = 0; tx < width_tiles; tx++) {
                 /* MD sprite pattern indices run down a column first,
                    then to the right (stride = height) */
-                int tile_idx = tile + tx * height_tiles + ty;
+                int txx = xflip ? (width_tiles - 1 - tx) : tx;
+                int tile_idx = tile + txx * height_tiles + ty;
                 if (tile_idx >= 0x800) continue;
                 const uint8_t *r = &vdp.vram[tile_idx * 32 + prow * 4];
                 int sx0 = x + tx * 8;
@@ -391,7 +406,7 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                     int color_idx = (col & 1) ? (r[col >> 1] & 0xF)
                                               : ((r[col >> 1] >> 4) & 0xF);
                     if (color_idx == 0) continue;
-                    int sx = sx0 + col;
+                    int sx = xflip ? (sx0 + 7 - col) : (sx0 + col);
                     if (sx < 0 || sx >= SCREEN_WIDTH) continue;
                     pix[row * SCREEN_WIDTH + sx] =
                         MD_ColorToRGBA(palette_main[pal_line * 16 + color_idx]);
@@ -417,12 +432,27 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             int pal_line = (pattern >> 13) & 3;
             int x = ((int)(entry[6] | (entry[7] << 8)) & 0x1FF) - 0x80;
 
-            int ty = (row - y) >> 3;
-            int prow = (row - y) & 7;
+            /* Pattern word bits 11/12 are the VDP X/Y flip flags; they flip
+               the whole sprite piece (tile order AND per-tile pixels). */
+            int xflip = (pattern >> 11) & 1;
+            int yflip = (pattern >> 12) & 1;
+
+            int dy = row - y;
+            int ty;
+            int prow;
+            if (yflip) {
+                dy = height_tiles * 8 - 1 - dy;
+                ty = dy >> 3;
+                prow = dy & 7;
+            } else {
+                ty = dy >> 3;
+                prow = dy & 7;
+            }
             if (ty < 0 || ty >= height_tiles) continue;
 
             for (int tx = 0; tx < width_tiles; tx++) {
-                int tile_idx = tile + tx * height_tiles + ty;
+                int txx = xflip ? (width_tiles - 1 - tx) : tx;
+                int tile_idx = tile + txx * height_tiles + ty;
                 if (tile_idx >= 0x800) continue;
                 const uint8_t *r = &vdp.vram[tile_idx * 32 + prow * 4];
                 int sx0 = x + tx * 8;
@@ -431,7 +461,7 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                     int color_idx = (col & 1) ? (r[col >> 1] & 0xF)
                                               : ((r[col >> 1] >> 4) & 0xF);
                     if (color_idx == 0) continue;
-                    int sx = sx0 + col;
+                    int sx = xflip ? (sx0 + 7 - col) : (sx0 + col);
                     if (sx < 0 || sx >= SCREEN_WIDTH) continue;
                     pix[row * SCREEN_WIDTH + sx] =
                         MD_ColorToRGBA(palette_main[pal_line * 16 + color_idx]);
