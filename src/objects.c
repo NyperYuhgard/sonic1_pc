@@ -370,11 +370,44 @@ static void SonicPlayer_Main(void *obj) {
 
 /* ===========================================================================
    HUD object (id_HUD = $21)
-   STUB — will be ported from _incObj/21 HUD.asm in a later pass.
+   Ported from _incObj/21 HUD.asm (FixBugs=0).
+   "SCOR", "TIME", "RINGS" text; on screen position (0x90, 0x108).
+   Flash frames: with rings, always all-yellow. Without rings, the ring
+   counter flashes red on frames where v_framebyte bit 3 is clear; at 9
+   minutes the time counter stays red too.
    =========================================================================== */
 static void HUD_Main(void *obj) {
-    /* TODO: score / time / rings / lives display */
-    (void)obj;
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t routine = obRoutine(o);
+
+    if (routine == 0) {
+        obRoutine(o) = 2;                              /* advance to HUD_Flash */
+        obX(o)        = (int16_t)(0x80 + 0x10);        /* screen X (0x90) */
+        obScreenY(o)  = (int16_t)(0x80 + 0x88);        /* screen Y (0x108) */
+        obMap(o)      = (uint32_t)(uintptr_t)Map_HUD;
+        obGfx(o)      = (uint16_t)ArtTile_HUD;         /* pieces carry pri/pal */
+        obRender(o)   = sprite_cam_screen;
+        obPriority(o) = 0;
+        /* ASM falls through into HUD_Flash for the first frame */
+    }
+
+    /* HUD_Flash (routine 2) */
+    if (v_rings != 0) {
+        obFrame(o) = 0;                                /* all counters yellow */
+        DisplaySprite(obj);
+        return;
+    }
+
+    /* No rings: flash the ring counter red every 8 frames, all-red at 9:00 */
+    int d0 = 0;
+    if (!(v_framebyte & 0x08)) {
+        d0 += 1;                                       /* ring counter red */
+    }
+    if (v_timemin == 9) {
+        d0 += 2;                                       /* + time counter red */
+    }
+    obFrame(o) = (uint8_t)d0;
+    DisplaySprite(obj);
 }
 
 /* ===========================================================================

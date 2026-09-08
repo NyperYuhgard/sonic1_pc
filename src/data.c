@@ -86,6 +86,21 @@ size_t   Level_GHZ1_len = 0;
 uint8_t *Level_GHZbg = NULL;
 size_t   Level_GHZbg_len = 0;
 
+uint8_t *Nem_Hud = NULL;
+size_t   Nem_Hud_len = 0;
+
+uint8_t *Nem_Lives = NULL;
+size_t   Nem_Lives_len = 0;
+
+uint8_t *Art_Hud = NULL;
+size_t   Art_Hud_len = 0;
+
+uint8_t *Art_LivesNums = NULL;
+size_t   Art_LivesNums_len = 0;
+
+uint8_t *Map_HUD = NULL;
+size_t   Map_HUD_len = 0;
+
 /* ============================================================================
    Asset loading
    ============================================================================ */
@@ -157,6 +172,17 @@ int Data_Init(void) {
     Nem_TitleCard_len = 0;
     Map_Card = NULL;
     Map_Card_len = 0;
+
+    Nem_Hud = NULL;
+    Nem_Hud_len = 0;
+    Nem_Lives = NULL;
+    Nem_Lives_len = 0;
+    Art_Hud = NULL;
+    Art_Hud_len = 0;
+    Art_LivesNums = NULL;
+    Art_LivesNums_len = 0;
+    Map_HUD = NULL;
+    Map_HUD_len = 0;
 
     if (load_asset("palette/sega_bg.bin", &Pal_SegaBG, &Pal_SegaBG_len) != 0) {
         Pal_SegaBG = NULL;
@@ -288,6 +314,31 @@ int Data_Init(void) {
         Level_GHZbg_len = 0;
     }
 
+    if (load_asset("artnem/hud.nem", &Nem_Hud, &Nem_Hud_len) != 0) {
+        Nem_Hud = NULL;
+        Nem_Hud_len = 0;
+    }
+
+    if (load_asset("artnem/hud_lives.nem", &Nem_Lives, &Nem_Lives_len) != 0) {
+        Nem_Lives = NULL;
+        Nem_Lives_len = 0;
+    }
+
+    if (load_asset("artunc/HUD Numbers.unc", &Art_Hud, &Art_Hud_len) != 0) {
+        Art_Hud = NULL;
+        Art_Hud_len = 0;
+    }
+
+    if (load_asset("artunc/Lives Counter Numbers.unc", &Art_LivesNums, &Art_LivesNums_len) != 0) {
+        Art_LivesNums = NULL;
+        Art_LivesNums_len = 0;
+    }
+
+    if (load_asm_asset("maps/hud.asm", &Map_HUD, &Map_HUD_len, 1) != 0) {
+        Map_HUD = NULL;
+        Map_HUD_len = 0;
+    }
+
     if (load_asset("artnem/jap_credits.nem", &Nem_JapNames, &Nem_JapNames_len) != 0) {
         Nem_JapNames = NULL;
         Nem_JapNames_len = 0;
@@ -337,6 +388,11 @@ void Data_Quit(void) {
     FREE_ASSET(Nem_GHZ_1st);
     FREE_ASSET(Nem_TitleCard);
     FREE_ASSET(Map_Card);
+    FREE_ASSET(Nem_Hud);
+    FREE_ASSET(Nem_Lives);
+    FREE_ASSET(Art_Hud);
+    FREE_ASSET(Art_LivesNums);
+    FREE_ASSET(Map_HUD);
 #undef FREE_ASSET
 }
 

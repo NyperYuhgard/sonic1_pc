@@ -25,6 +25,7 @@ set(SOURCES
     src/deform.c
     src/level.c
     src/plc.c
+    src/hud.c
 )
 
 # Executable

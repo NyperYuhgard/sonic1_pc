@@ -117,6 +117,21 @@ extern size_t   Nem_TitleCard_len;
 extern uint8_t *Map_Card;
 extern size_t   Map_Card_len;
 
+/* HUD graphics (artnem/HUD.nem = SCOR/TIME/RING text; artnem/hud_lives.nem
+   = lives icon + "SONIC x N"; artunc numbers are the 8x16/8x8 digits) */
+extern uint8_t *Nem_Hud;
+extern size_t   Nem_Hud_len;
+extern uint8_t *Nem_Lives;
+extern size_t   Nem_Lives_len;
+extern uint8_t *Art_Hud;
+extern size_t   Art_Hud_len;
+extern uint8_t *Art_LivesNums;
+extern size_t   Art_LivesNums_len;
+
+/* HUD sprite mappings */
+extern uint8_t *Map_HUD;
+extern size_t   Map_HUD_len;
+
 /* Initialize all assets from the assets/ directory.
    Returns 0 on success, -1 on any failure. */
 int Data_Init(void);

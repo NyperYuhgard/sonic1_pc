@@ -12,6 +12,7 @@
 #include "decomp.h"
 #include "deform.h"
 #include "plc.h"
+#include "hud.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -330,8 +331,10 @@ static void Level_Enter(void) {
 
     /* ------------------------------------------------------------------
        Phase H: HUD base graphics (sonic.asm:2857)
+       Decompress HUD art to VRAM and draw the static "E______0", "0:00",
+       "__0" digits plus the lives counter.
        ------------------------------------------------------------------ */
-    /* TODO: Hud_Base — load basic HUD tiles */
+    Hud_Base();
 
     /* ------------------------------------------------------------------
        Phase I: Post-title-card init (sonic.asm:2860-2919)

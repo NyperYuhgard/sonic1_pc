@@ -17,6 +17,7 @@
 #include "deform.h"
 #include "level.h"
 #include "plc.h"
+#include "hud.h"
 
 /* ===================================================================
    Game Mode IDs (from sonic.asm GameModeArray)
@@ -178,7 +179,10 @@ void WaitForVBlank(void) {
     case id_VBlank_PaletteFade:  VBlank_PaletteFade();  break;
     case id_VBlank_SegaPCM:      VBlank_SegaPCM();      break;
     case id_VBlank_Title:        VBlank_StandardTransfers(); break;
-    case id_VBlank_Levels:       VBlank_StandardTransfers(); break;
+    case id_VBlank_Levels:
+        VBlank_StandardTransfers();
+        HUD_Update();   /* ASM VBlank_Levels -> VBlank_UpdateScreen -> HUD_Update */
+        break;
     default:                     VBlank_StandardTransfers(); break;
     }
 

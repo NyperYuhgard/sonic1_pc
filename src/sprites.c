@@ -20,6 +20,7 @@ static void build_sprite_piece(uint8_t *sprite_table, int *sprite_index,
     int height_code = p[1] & 3;            /* height-1 */
     uint8_t mflags = p[2];
     int m_pri   = (mflags >> 7) & 1;       /* priority flag */
+    int m_pal   = (mflags >> 5) & 3;       /* palette line */
     int m_yflip = (mflags >> 4) & 1;       /* per-piece Y flip */
     int m_xflip = (mflags >> 3) & 1;       /* per-piece X flip */
     uint16_t tile = ((uint16_t)(mflags & 7) << 8) | p[3]; /* 11-bit tile */
@@ -42,6 +43,7 @@ static void build_sprite_piece(uint8_t *sprite_table, int *sprite_index,
 
     uint16_t pattern = (uint16_t)gfx + tile;
     /* Per-piece mapping flags (obGfx already carries the palette bits) */
+    if (m_pal)   pattern |= (uint16_t)(m_pal << 13); /* palette line in VDP word */
     if (m_xflip) pattern |= 1 << 11;   /* set X-flip in VDP word */
     if (m_yflip) pattern |= 1 << 12;   /* set Y-flip in VDP word */
     if (m_pri)   pattern |= 1 << 15;   /* priority: draws above planes/others */
