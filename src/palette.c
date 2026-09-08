@@ -301,8 +301,37 @@ int PalCycle_Sega(void) {
 }
 
 /* ============================================================================
- *  PalCycle_Title - stub for title screen palette cycling
+ *  PalCycle_Title (from _inc/PaletteCycle.asm, PalCycle_Title/PCycGHZ_Go)
+ *  Cycles the background water colours on the title screen: every 6 frames,
+ *  4 colours (palette line 3, colours 8-B) are replaced with the next block
+ *  of 4 colours from Pal_TitleCycWater (4 blocks of 4, big-endian words).
  *  ============================================================================ */
 void PalCycle_Title(void) {
-    /* TODO: Implement title palette cycle */
+    if (!Pal_TitleCycWater || Pal_TitleCycWater_len < 32) return;
+
+    const uint8_t *tab = Pal_TitleCycWater;
+    #define TITLE_CYC_COLOR(idx) ((uint16_t)((uint16_t)tab[(idx)*2] << 8) | tab[(idx)*2 + 1])
+
+    /* Decrementar temporizador */
+    v_pcyc_time = (uint16_t)(v_pcyc_time - 1);
+    if ((v_pcyc_time & 0x8000) == 0) return; /* Timer aún positivo (>= 0) */
+
+    v_pcyc_time = 6 - 1; /* Reset timer */
+
+    /* Obtener el número de ciclo (0..3) */
+    uint16_t block = v_pcyc_num & 3;
+    v_pcyc_num = (uint16_t)(v_pcyc_num + 1);
+
+    /* Cada bloque tiene 4 colores (uint16_t) */
+    int base_color_idx = block * 4; 
+
+    /* Escribir en la paleta RAM (Línea 3, colores 8 a 11) */
+    uint16_t *line3 = (uint16_t *)RAM_ADDR(v_palette_line_3);
+    for (int i = 0; i < 4; i++) {
+        uint16_t color = TITLE_CYC_COLOR(base_color_idx + i);
+        line3[8 + i] = color;
+        vdp.cram[40 + i] = color; /* Sincronizar CRAM (Línea 3 = offset 32, 32+8 = 40) */
+    }
+
+    #undef TITLE_CYC_COLOR
 }

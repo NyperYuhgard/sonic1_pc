@@ -29,6 +29,10 @@ extern size_t   Eni_SegaLogo_len;
 extern uint8_t *Pal_Title;
 extern size_t   Pal_Title_len;
 
+/* Title screen water palette cycle data (assets/palette/cycle_water.bin) */
+extern uint8_t *Pal_TitleCycWater;
+extern size_t   Pal_TitleCycWater_len;
+
 extern uint8_t *Pal_LevelSel;
 extern size_t   Pal_LevelSel_len;
 

@@ -776,6 +776,7 @@ static void GM_Title_Screen(void) {
         if (f_levselcheat && (v_jpadhold1 & btnA)) {
             v_vblank_routine = id_VBlank_Title;
             WaitForVBlank();
+            PalLoad(palid_LevelSel);   /* load level select palette (ASM: moveq #palid_LevelSel, bsr PalLoad) */
             Palette_Update();
             memset(RAM_ADDR(v_hscrolltablebuffer), 0, 0x400);
             v_scrposy_vdp = 0;
