@@ -249,11 +249,12 @@ static void GM_Sega_Screen(void) {
     /* --- Wait for "SEGA" sound ---
        ASM: queue the sound, set routine to $14, ONE WaitForVBlank.
        Sound driver is stubbed, so this is just one frame. */
+       Sound_Queue(sfx_Sega, false);
     v_vblank_routine = id_VBlank_SegaPCM;
     WaitForVBlank();
 
     /* --- Post-chant wait (30 frames or until Start pressed) --- */
-    v_generictimer = 30;
+    v_generictimer = 120;
     do {
         v_vblank_routine = id_VBlank_Sega; /* set every frame (matches ASM loop) */
         WaitForVBlank();
