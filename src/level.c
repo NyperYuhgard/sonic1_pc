@@ -244,10 +244,14 @@ static void Level_Enter(void) {
     ClearPLC();
     Palette_FadeOut();
 
-    /* ------------------------------------------------------------------
+/* ------------------------------------------------------------------
        Phase B: Title card art + level PLC (sonic.asm:2716-2737)
-       Skip for now — no title card assets loaded yet.
        ------------------------------------------------------------------ */
+    /* Decompress the zone title card art to VRAM */
+    if (Nem_TitleCard) {
+        NemDecToVRAM(Nem_TitleCard, ArtTile_Title_Card * tile_size);
+    }
+    /* TODO: level art AddPLC queue — decoded inline by LevelDataLoad here */
 
     /* ------------------------------------------------------------------
        Phase C: Clear RAM regions (sonic.asm:2739-2743)
@@ -287,12 +291,25 @@ static void Level_Enter(void) {
        Phase F: Music + title card object (sonic.asm:2792-2811)
        ------------------------------------------------------------------ */
     /* TODO: play zone music via MusicList */
-    /* TODO: load title card object (id_TitleCard = 0x34) */
+
+    /* Load zone title cards (move.b #id_TitleCard,(v_titlecard).w) */
+    memset(RAM_ADDR(v_titlecard), 0, 4 * OBJECT_SIZE);
+    obID(&ram[v_titlecard]) = id_TitleCard;
 
     /* ------------------------------------------------------------------
-       Phase G: Title card loop (sonic.asm:2814-2842)
-       Skip for now — will animate title cards in a later pass.
+       Phase G: Title card move-in loop (sonic.asm:2814-2842)
+       Execute objects each frame until every element has reached its
+       resting X-position. PLCs are synchronous in this port, so the
+       only remaining loop condition is the cards settling.
        ------------------------------------------------------------------ */
+    v_vblank_routine = id_VBlank_Levels;
+    int settle_frames = 0;
+    do {
+        WaitForVBlank();
+        ExecuteObjects();        /* first call spawns the four card elements */
+        BuildSprites();
+        settle_frames++;
+    } while (settle_frames < 120 && !TitleCardsSettled());
 
     /* ------------------------------------------------------------------
        Phase H: HUD base graphics (sonic.asm:2857)
@@ -349,6 +366,12 @@ static void Level_Enter(void) {
        ------------------------------------------------------------------ */
     v_vblank_routine = id_VBlank_Levels;
     Palette_FadeIn();
+
+    /* Level has faded in: make the title cards start moving (sonic.asm:2972-2975) */
+    obRoutine(&ram[v_titlecard])                     += 2;  /* name  -> wait */
+    obRoutine(&ram[v_titlecard + OBJECT_SIZE * 1])   += 4;  /* ZONE  -> wait */
+    obRoutine(&ram[v_titlecard + OBJECT_SIZE * 2])   += 4;  /* ACT   -> wait */
+    obRoutine(&ram[v_titlecard + OBJECT_SIZE * 3])   += 4;  /* oval  -> wait */
 }
 
 /* ===================================================================

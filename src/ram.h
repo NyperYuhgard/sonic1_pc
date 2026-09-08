@@ -642,6 +642,10 @@ static inline void RAM_SET_U32(uint32_t addr, uint32_t v) {
 #define standonobject(obj)  (*(uint8_t *)((uint8_t *)(obj) + 0x3D))
 #define locktime(obj)       (*(uint8_t *)((uint8_t *)(obj) + 0x3E))
 
+/* Zone title card specific fields (objoff_30/objoff_32) */
+#define cardMainX(obj)   (*(int16_t *)((uint8_t *)(obj) + 0x30))  /* target X while moving in */
+#define cardFinalX(obj)  (*(int16_t *)((uint8_t *)(obj) + 0x32))  /* target X while moving out */
+
 /* ---------------------------------------------------------------------------
    Sound driver RAM (SMPS) — within the block starting at v_snddriver_ram.
    Offsets relative to v_snddriver_ram. (Audio is a stub; see sound.h/.c)

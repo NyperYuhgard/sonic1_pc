@@ -110,6 +110,13 @@ extern size_t   Map_PSB_len;
 extern uint8_t *Map_Cred;
 extern size_t   Map_Cred_len;
 
+extern uint8_t *Nem_TitleCard;
+extern size_t   Nem_TitleCard_len;
+
+/* Zone title card sprite mappings */
+extern uint8_t *Map_Card;
+extern size_t   Map_Card_len;
+
 /* Initialize all assets from the assets/ directory.
    Returns 0 on success, -1 on any failure. */
 int Data_Init(void);

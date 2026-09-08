@@ -29,6 +29,9 @@ void *FindFreeObj(void);
 /* Delete an object (translated from DeleteObject.asm) */
 void DeleteObject(void *obj);
 
+/* Has every title card element reached its resting X-position? */
+int TitleCardsSettled(void);
+
 /* Get a pointer to the object at the given index */
 static inline void *Object_GetSlot(int index) {
     return &ram[v_objspace + OBJECT_SIZE * index];

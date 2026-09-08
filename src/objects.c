@@ -21,6 +21,7 @@ static void PSBTM_Main(void *obj);
 static void CreditsText_Main(void *obj);
 static void SonicPlayer_Main(void *obj);
 static void HUD_Main(void *obj);
+static void TitleCard_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -42,6 +43,7 @@ void Objects_Init(void) {
     /* Register level objects */
     obj_dispatch[id_SonicPlayer]  = SonicPlayer_Main;
     obj_dispatch[id_HUD]          = HUD_Main;
+    obj_dispatch[id_TitleCard]    = TitleCard_Main;
 
     /* Clear all object RAM */
     memset(ObjRAM, 0, NUM_OBJECTS * OBJECT_SIZE);
@@ -222,6 +224,139 @@ static void CreditsText_Main(void *obj) {
             DisplaySprite(obj);
             break;
     }
+}
+
+/* ===========================================================================
+   TitleCard object (id_TitleCard = $34)
+   Zone title cards. Ported from _incObj/34 Title Cards.asm.
+   The root object (v_titlecard) is converted into the level "name" card;
+   three more elements (ZONE, ACT, oval) are placed right after it in memory.
+   =========================================================================== */
+
+/* Card_ItemData: per-element Y-position and frame ID. All four elements
+   are born in routine 2 (Card_MoveIn). */
+static const int16_t Card_ItemDataY[4] = { 0xD0, 0xE4, 0xEA, 0xE0 };
+static const uint8_t Card_ItemDataF[4] = { 0x00, 0x06, 0x07, 0x0A };
+
+/* Card_ConData: four (start X, target X) pairs per zone -
+   name, ZONE, ACT, oval. Element 6 is used by Final Zone. */
+static const int16_t Card_ConData[7][8] = {
+    { 0x000, 0x120, -0x104, 0x13C, 0x414, 0x154, 0x214, 0x154 }, /* GHZ */
+    { 0x000, 0x120, -0x10C, 0x134, 0x40C, 0x14C, 0x20C, 0x14C }, /* LZ */
+    { 0x000, 0x120, -0x120, 0x120, 0x3F8, 0x138, 0x1F8, 0x138 }, /* MZ */
+    { 0x000, 0x120, -0x104, 0x13C, 0x414, 0x154, 0x214, 0x154 }, /* SLZ */
+    { 0x000, 0x120, -0x0FC, 0x144, 0x41C, 0x15C, 0x21C, 0x15C }, /* SYZ */
+    { 0x000, 0x120, -0x0FC, 0x144, 0x41C, 0x15C, 0x21C, 0x15C }, /* SBZ */
+    { 0x000, 0x120, -0x11C, 0x124, 0x3EC, 0x3EC, 0x1EC, 0x12C }, /* FZ */
+};
+
+int TitleCardsSettled(void) {
+    for (int i = 0; i < 4; i++) {
+        uint8_t *o = &ram[v_titlecard + OBJECT_SIZE * i];
+        if (obID(o) == 0) continue;
+        if (obX(o) != cardMainX(o)) return 0;
+    }
+    return 1;
+}
+
+static void TitleCard_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t routine = obRoutine(o);
+
+    /* Card_LoadForZone (routine 0): turn this slot into the name card and
+       spawn the other three elements back-to-back after it. */
+    if (routine == 0) {
+        uint8_t *a1 = o;
+        int d0 = v_zone;
+        uint16_t zact = (uint16_t)v_zone_act;
+
+        if (zact == id_LZ_act4) {
+            d0 = 5;                 /* SBZ3: use SBZ title card */
+        }
+        int d2 = d0;                /* name card frame ID */
+        if (zact == id_FZ) {
+            d0 = 6;                 /* FZ entry in Card_ConData */
+            d2 = 0x0B;              /* "FINAL" mapping frame */
+        }
+
+        const int16_t *con = Card_ConData[d0];
+        for (int i = 0; i < 4; i++) {
+            obID(a1)       = id_TitleCard;
+            obX(a1)        = (int16_t)con[i * 2];
+            cardFinalX(a1) = (int16_t)con[i * 2];         /* same as start */
+            cardMainX(a1)  = (int16_t)con[i * 2 + 1];
+            obScreenY(a1)  = (int16_t)Card_ItemDataY[i];
+            obRoutine(a1)  = 2;                           /* Card_MoveIn */
+            int frame = Card_ItemDataF[i];
+            if (frame == 0) {
+                frame = d2;                               /* zone name frame */
+            }
+            if (frame == 7) {
+                frame += v_act;
+                if (v_act == act4) frame -= 1;            /* SBZ3/LZ4 keeps "3" */
+            }
+            obFrame(a1)    = (uint8_t)frame;
+            obMap(a1)      = (uint32_t)(uintptr_t)Map_Card;
+            obGfx(a1)      = (uint16_t)(ArtTile_Title_Card | Tile_Prio);
+            obActWid(a1)   = 240 / 2;
+            obRender(a1)   = sprite_cam_screen;
+            obPriority(a1) = 0;
+            obTimeFrame(a1)= 60;                          /* 1 second delay */
+            a1 += OBJECT_SIZE;
+        }
+        /* ASM falls through into Card_MoveIn for this (name) element. */
+    }
+
+    /* Card_MoveIn (routine 2): slide toward cardMainX at 16 px/frame. */
+    if (routine == 0 || routine == 2) {
+        int16_t d1 = 0x10;
+        int16_t cur = obX(o);
+        int16_t target = cardMainX(o);
+
+        if (cur != target) {
+            if (target < cur) d1 = -d1;
+            obX(o) = (int16_t)(cur + d1);
+        }
+
+        /* Bounds check before displaying (FixBugs variant: keep long cards
+           like Spring Yard from poking in on the wrong side of the screen).
+           Displays only while X is in (0x50, 0x200]. */
+        int16_t x = obX(o);
+        if (x <= 0x50 || x > 0x200) return;  /* off screen: don't display */
+        DisplaySprite(obj);
+        return;
+    }
+
+    /* Card_Wait (routine 4/6): count down, then slide back out. */
+    if (routine == 4 || routine == 6) {
+        if (obTimeFrame(o) != 0) {
+            obTimeFrame(o)--;
+            DisplaySprite(obj);
+            return;
+        }
+
+        /* Card_MoveOut: 32 px/frame back toward cardFinalX (the start). */
+        if (!(obRender(o) & 0x80)) {
+            DeleteObject(obj);      /* Card_ChangeArt extra loads skipped in PC */
+            return;
+        }
+        int16_t d1 = 0x20;
+        int16_t cur = obX(o);
+        int16_t target = cardFinalX(o);
+        if (cur == target) {
+            DeleteObject(obj);      /* Card_ChangeArt extra loads skipped in PC */
+            return;
+        }
+        if (target < cur) d1 = -d1;
+        cur = (int16_t)(cur + d1);
+        obX(o) = cur;
+        /* Keep moving even when off screen; only the display is gated. */
+        if (cur <= 0x50 || cur > 0x200) return;
+        DisplaySprite(obj);
+        return;
+    }
+
+    DisplaySprite(obj);
 }
 
 /* ===========================================================================

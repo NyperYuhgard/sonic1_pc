@@ -153,6 +153,10 @@ int Data_Init(void) {
     Level_GHZ1_len = 0;
     Level_GHZbg = NULL;
     Level_GHZbg_len = 0;
+    Nem_TitleCard = NULL;
+    Nem_TitleCard_len = 0;
+    Map_Card = NULL;
+    Map_Card_len = 0;
 
     if (load_asset("palette/sega_bg.bin", &Pal_SegaBG, &Pal_SegaBG_len) != 0) {
         Pal_SegaBG = NULL;
@@ -249,6 +253,16 @@ int Data_Init(void) {
         Map_Cred_len = 0;
     }
 
+    if (load_asset("artnem/title_card.nem", &Nem_TitleCard, &Nem_TitleCard_len) != 0) {
+        Nem_TitleCard = NULL;
+        Nem_TitleCard_len = 0;
+    }
+
+    if (load_asm_asset("maps/titlecard.asm", &Map_Card, &Map_Card_len, 1) != 0) {
+        Map_Card = NULL;
+        Map_Card_len = 0;
+    }
+
     if (load_asset("tilemaps/title.eni", &Eni_Title, &Eni_Title_len) != 0) {
         Eni_Title = NULL;
         Eni_Title_len = 0;
@@ -321,6 +335,8 @@ void Data_Quit(void) {
     FREE_ASSET(Blk256_GHZ);
     FREE_ASSET(Eni_Title);
     FREE_ASSET(Nem_GHZ_1st);
+    FREE_ASSET(Nem_TitleCard);
+    FREE_ASSET(Map_Card);
 #undef FREE_ASSET
 }
 
@@ -376,6 +392,13 @@ size_t   Map_PSB_len = 0;
 
 uint8_t *Map_Cred = NULL;
 size_t   Map_Cred_len = 0;
+
+uint8_t *Nem_TitleCard = NULL;
+size_t   Nem_TitleCard_len = 0;
+
+/* Zone title card sprite mappings */
+uint8_t *Map_Card = NULL;
+size_t   Map_Card_len = 0;
 
 /* ===========================================================================
    ASM parser for original Sonic 1 anim/map assets
