@@ -290,7 +290,24 @@ static void Level_Enter(void) {
     /* ------------------------------------------------------------------
        Phase F: Music + title card object (sonic.asm:2792-2811)
        ------------------------------------------------------------------ */
-    /* TODO: play zone music via MusicList */
+    /* Level_GetBgm: play the zone's music from MusicList. Skipped in
+       credits demos (f_demo negative). SBZ3 (LZ act 4) and Final Zone
+       pick their dedicated entries. */
+    if ((int16_t)RAM_WORD(f_demo) >= 0) {
+        static const uint8_t music_list[] = {
+            bgm_GHZ,   /* 0: Green Hill */
+            bgm_LZ,    /* 1: Labyrinth */
+            bgm_MZ,    /* 2: Marble */
+            bgm_SLZ,   /* 3: Star Light */
+            bgm_SYZ,   /* 4: Spring Yard */
+            bgm_SBZ,   /* 5: Scrap Brain */
+            bgm_FZ,    /* 6: Final */
+        };
+        int d0 = v_zone;
+        if (v_zone_act == id_LZ_act4) d0 = 5;  /* SBZ3 uses Scrap Brain */
+        else if (v_zone_act == id_FZ) d0 = 6;  /* Final Zone */
+        Sound_Queue(music_list[d0], false);
+    }
 
     /* Load zone title cards (move.b #id_TitleCard,(v_titlecard).w) */
     memset(RAM_ADDR(v_titlecard), 0, 4 * OBJECT_SIZE);

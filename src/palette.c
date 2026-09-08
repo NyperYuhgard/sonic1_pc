@@ -25,26 +25,32 @@ typedef struct {
 
 static PalEntry pal_index[8];
 
+/* Number of longwords minus 1 for a palette buffer of `len` bytes, exactly
+   like the ASM (makePalEntry: "(end-start)/4-1"). 0 for empty data. */
+static uint16_t pal_count(size_t len) {
+    return len ? (uint16_t)(len / 2 - 1) : 0;
+}
+
 void Palette_Init(void) {
     pal_index[0].data = Pal_SegaBG;
     pal_index[0].target_ram_offset = v_palette_line_1;
-    pal_index[0].count = (128 / 2) - 1;
+    pal_index[0].count = pal_count(Pal_SegaBG_len);
 
     pal_index[1].data = Pal_Title;
     pal_index[1].target_ram_offset = v_palette_line_1;
-    pal_index[1].count = (128 / 2) - 1;
+    pal_index[1].count = pal_count(Pal_Title_len);
 
     pal_index[2].data = Pal_LevelSel;
     pal_index[2].target_ram_offset = v_palette_line_1;
-    pal_index[2].count = (128 / 2) - 1;
+    pal_index[2].count = pal_count(Pal_LevelSel_len);
 
     pal_index[3].data = Pal_Sonic;
     pal_index[3].target_ram_offset = v_palette_line_1;
-    pal_index[3].count = (128 / 2) - 1;
+    pal_index[3].count = pal_count(Pal_Sonic_len);
 
     pal_index[4].data = Pal_GHZ;            /* palid_GHZ */
     pal_index[4].target_ram_offset = v_palette_line_2;
-    pal_index[4].count = (Pal_GHZ_len ? (uint16_t)(Pal_GHZ_len / 2) - 1 : 0);
+    pal_index[4].count = pal_count(Pal_GHZ_len);
 }
 
 void PalLoad(int index) {
