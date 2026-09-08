@@ -19,15 +19,29 @@ int sprite_queue_count = 0;
 static void TitleSonic_Main(void *obj);
 static void PSBTM_Main(void *obj);
 static void CreditsText_Main(void *obj);
+static void SonicPlayer_Main(void *obj);
+static void HUD_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
+/* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
+static void NullObject_Main(void *obj) {
+    DeleteObject(obj);
+}
+
 void Objects_Init(void) {
-    memset(obj_dispatch, 0, sizeof(obj_dispatch));
+    /* Default: every unmapped ID self-deletes (matches ASM NullObject) */
+    for (int i = 1; i < 256; i++) {
+        obj_dispatch[i] = NullObject_Main;
+    }
 
     /* Register title screen objects */
     obj_dispatch[id_TitleSonic]   = TitleSonic_Main;
     obj_dispatch[id_PSBTM]        = PSBTM_Main;
     obj_dispatch[id_CreditsText]  = CreditsText_Main;
+
+    /* Register level objects */
+    obj_dispatch[id_SonicPlayer]  = SonicPlayer_Main;
+    obj_dispatch[id_HUD]          = HUD_Main;
 
     /* Clear all object RAM */
     memset(ObjRAM, 0, NUM_OBJECTS * OBJECT_SIZE);
@@ -208,6 +222,24 @@ static void CreditsText_Main(void *obj) {
             DisplaySprite(obj);
             break;
     }
+}
+
+/* ===========================================================================
+   SonicPlayer object (id_SonicPlayer = $01)
+   STUB — will be ported from _incObj/01 Sonic - Main.asm in a later pass.
+   =========================================================================== */
+static void SonicPlayer_Main(void *obj) {
+    /* TODO: full player physics + collision */
+    (void)obj;
+}
+
+/* ===========================================================================
+   HUD object (id_HUD = $21)
+   STUB — will be ported from _incObj/21 HUD.asm in a later pass.
+   =========================================================================== */
+static void HUD_Main(void *obj) {
+    /* TODO: score / time / rings / lives display */
+    (void)obj;
 }
 
 /* ===========================================================================

@@ -24,6 +24,8 @@ extern size_t   Eni_SegaLogo_len;
 #define palid_Title     1
 #define palid_LevelSel  2
 #define palid_Sonic     3
+#define palid_GHZ       4
+#define palid_ZoneStart palid_GHZ   /* first level palette entry (Pal_Levels) */
 
 /* Title Screen assets */
 extern uint8_t *Pal_Title;
@@ -38,6 +40,9 @@ extern size_t   Pal_LevelSel_len;
 
 extern uint8_t *Pal_Sonic;
 extern size_t   Pal_Sonic_len;
+
+extern uint8_t *Pal_GHZ;
+extern size_t   Pal_GHZ_len;
 
 extern uint8_t *Nem_JapNames;
 extern size_t   Nem_JapNames_len;

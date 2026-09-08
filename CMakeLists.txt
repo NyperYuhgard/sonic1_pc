@@ -23,6 +23,8 @@ set(SOURCES
     src/data.c
     src/assets.c
     src/deform.c
+    src/level.c
+    src/plc.c
 )
 
 # Executable

@@ -495,6 +495,9 @@ enum {
 /* ---------------------------------------------------------------------------
     Pattern Load Cue IDs
     --------------------------------------------------------------------------- */
+#define plc_slot_size               6          /* size of a PLC slot (4B src + 2B dest) */
+#define plc_slot_count              16         /* max queued PLCs */
+
 #define plcid_Main             0
 #define plcid_Main2            1
 #define plcid_Explode          2
@@ -719,21 +722,141 @@ enum {
 #define ArtTile_Title_Trademark           0x510
 #define ArtTile_Level_Select_Font         0x680
 
-/* Object IDs */
+/* Object IDs (from disasm "_inc/Object Pointers.asm") */
+#define id_SonicPlayer                    0x01
+#define id_Splash                         0x08
+#define id_SonicSpecial                   0x09
+#define id_DrownCount                     0x0A
+#define id_Pole                           0x0B
+#define id_FlapDoor                       0x0C
+#define id_Signpost                       0x0D
 #define id_TitleSonic                     0x0E
 #define id_PSBTM                          0x0F
-#define id_CreditsText                    0x8A
-
-/* Boss object IDs (from disasm "Object Pointers.asm") */
+#define id_Obj10                          0x10
+#define id_Bridge                         0x11
+#define id_SpinningLight                  0x12
+#define id_LavaMaker                      0x13
+#define id_LavaBall                       0x14
+#define id_SwingingPlatform               0x15
+#define id_Harpoon                        0x16
+#define id_Helix                          0x17
+#define id_BasicPlatform                  0x18
+#define id_Obj19                          0x19
+#define id_CollapseLedge                  0x1A
+#define id_WaterSurface                   0x1B
+#define id_Scenery                        0x1C
+#define id_MagicSwitch                    0x1D
+#define id_BallHog                        0x1E
+#define id_Crabmeat                       0x1F
+#define id_Cannonball                     0x20
+#define id_HUD                            0x21
+#define id_BuzzBomber                     0x22
+#define id_Missile                        0x23
+#define id_UnusedExplosion                0x24
+#define id_Rings                          0x25
+#define id_Monitor                        0x26
+#define id_ExplosionItem                  0x27
+#define id_Animals                        0x28
+#define id_Points                         0x29
+#define id_AutoDoor                       0x2A
+#define id_Chopper                        0x2B
+#define id_Jaws                           0x2C
+#define id_Burrobot                       0x2D
+#define id_PowerUp                        0x2E
+#define id_LargeGrass                     0x2F
+#define id_GlassBlock                     0x30
+#define id_ChainStomp                     0x31
+#define id_Button                         0x32
+#define id_PushBlock                      0x33
+#define id_TitleCard                      0x34
+#define id_GrassFire                      0x35
+#define id_Spikes                         0x36
+#define id_RingLoss                       0x37
+#define id_ShieldItem                     0x38
+#define id_GameOverCard                   0x39
+#define id_GotThroughCard                 0x3A
+#define id_PurpleRock                     0x3B
+#define id_SmashWall                      0x3C
 #define id_BossGreenHill                  0x3D
+#define id_Prison                         0x3E
+#define id_Explosion                      0x3F
+#define id_MotoBug                        0x40
+#define id_Springs                        0x41
+#define id_Newtron                        0x42
+#define id_Roller                         0x43
+#define id_EdgeWalls                      0x44
+#define id_SideStomp                      0x45
+#define id_MarbleBrick                    0x46
+#define id_Bumper                         0x47
+#define id_BossBall                       0x48
+#define id_WaterSound                     0x49
+#define id_VanishSonic                    0x4A
+#define id_GiantRing                      0x4B
+#define id_GeyserMaker                    0x4C
+#define id_LavaGeyser                     0x4D
+#define id_LavaWall                       0x4E
+#define id_Obj4F                          0x4F
+#define id_Yadrin                         0x50
+#define id_SmashBlock                     0x51
+#define id_MovingBlock                    0x52
+#define id_CollapseFloor                  0x53
+#define id_LavaTag                        0x54
+#define id_Basaran                        0x55
+#define id_FloatingBlock                  0x56
+#define id_SpikeBall                      0x57
+#define id_BigSpikeBall                   0x58
+#define id_Elevator                       0x59
+#define id_CirclingPlatform               0x5A
+#define id_Staircase                      0x5B
+#define id_Pylon                          0x5C
+#define id_Fan                            0x5D
+#define id_Seesaw                         0x5E
+#define id_Bomb                           0x5F
+#define id_Orbinaut                       0x60
+#define id_LabyrinthBlock                 0x61
+#define id_Gargoyle                       0x62
+#define id_LabyrinthConvey                0x63
+#define id_Bubble                         0x64
+#define id_Waterfall                      0x65
+#define id_Junction                       0x66
+#define id_RunningDisc                    0x67
+#define id_Conveyor                       0x68
+#define id_SpinPlatform                   0x69
+#define id_Saws                           0x6A
+#define id_ScrapStomp                     0x6B
+#define id_VanishPlatform                 0x6C
+#define id_Flamethrower                   0x6D
+#define id_Electro                        0x6E
+#define id_SpinConvey                     0x6F
+#define id_Girder                         0x70
+#define id_Invisibarrier                  0x71
+#define id_Teleport                       0x72
 #define id_BossMarble                     0x73
+#define id_BossFire                       0x74
 #define id_BossSpringYard                 0x75
 #define id_BossBlock                      0x76
 #define id_BossLabyrinth                  0x77
+#define id_Caterkiller                    0x78
+#define id_Lamppost                       0x79
 #define id_BossStarLight                  0x7A
+#define id_BossSpikeball                  0x7B
+#define id_RingFlash                      0x7C
+#define id_HiddenBonus                    0x7D
+#define id_SSResult                       0x7E
+#define id_SSRChaos                       0x7F
+#define id_ContScrItem                    0x80
+#define id_ContSonic                      0x81
 #define id_ScrapEggman                    0x82
 #define id_FalseFloor                     0x83
+#define id_EggmanCylinder                 0x84
 #define id_BossFinal                      0x85
+#define id_BossPlasma                     0x86
+#define id_EndSonic                       0x87
+#define id_EndChaos                       0x88
+#define id_EndSTH                         0x89
+#define id_CreditsText                    0x8A
+#define id_EndEggman                      0x8B
+#define id_TryChaos                       0x8C
 
 /* PLC IDs for bosses (from disasm "_inc/Pattern Load Cues.asm") */
 #define plcid_EggmanSBZ2                  0x1E

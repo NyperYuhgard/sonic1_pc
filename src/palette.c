@@ -23,7 +23,7 @@ typedef struct {
     uint16_t       count;             /* longwords - 1 */
 } PalEntry;
 
-static PalEntry pal_index[4];
+static PalEntry pal_index[8];
 
 void Palette_Init(void) {
     pal_index[0].data = Pal_SegaBG;
@@ -41,6 +41,10 @@ void Palette_Init(void) {
     pal_index[3].data = Pal_Sonic;
     pal_index[3].target_ram_offset = v_palette_line_1;
     pal_index[3].count = (128 / 2) - 1;
+
+    pal_index[4].data = Pal_GHZ;            /* palid_GHZ */
+    pal_index[4].target_ram_offset = v_palette_line_2;
+    pal_index[4].count = (Pal_GHZ_len ? (uint16_t)(Pal_GHZ_len / 2) - 1 : 0);
 }
 
 void PalLoad(int index) {
@@ -67,7 +71,11 @@ void PalLoad_Fade(int index) {
     const PalEntry *e = &pal_index[index];
     if (!e->data) return;
 
-    uint16_t *dest = (uint16_t *)RAM_ADDR(v_palette_fading);
+    /* Mirror the ASM: a3 = target RAM address, then add $80 to land in the
+       matching line of the fade-in buffer (v_palette_fading). Level palettes
+       target v_palette_line_2, so they must land in the fade buffer line 2. */
+    int line_off = (int)(e->target_ram_offset - v_palette);
+    uint16_t *dest = (uint16_t *)RAM_ADDR(v_palette_fading + line_off);
     int words = e->count + 1;
     for (int i = 0; i < words; i++) {
         dest[i] = ((uint16_t)e->data[i * 2] << 8) | e->data[i * 2 + 1];

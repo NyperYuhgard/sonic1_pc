@@ -44,6 +44,9 @@ size_t   Pal_LevelSel_len = 0;
 uint8_t *Pal_Sonic = NULL;
 size_t   Pal_Sonic_len = 0;
 
+uint8_t *Pal_GHZ = NULL;
+size_t   Pal_GHZ_len = 0;
+
 uint8_t *Nem_JapNames = NULL;
 size_t   Nem_JapNames_len = 0;
 
@@ -122,6 +125,8 @@ int Data_Init(void) {
     Pal_LevelSel_len = 0;
     Pal_Sonic = NULL;
     Pal_Sonic_len = 0;
+    Pal_GHZ = NULL;
+    Pal_GHZ_len = 0;
     Nem_JapNames = NULL;
     Nem_JapNames_len = 0;
     Eni_JapNames = NULL;
@@ -192,6 +197,11 @@ int Data_Init(void) {
     if (load_asset("palette/sonic.bin", &Pal_Sonic, &Pal_Sonic_len) != 0) {
         Pal_Sonic = NULL;
         Pal_Sonic_len = 0;
+    }
+
+    if (load_asset("palette/ghz.bin", &Pal_GHZ, &Pal_GHZ_len) != 0) {
+        Pal_GHZ = NULL;
+        Pal_GHZ_len = 0;
     }
 
     if (load_asset("artnem/title_fg.nem", &Nem_TitleFg, &Nem_TitleFg_len) != 0) {
@@ -299,6 +309,7 @@ void Data_Quit(void) {
     FREE_ASSET(Pal_TitleCycWater);
     FREE_ASSET(Pal_LevelSel);
     FREE_ASSET(Pal_Sonic);
+    FREE_ASSET(Pal_GHZ);
     FREE_ASSET(Nem_JapNames);
     FREE_ASSET(Eni_JapNames);
     FREE_ASSET(Nem_CreditText);

@@ -15,6 +15,8 @@
 #include "data.h"
 #include "decomp.h"
 #include "deform.h"
+#include "level.h"
+#include "plc.h"
 
 /* ===================================================================
    Game Mode IDs (from sonic.asm GameModeArray)
@@ -53,7 +55,6 @@ int running = 1;
     =================================================================== */
 static void GM_Sega_Screen(void);
 static void GM_Title_Screen(void);
-static void GM_Level_Process(void);
 static void GM_Special_Stage(void);
 static void GM_Continue_Screen(void);
 static void GM_Ending_Screen(void);
@@ -270,224 +271,9 @@ static void GM_Sega_Screen(void) {
     Game mode stubs and helpers
     =================================================================== */
 
-/* Stub: Clear any pending PLC (Pattern Load Cue) */
-static void ClearPLC(void) {
-    memset(RAM_ADDR(v_plc_buffer), 0, 0x20);
-}
-
-/* Stub: Queue sound/music */
+/* OnlyForCompat: Queue sound/music */
 static void QueueSound2(int id, bool loop) {
     Sound_Queue(id, loop);
-}
-
-/* Stub: Run PLC (load pending patterns) */
-static void RunPLC(void) {
-    /* TODO: Implement PLC runner */
-}
-
-/* ===================================================================
-   Level size loading (from _inc/LevelSizeLoad & BgScrollSpeed.asm)
-   =================================================================== */
-
-/* Level size array (from _inc/LevelSizeArray.asm): one 6-word entry per act:
-   <unused=$0004> <left> <right> <top> <bottom> <lookshift=$0060> */
-static const uint16_t level_size_array[][6] = {
-    /*                                                  GHZ1 */
-    { 0x0004, 0x0000, 0x24BF, 0x0000, 0x0300, 0x0060 },
-    /*                                                  GHZ2 */
-    { 0x0004, 0x0000, 0x1EBF, 0x0000, 0x0300, 0x0060 },
-    /*                                                  GHZ3 */
-    { 0x0004, 0x0000, 0x2960, 0x0000, 0x0300, 0x0060 },
-    /*                                                  GHZ4 (unused) */
-    { 0x0004, 0x0000, 0x2ABF, 0x0000, 0x0300, 0x0060 },
-};
-
-static void LevelSizeLoad(void) {
-    uint8_t zone = (uint8_t)(v_zone_act >> 8);
-    uint8_t act  = (uint8_t)(v_zone_act & 0xFF);
-
-    /* Clear level-change variables */
-    v_unused7 = 0;
-    v_unused8 = 0;
-    v_unused9 = 0;
-    v_unused10 = 0;
-    v_dle_routine = 0;
-    f_nobgscroll = 0;
-
-    /* LevelSizeArray entry index = zone*4 + act */
-    uint32_t idx = (uint32_t)zone * 4 + act;
-    if (idx < sizeof(level_size_array) / sizeof(level_size_array[0])) {
-        const uint16_t *e = level_size_array[idx];
-
-        v_unused11      = e[0];                 /* always $0004 */
-        v_limitleft2    = v_limitleft1  = e[1];
-        v_limitright2   = v_limitright1 = e[2];
-        v_limittop2     = v_limittop1   = e[3];
-        v_limitbtm2     = v_limitbtm1   = e[4];
-        v_lookshift     = e[5];                 /* always $0060 */
-        v_limitleft3    = v_limitleft2 + 0x240;
-
-        /* Trigger drawing of a whole column on next frame */
-        v_fg_xblock = 0x10;
-        v_fg_yblock = 0x10;
-    }
-
-    /* Start location. The title screen (FixBugs) uses a fixed spot to avoid
-       conflicts with GHZ1's start location. */
-    int16_t startX = 0x0050;
-    int16_t startY = 0x03B0;
-    obX(&ram[v_player]) = startX;
-    obY(&ram[v_player]) = startY;
-
-    /* LevSz_InitCameraPositions */
-    int32_t camX = startX - 160;                /* center Sonic horizontally */
-    if (camX < 0) camX = 0;
-    if (camX >= (int32_t)v_limitright2) camX = v_limitright2;
-
-    int32_t camY = startY - 96;                 /* center Sonic vertically */
-    if (camY < 0) camY = 0;
-    if (camY >= (int32_t)v_limitbtm2) camY = v_limitbtm2;
-
-    RAM_WORD(0xF700) = (uint16_t)camX;          /* v_screenposx */
-    RAM_WORD(0xF704) = (uint16_t)camY;          /* v_screenposy */
-}
-
-/* ===================================================================
-   Level layout loading (from _inc/LevelLayoutLoad.asm)
-   =================================================================== */
-
-/* Copy one layout blob to RAM. Header is [width][height], followed by
-   (height+1) rows of (width+1) bytes (dbf semantics), rows stored
-   layout_row ($80) apart in RAM. */
-static void level_layout_load2(const uint8_t *src, uint8_t *dst) {
-    size_t width = src[0] + 1;
-    size_t rows  = src[1] + 1;
-    src += 2;
-    for (size_t r = 0; r < rows; r++) {
-        memcpy(dst, src, width);
-        dst += layout_row;
-        src += width;
-    }
-}
-
-static void LevelLayoutLoad(void) {
-    uint8_t zone = (uint8_t)(v_zone_act >> 8);
-    uint8_t act  = (uint8_t)(v_zone_act & 0xFF);
-
-    /* Clear the entire layout buffer (FixBugs) */
-    memset(RAM_ADDR(v_lvllayout), 0, v_lvllayout_end - v_lvllayout);
-
-    if (zone != 0) return;   /* only GHZ loaded so far */
-
-    /* Level_Index (sonic.asm): all GHZ acts share the GHZ1 FG; GHZ4 (unused)
-       falls back to the background blob. */
-    const uint8_t *fg;
-    const uint8_t *bg;
-    switch (act) {
-    case 3:  fg = Level_GHZbg;  bg = Level_GHZbg;  break;
-    default: fg = Level_GHZ1;   bg = Level_GHZbg;  break;
-    }
-    if (!fg || !bg) return;
-
-    level_layout_load2(fg, RAM_ADDR(v_lvllayout_fg));
-    level_layout_load2(bg, RAM_ADDR(v_lvllayout_bg));
-}
-
-/* ===================================================================
-   Level drawing (from _inc/Level Drawing (REV00).asm)
-   =================================================================== */
-
-static uint16_t data_be16(const uint8_t *p) {
-    return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
-}
-
-/* Draw a 16x16 block into a nametable plane. Mirrors GetBlockData +
-   DrawBlock: resolves the chunk from the layout, the block from the
-   chunk, applies X/Y flips and stores the four tile words big-endian. */
-static void draw_chunks_block(const uint8_t *layout, int cam_x, int cam_y,
-                              int sx, int sy, uint32_t vram) {
-    int ly = cam_y + sy;                        /* level Y pixel position */
-    int lx = cam_x + sx;                        /* level X pixel position */
-
-    /* Turn Y coordinate into a layout row offset */
-    int row_off = ((ly >> 1) & 0x380);
-    /* Turn X coordinate into a layout chunk column */
-    int col_off = ((lx >> 8) & 0x7F);
-
-    /* Get the chunk ID from the level layout */
-    uint8_t chunk_id = layout[row_off + col_off];
-    if (chunk_id == 0) return;                  /* empty chunk, skip */
-
-    /* Chunk RAM address: (chunk_id-1) * $200 */
-    uint32_t chunk_off = (uint32_t)((chunk_id - 1) & 0x7F) * chunk_size;
-
-    /* Block cell within the chunk: 2 bytes per 16x16 block */
-    int cell_y = (ly * 2) & 0x1E0;
-    int cell_x = ((lx >> 3) & 0x1E);
-    const uint8_t *cell = RAM_ADDR(v_256x256) + chunk_off + cell_y + cell_x;
-
-    /* Cell word: block ID (low byte + low 2 bits of flag byte) */
-    uint16_t cell_word = data_be16(cell);
-    uint16_t block_id  = cell_word & 0x3FF;
-
-    /* Block data: 4 words (TL, TR, BL, BR) in RAM, native order from EniDec */
-    const uint16_t *blk = (const uint16_t *)RAM_ADDR(v_16x16) + block_id * 4;
-    uint16_t t[4];
-    for (int i = 0; i < 4; i++) t[i] = blk[i];
-
-    /* Flipping */
-    int flip_x = (cell[0] >> 3) & 1;
-    int flip_y = (cell[0] >> 4) & 1;
-
-    uint16_t r0a, r0b, r1a, r1b;
-    if (flip_y) { r0a = t[2]; r0b = t[3]; r1a = t[0]; r1b = t[1]; }
-    else        { r0a = t[0]; r0b = t[1]; r1a = t[2]; r1b = t[3]; }
-    if (flip_x) { uint16_t sw; sw = r0a; r0a = r0b; r0b = sw;
-                         sw = r1a; r1a = r1b; r1b = sw; }
-    if (flip_x) { r0a ^= 0x0800; r0b ^= 0x0800; r1a ^= 0x0800; r1b ^= 0x0800; }
-    if (flip_y) { r0a ^= 0x1000; r0b ^= 0x1000; r1a ^= 0x1000; r1b ^= 0x1000; }
-
-    /* Store the four tile words big-endian (top row, then bottom row) */
-    vdp.vram[vram]           = (uint8_t)(r0a >> 8);
-    vdp.vram[vram + 1]       = (uint8_t)r0a;
-    vdp.vram[vram + 2]       = (uint8_t)(r0b >> 8);
-    vdp.vram[vram + 3]       = (uint8_t)r0b;
-    vdp.vram[vram + 0x80]    = (uint8_t)(r1a >> 8);
-    vdp.vram[vram + 0x81]    = (uint8_t)r1a;
-    vdp.vram[vram + 0x82]    = (uint8_t)(r1b >> 8);
-    vdp.vram[vram + 0x83]    = (uint8_t)r1b;
-}
-
-/* Draw one plane's worth of level graphics (16 strips x 32 blocks), mirroring
-   DrawChunks + DrawBlocks_LR_2 + Calc_VRAM_Pos. A block vertically spans two
-   tile rows, so the stride is $100 bytes ($80 per tile row). */
-static void draw_chunks_plane(uint32_t plane_base, int cam_x, int cam_y,
-                              const uint8_t *layout) {
-    for (int strip = 0; strip < 16; strip++) {
-        int sy = -16 + strip * 16;               /* d4: start 16px above screen */
-        int block_row = ((cam_y + sy) & 0xF0) >> 4;  /* plane block row (0-15) */
-        for (int bx = 0; bx < 32; bx++) {
-            int sx = bx * 16;                    /* d5: from far left */
-            int col = ((cam_x + sx) & 0x1F0) >> 4;
-            uint32_t vram = plane_base + block_row * 0x100 + col * 4;
-            draw_chunks_block(layout, cam_x, cam_y, sx, sy, vram);
-        }
-    }
-}
-
-/* Draw the initial background layer. The title screen (GM_Title) calls the
-   original with a3=v_bgscreenposx, a4=v_lvllayout_bg, d2=$6000, so only the
-   BG plane is drawn here. */
-static void DrawChunks(void) {
-    draw_chunks_plane(vram_bg,
-                      (int16_t)RAM_WORD(0xF708),   /* v_bgscreenposx */
-                      (int16_t)RAM_WORD(0xF70C),   /* v_bgscreenposy */
-                      RAM_ADDR(v_lvllayout_bg));
-}
-
-/* Stub: Start a new PLC */
-static void NewPLC(int id) {
-    /* TODO: Implement PLC */
 }
 
 /* Stub: Goto demo mode */
@@ -500,8 +286,8 @@ static void PlayLevel(void) {
     v_gamemode = GM_Level;
 }
 
-/* Clear screen alias */
-static void ClearScreen(void) {
+/* Clear screen alias — used by level.c too */
+void ClearScreen(void) {
     VDP_ClearScreen();
 }
 
@@ -872,10 +658,7 @@ static void GM_Title_Screen(void) {
 }
 
 static void GM_Level_Process(void) {
-    /* TODO: Implement Level processing */
-    ExecuteObjects();
-    BuildSprites();
-    WaitForVBlank();
+    Level_Process();
 }
 
 static void GM_Special_Stage(void) {
