@@ -5,194 +5,236 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/mman.h>
+#include <unistd.h>
+#include <limits.h>
 
 /* Object mapping pointers are stored in 32-bit fields (obMap), so mapping
    data must live below 4 GB. MAP_32BIT asks the kernel for such an address. */
-static uint8_t *alloc_32bit(size_t n) {
+static const uint8_t *alloc_32bit(size_t n) {
     void *p = mmap(NULL, n, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
-    return (p == MAP_FAILED) ? NULL : (uint8_t *)p;
+    return (p == MAP_FAILED) ? NULL : (const uint8_t *)p;
 }
 
 /* ============================================================================
    Asset pointers
    ============================================================================ */
-uint8_t *Pal_SegaBG = NULL;
+const uint8_t *Pal_SegaBG = NULL;
 size_t   Pal_SegaBG_len = 0;
 
-uint8_t *Pal_Sega1 = NULL;
+const uint8_t *Pal_Sega1 = NULL;
 size_t   Pal_Sega1_len = 0;
 
-uint8_t *Pal_Sega2 = NULL;
+const uint8_t *Pal_Sega2 = NULL;
 size_t   Pal_Sega2_len = 0;
 
-uint8_t *Nem_SegaLogo = NULL;
+const uint8_t *Nem_SegaLogo = NULL;
 size_t   Nem_SegaLogo_len = 0;
 
-uint8_t *Eni_SegaLogo = NULL;
+const uint8_t *Eni_SegaLogo = NULL;
 size_t   Eni_SegaLogo_len = 0;
 
-uint8_t *Pal_Title = NULL;
+const uint8_t *Pal_Title = NULL;
 size_t   Pal_Title_len = 0;
 
-uint8_t *Pal_TitleCycWater = NULL;
+const uint8_t *Pal_TitleCycWater = NULL;
 size_t   Pal_TitleCycWater_len = 0;
 
-uint8_t *Pal_LevelSel = NULL;
+const uint8_t *Pal_LevelSel = NULL;
 size_t   Pal_LevelSel_len = 0;
 
-uint8_t *Pal_Sonic = NULL;
+const uint8_t *Pal_Sonic = NULL;
 size_t   Pal_Sonic_len = 0;
 
-uint8_t *Pal_GHZ = NULL;
+const uint8_t *Pal_GHZ = NULL;
 size_t   Pal_GHZ_len = 0;
 
-uint8_t *Nem_JapNames = NULL;
+const uint8_t *Nem_JapNames = NULL;
 size_t   Nem_JapNames_len = 0;
 
-uint8_t *Eni_JapNames = NULL;
+const uint8_t *Eni_JapNames = NULL;
 size_t   Eni_JapNames_len = 0;
 
-uint8_t *Nem_CreditText = NULL;
+const uint8_t *Nem_CreditText = NULL;
 size_t   Nem_CreditText_len = 0;
 
-uint8_t *Nem_TitleFg = NULL;
+const uint8_t *Nem_TitleFg = NULL;
 size_t   Nem_TitleFg_len = 0;
 
-uint8_t *Nem_TitleSonic = NULL;
+const uint8_t *Nem_TitleSonic = NULL;
 size_t   Nem_TitleSonic_len = 0;
 
-uint8_t *Nem_TitleTM = NULL;
+const uint8_t *Nem_TitleTM = NULL;
 size_t   Nem_TitleTM_len = 0;
 
-uint8_t *Art_Text = NULL;
+const uint8_t *Art_Text = NULL;
 size_t   Art_Text_len = 0;
 
-uint8_t *Blk16_GHZ = NULL;
+const uint8_t *Blk16_GHZ = NULL;
 size_t   Blk16_GHZ_len = 0;
 
-uint8_t *Blk256_GHZ = NULL;
+const uint8_t *Blk256_GHZ = NULL;
 size_t   Blk256_GHZ_len = 0;
 
-uint8_t *Eni_Title = NULL;
+const uint8_t *Eni_Title = NULL;
 size_t   Eni_Title_len = 0;
 
-uint8_t *Nem_GHZ_1st = NULL;
+const uint8_t *Nem_GHZ_1st = NULL;
 size_t   Nem_GHZ_1st_len = 0;
 
-uint8_t *Level_GHZ1 = NULL;
+const uint8_t *Level_GHZ1 = NULL;
 size_t   Level_GHZ1_len = 0;
 
-uint8_t *Level_GHZbg = NULL;
+const uint8_t *Level_GHZbg = NULL;
 size_t   Level_GHZbg_len = 0;
 
 /* Level PLC graphics (PLC_GHZ + PLC_Main2). Only Nem_GHZ_1st is staged so
    far; these stay NULL (AddPLC skips them) until their assets land. */
-uint8_t *Nem_GHZ_2nd = NULL;
+const uint8_t *Nem_GHZ_2nd = NULL;
 size_t   Nem_GHZ_2nd_len = 0;
-uint8_t *Nem_Stalk = NULL;
+const uint8_t *Nem_Stalk = NULL;
 size_t   Nem_Stalk_len = 0;
-uint8_t *Nem_PplRock = NULL;
+const uint8_t *Nem_PplRock = NULL;
 size_t   Nem_PplRock_len = 0;
-uint8_t *Nem_Crabmeat = NULL;
+const uint8_t *Nem_Crabmeat = NULL;
 size_t   Nem_Crabmeat_len = 0;
-uint8_t *Nem_Buzz = NULL;
+const uint8_t *Nem_Buzz = NULL;
 size_t   Nem_Buzz_len = 0;
-uint8_t *Nem_Chopper = NULL;
+const uint8_t *Nem_Chopper = NULL;
 size_t   Nem_Chopper_len = 0;
-uint8_t *Nem_Newtron = NULL;
+const uint8_t *Nem_Newtron = NULL;
 size_t   Nem_Newtron_len = 0;
-uint8_t *Nem_Motobug = NULL;
+const uint8_t *Nem_Motobug = NULL;
 size_t   Nem_Motobug_len = 0;
-uint8_t *Nem_Spikes = NULL;
+const uint8_t *Nem_Spikes = NULL;
 size_t   Nem_Spikes_len = 0;
-uint8_t *Nem_HSpring = NULL;
+const uint8_t *Nem_HSpring = NULL;
 size_t   Nem_HSpring_len = 0;
-uint8_t *Nem_VSpring = NULL;
+const uint8_t *Nem_VSpring = NULL;
 size_t   Nem_VSpring_len = 0;
-uint8_t *Nem_Monitors = NULL;
+const uint8_t *Nem_Monitors = NULL;
 size_t   Nem_Monitors_len = 0;
-uint8_t *Nem_Shield = NULL;
+const uint8_t *Nem_Shield = NULL;
 size_t   Nem_Shield_len = 0;
-uint8_t *Nem_Stars = NULL;
+const uint8_t *Nem_Stars = NULL;
 size_t   Nem_Stars_len = 0;
 
-uint8_t *Nem_Hud = NULL;
+const uint8_t *Nem_Hud = NULL;
 size_t   Nem_Hud_len = 0;
 
-uint8_t *Nem_Lives = NULL;
+const uint8_t *Nem_Lives = NULL;
 size_t   Nem_Lives_len = 0;
 
-uint8_t *Art_Hud = NULL;
+const uint8_t *Art_Hud = NULL;
 size_t   Art_Hud_len = 0;
 
-uint8_t *Art_LivesNums = NULL;
+const uint8_t *Art_LivesNums = NULL;
 size_t   Art_LivesNums_len = 0;
 
-uint8_t *Map_HUD = NULL;
+const uint8_t *Map_HUD = NULL;
 size_t   Map_HUD_len = 0;
 
-uint8_t *ObjPos_GHZ1 = NULL;
+const uint8_t *Map_Sonic = NULL;
+size_t   Map_Sonic_len = 0;
+
+const uint8_t *Art_Sonic = NULL;
+size_t   Art_Sonic_len = 0;
+const uint8_t *SonicDynPLC = NULL;
+size_t   SonicDynPLC_len = 0;
+const uint8_t *Ani_Sonic = NULL;
+size_t   Ani_Sonic_len = 0;
+
+const uint8_t *ObjPos_GHZ1 = NULL;
 size_t   ObjPos_GHZ1_len = 0;
 
-uint8_t *Nem_Ring = NULL;
+const uint8_t *Nem_Ring = NULL;
 size_t   Nem_Ring_len = 0;
 
-uint8_t *Map_Ring = NULL;
+const uint8_t *Map_Ring = NULL;
 size_t   Map_Ring_len = 0;
 
-uint8_t *Ani_Ring = NULL;
+const uint8_t *Ani_Ring = NULL;
 size_t   Ani_Ring_len = 0;
 
 /* Uncompressed level art for AnimateLevelAct (AnimateLevelGfx.asm).
    Art_MzLava1/2 and Art_MzTorch are for MZ, Art_SbzSmoke for SBZ,
    Art_BigRing for the giant ring object; only the GHZ art + BigRing
    are reachable while GHZ is the playable zone. */
-uint8_t *Art_GhzWater = NULL;
+const uint8_t *Art_GhzWater = NULL;
 size_t   Art_GhzWater_len = 0;
-uint8_t *Art_GhzFlower1 = NULL;
+const uint8_t *Art_GhzFlower1 = NULL;
 size_t   Art_GhzFlower1_len = 0;
-uint8_t *Art_GhzFlower2 = NULL;
+const uint8_t *Art_GhzFlower2 = NULL;
 size_t   Art_GhzFlower2_len = 0;
-uint8_t *Art_MzLava1 = NULL;
+const uint8_t *Art_MzLava1 = NULL;
 size_t   Art_MzLava1_len = 0;
-uint8_t *Art_MzLava2 = NULL;
+const uint8_t *Art_MzLava2 = NULL;
 size_t   Art_MzLava2_len = 0;
-uint8_t *Art_MzTorch = NULL;
+const uint8_t *Art_MzTorch = NULL;
 size_t   Art_MzTorch_len = 0;
-uint8_t *Art_SbzSmoke = NULL;
+const uint8_t *Art_SbzSmoke = NULL;
 size_t   Art_SbzSmoke_len = 0;
-uint8_t *Art_BigRing = NULL;
+const uint8_t *Art_BigRing = NULL;
 size_t   Art_BigRing_len = 0;
+
+/* Collision index tables (AngleMap, CollArray1, CollArray2) */
+const uint8_t *Col_AngleMap = NULL;
+size_t   Col_AngleMap_len = 0;
+const uint8_t *Col_CollArray1 = NULL;
+size_t   Col_CollArray1_len = 0;
+const uint8_t *Col_CollArray2 = NULL;
+size_t   Col_CollArray2_len = 0;
 
 /* Per-zone collision indexes (ColPointers, sonic.asm:3116-3121).
    Only GHZ is staged so far; the rest stay NULL (ColIndexLoad picks a
    NULL pointer) until their collide/*.bin lands. */
-uint8_t *Col_GHZ = NULL;
+const uint8_t *Col_GHZ = NULL;
 size_t   Col_GHZ_len = 0;
-uint8_t *Col_LZ = NULL;
+const uint8_t *Col_LZ = NULL;
 size_t   Col_LZ_len = 0;
-uint8_t *Col_MZ = NULL;
+const uint8_t *Col_MZ = NULL;
 size_t   Col_MZ_len = 0;
-uint8_t *Col_SLZ = NULL;
+const uint8_t *Col_SLZ = NULL;
 size_t   Col_SLZ_len = 0;
-uint8_t *Col_SYZ = NULL;
+const uint8_t *Col_SYZ = NULL;
 size_t   Col_SYZ_len = 0;
-uint8_t *Col_SBZ = NULL;
+const uint8_t *Col_SBZ = NULL;
 size_t   Col_SBZ_len = 0;
 
 /* ============================================================================
    Asset loading
    ============================================================================ */
 
-static int load_asset(const char *name, uint8_t **out_ptr, size_t *out_len);
+static int load_asset(const char *name, const uint8_t **out_ptr, size_t *out_len);
 
-static int load_asm_asset(const char *name, uint8_t **out_ptr, size_t *out_len, int is_map);
+static int load_asm_asset(const char *name, const uint8_t **out_ptr, size_t *out_len, int is_map);
 
-static int load_asset(const char *name, uint8_t **out_ptr, size_t *out_len) {
-    char path[512];
-    snprintf(path, sizeof(path), "./assets/%s", name);
-    uint8_t *buf = Assets_Load(path, out_len);
+static const char *assets_base_path(void) {
+    static char base[PATH_MAX];
+    static int init = 0;
+    if (init) return base;
+    init = 1;
+    ssize_t n = readlink("/proc/self/exe", base, sizeof(base) - 1);
+    if (n > 0) {
+        base[n] = '\0';
+        char *slash = strrchr(base, '/');
+        if (slash) {
+            *slash = '\0';
+            char tmp[PATH_MAX + 64];
+            snprintf(tmp, sizeof(tmp), "%s/assets", base);
+            strncpy(base, tmp, sizeof(base) - 1);
+            base[sizeof(base) - 1] = '\0';
+            return base;
+        }
+    }
+    snprintf(base, sizeof(base), "./assets");
+    return base;
+}
+
+static int load_asset(const char *name, const uint8_t **out_ptr, size_t *out_len) {
+    char path[PATH_MAX + 512];
+    snprintf(path, sizeof(path), "%s/%s", assets_base_path(), name);
+    const uint8_t *buf = Assets_Load(path, out_len);
     if (!buf) {
         fprintf(stderr, "[Data] Failed to load asset: %s\n", path);
         return -1;
@@ -439,6 +481,26 @@ int Data_Init(void) {
         Map_Card_len = 0;
     }
 
+    if (load_asm_asset("maps/sonic.asm", &Map_Sonic, &Map_Sonic_len, 1) != 0) {
+        Map_Sonic = NULL;
+        Map_Sonic_len = 0;
+    }
+
+    if (load_asset("artunc/Sonic.unc", &Art_Sonic, &Art_Sonic_len) != 0) {
+        Art_Sonic = NULL;
+        Art_Sonic_len = 0;
+    }
+
+    if (load_asm_asset("maps/Sonic - Dynamic Gfx Script.asm", &SonicDynPLC, &SonicDynPLC_len, 0) != 0) {
+        SonicDynPLC = NULL;
+        SonicDynPLC_len = 0;
+    }
+
+    if (load_asm_asset("anim/Sonic.asm", &Ani_Sonic, &Ani_Sonic_len, 0) != 0) {
+        Ani_Sonic = NULL;
+        Ani_Sonic_len = 0;
+    }
+
     if (load_asset("tilemaps/title.eni", &Eni_Title, &Eni_Title_len) != 0) {
         Eni_Title = NULL;
         Eni_Title_len = 0;
@@ -547,6 +609,19 @@ int Data_Init(void) {
         Art_BigRing_len = 0;
     }
 
+    if (load_asset("collide/Angle_Map.bin", &Col_AngleMap, &Col_AngleMap_len) != 0) {
+        Col_AngleMap = NULL;
+        Col_AngleMap_len = 0;
+    }
+    if (load_asset("collide/Collision_Array_Normal.bin", &Col_CollArray1, &Col_CollArray1_len) != 0) {
+        Col_CollArray1 = NULL;
+        Col_CollArray1_len = 0;
+    }
+    if (load_asset("collide/Collision_Array_Rotated.bin", &Col_CollArray2, &Col_CollArray2_len) != 0) {
+        Col_CollArray2 = NULL;
+        Col_CollArray2_len = 0;
+    }
+
     if (load_asset("artnem/jap_credits.nem", &Nem_JapNames, &Nem_JapNames_len) != 0) {
         Nem_JapNames = NULL;
         Nem_JapNames_len = 0;
@@ -610,6 +685,10 @@ void Data_Quit(void) {
     FREE_ASSET(Nem_Stars);
     FREE_ASSET(Nem_TitleCard);
     FREE_ASSET(Map_Card);
+    FREE_ASSET(Map_Sonic);
+    FREE_ASSET(Art_Sonic);
+    FREE_ASSET(SonicDynPLC);
+    FREE_ASSET(Ani_Sonic);
     FREE_ASSET(Nem_Hud);
     FREE_ASSET(Nem_Lives);
     FREE_ASSET(Art_Hud);
@@ -628,6 +707,9 @@ void Data_Quit(void) {
     FREE_ASSET(Art_MzTorch);
     FREE_ASSET(Art_SbzSmoke);
     FREE_ASSET(Art_BigRing);
+    FREE_ASSET(Col_AngleMap);
+    FREE_ASSET(Col_CollArray1);
+    FREE_ASSET(Col_CollArray2);
 #undef FREE_ASSET
 }
 
@@ -664,10 +746,10 @@ const uint32_t LevSel_Ptrs_len = sizeof(LevSel_Ptrs);
    Format: word offset to animation data, then duration + frame IDs/flags
    =========================================================================== */
 
-uint8_t *Ani_TSon = NULL;
+const uint8_t *Ani_TSon = NULL;
 size_t   Ani_TSon_len = 0;
 
-uint8_t *Ani_PSBTM = NULL;
+const uint8_t *Ani_PSBTM = NULL;
 size_t   Ani_PSBTM_len = 0;
 
 /* ===========================================================================
@@ -675,20 +757,20 @@ size_t   Ani_PSBTM_len = 0;
    These are loaded at runtime from assets/
    =========================================================================== */
 
-uint8_t *Map_TSon = NULL;
+const uint8_t *Map_TSon = NULL;
 size_t   Map_TSon_len = 0;
 
-uint8_t *Map_PSB = NULL;
+const uint8_t *Map_PSB = NULL;
 size_t   Map_PSB_len = 0;
 
-uint8_t *Map_Cred = NULL;
+const uint8_t *Map_Cred = NULL;
 size_t   Map_Cred_len = 0;
 
-uint8_t *Nem_TitleCard = NULL;
+const uint8_t *Nem_TitleCard = NULL;
 size_t   Nem_TitleCard_len = 0;
 
 /* Zone title card sprite mappings */
-uint8_t *Map_Card = NULL;
+const uint8_t *Map_Card = NULL;
 size_t   Map_Card_len = 0;
 
 /* ===========================================================================
@@ -808,10 +890,10 @@ typedef struct {
 static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_len) {
     (void)text_len;
     const char *p = text;
-    AnimSeg segs[16];
+    AnimSeg segs[128] = {0};
     int seg_count = 0;
-    char table_name[16][64];
-    int table_delta[16];
+    char table_name[128][64];
+    int table_delta[128];
     int table_count = 0;
 
     while (*p) {
@@ -825,10 +907,12 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
         const char *ins = strip_label(lp);
         if (*ins == '\0') continue;
 
-        if (is_directive(ins, "dc.w")) {
-            const char *dp = ins + 4;
+        if (is_directive(ins, "dc.w") || is_directive(ins, "mappingsTableEntry.w")) {
+            const char *dp = ins;
+            if (is_directive(ins, "dc.w")) dp += 4;
+            else dp += strlen("mappingsTableEntry.w");
             while (*dp && isspace((unsigned char)*dp)) dp++;
-            if (table_count < 16) {
+            if (table_count < 128) {
                 parse_table_expr(dp, table_name[table_count], 64, &table_delta[table_count]);
                 table_count++;
             }
@@ -838,7 +922,7 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
         if (is_directive(ins, "dc.b")) {
             const int has_label = (strip_label(lp) != lp);
             if (has_label) {
-                if (seg_count < 16) {
+                if (seg_count < 128) {
                     segs[seg_count].bytes = NULL;
                     segs[seg_count].len = 0;
                     const char *q = lp;
@@ -849,7 +933,7 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
                     seg_count++;
                 }
             } else if (seg_count == 0) {
-                if (seg_count < 16) {
+                if (seg_count < 128) {
                     segs[seg_count].name[0] = '\0';
                     segs[seg_count].bytes = NULL;
                     segs[seg_count].len = 0;
@@ -882,14 +966,14 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
 
     /* Layout: table of word offsets first, then each referenced frame block. */
     size_t total = 2 * (size_t)table_count;
-    size_t seg_pos[16];
-    int ref_idx[16];
+    size_t seg_pos[128];
+    int ref_idx[128];
     size_t cursor = total;
 
-    for (int j = 0; j < seg_count; j++) seg_pos[j] = (size_t)-1;
+    for (int j = 0; j < 128; j++) seg_pos[j] = (size_t)-1;
     for (int k = 0; k < table_count; k++) {
         int idx = -1;
-        for (int j = 0; j < seg_count; j++) {
+        for (int j = 0; j < 128; j++) {
             if (strcmp(segs[j].name, table_name[k]) == 0) {
                 idx = j;
                 break;
@@ -903,7 +987,7 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
             cursor += segs[idx].len;
         }
     }
-    for (int j = 0; j < seg_count; j++) {
+    for (int j = 0; j < 128; j++) {
         if (seg_pos[j] == (size_t)-1) {
             seg_pos[j] = cursor;
             cursor += segs[j].len;
@@ -922,23 +1006,23 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
         out[2 * k + 1] = (uint8_t)((off >> 8) & 0xFF);
     }
 
-    for (int j = 0; j < seg_count; j++)
+    for (int j = 0; j < 128; j++)
         memcpy(out + seg_pos[j], segs[j].bytes, segs[j].len);
 
-    for (int j = 0; j < seg_count; j++) free(segs[j].bytes);
+    for (int j = 0; j < 128; j++) free(segs[j].bytes);
     return out;
 }
 
 typedef struct {
     char name[64];
-    uint8_t *pieces;
+    const uint8_t *pieces;
     size_t count;
 } MapFrame;
 
 static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len) {
     (void)text_len;
     const char *p = text;
-    MapFrame frames[32];
+    MapFrame frames[32] = {0};
     int frame_count = 0;
     char table_name[32][64];
     int table_delta[32];
@@ -1030,7 +1114,7 @@ static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len
             piece[3] = (uint8_t)(tile & 0xFF);
             piece[4] = (uint8_t)(x & 0xFF);
 
-            uint8_t *np = (uint8_t *)realloc(fr->pieces, (fr->count + 1) * 5);
+            const uint8_t *np = (const uint8_t *)realloc(fr->pieces, (fr->count + 1) * 5);
             if (!np) continue;
             fr->pieces = np;
             memcpy(fr->pieces + fr->count * 5, piece, 5);
@@ -1090,9 +1174,9 @@ static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len
     return out;
 }
 
-static int load_asm_asset(const char *name, uint8_t **out_ptr, size_t *out_len, int is_map) {
-    char path[512];
-    snprintf(path, sizeof(path), "./assets/%s", name);
+static int load_asm_asset(const char *name, const uint8_t **out_ptr, size_t *out_len, int is_map) {
+    char path[PATH_MAX + 512];
+    snprintf(path, sizeof(path), "%s/%s", assets_base_path(), name);
     size_t text_len = 0;
     char *text = (char *)Assets_Load(path, &text_len);
     if (!text) {
@@ -1100,7 +1184,7 @@ static int load_asm_asset(const char *name, uint8_t **out_ptr, size_t *out_len, 
         return -1;
     }
 
-    uint8_t *data = NULL;
+    const uint8_t *data = NULL;
     size_t data_len = 0;
     if (is_map) {
         data = parse_map_asm(text, text_len, &data_len);
@@ -1116,7 +1200,7 @@ static int load_asm_asset(const char *name, uint8_t **out_ptr, size_t *out_len, 
     }
 
     /* Move the parsed buffer into 32-bit addressable space (needed by obMap). */
-    uint8_t *low = alloc_32bit(data_len);
+    const uint8_t *low = alloc_32bit(data_len);
     if (!low) {
         fprintf(stderr, "[Data] mmap MAP_32BIT failed for: %s\n", path);
         free(data);

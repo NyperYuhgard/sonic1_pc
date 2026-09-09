@@ -4,19 +4,19 @@
 #include "types.h"
 
 /* Sega Screen assets (loaded at runtime from assets/) */
-extern uint8_t *Pal_SegaBG;
+extern const uint8_t *Pal_SegaBG;
 extern size_t   Pal_SegaBG_len;
 
-extern uint8_t *Pal_Sega1;
+extern const uint8_t *Pal_Sega1;
 extern size_t   Pal_Sega1_len;
 
-extern uint8_t *Pal_Sega2;
+extern const uint8_t *Pal_Sega2;
 extern size_t   Pal_Sega2_len;
 
-extern uint8_t *Nem_SegaLogo;
+extern const uint8_t *Nem_SegaLogo;
 extern size_t   Nem_SegaLogo_len;
 
-extern uint8_t *Eni_SegaLogo;
+extern const uint8_t *Eni_SegaLogo;
 extern size_t   Eni_SegaLogo_len;
 
 /* Palette index IDs (from Palette Index.asm) */
@@ -34,90 +34,90 @@ extern size_t   Eni_SegaLogo_len;
 #define palid_Ending    19
 
 /* Title Screen assets */
-extern uint8_t *Pal_Title;
+extern const uint8_t *Pal_Title;
 extern size_t   Pal_Title_len;
 
 /* Title screen water palette cycle data (assets/palette/cycle_water.bin) */
-extern uint8_t *Pal_TitleCycWater;
+extern const uint8_t *Pal_TitleCycWater;
 extern size_t   Pal_TitleCycWater_len;
 
-extern uint8_t *Pal_LevelSel;
+extern const uint8_t *Pal_LevelSel;
 extern size_t   Pal_LevelSel_len;
 
-extern uint8_t *Pal_Sonic;
+extern const uint8_t *Pal_Sonic;
 extern size_t   Pal_Sonic_len;
 
-extern uint8_t *Pal_GHZ;
+extern const uint8_t *Pal_GHZ;
 extern size_t   Pal_GHZ_len;
 
-extern uint8_t *Nem_JapNames;
+extern const uint8_t *Nem_JapNames;
 extern size_t   Nem_JapNames_len;
 
-extern uint8_t *Eni_JapNames;
+extern const uint8_t *Eni_JapNames;
 extern size_t   Eni_JapNames_len;
 
-extern uint8_t *Nem_CreditText;
+extern const uint8_t *Nem_CreditText;
 extern size_t   Nem_CreditText_len;
 
-extern uint8_t *Nem_TitleFg;
+extern const uint8_t *Nem_TitleFg;
 extern size_t   Nem_TitleFg_len;
 
-extern uint8_t *Nem_TitleSonic;
+extern const uint8_t *Nem_TitleSonic;
 extern size_t   Nem_TitleSonic_len;
 
-extern uint8_t *Nem_TitleTM;
+extern const uint8_t *Nem_TitleTM;
 extern size_t   Nem_TitleTM_len;
 
-extern uint8_t *Art_Text;
+extern const uint8_t *Art_Text;
 extern size_t   Art_Text_len;
 
-extern uint8_t *Blk16_GHZ;
+extern const uint8_t *Blk16_GHZ;
 extern size_t   Blk16_GHZ_len;
 
-extern uint8_t *Blk256_GHZ;
+extern const uint8_t *Blk256_GHZ;
 extern size_t   Blk256_GHZ_len;
 
-extern uint8_t *Eni_Title;
+extern const uint8_t *Eni_Title;
 extern size_t   Eni_Title_len;
 
-extern uint8_t *Nem_GHZ_1st;
+extern const uint8_t *Nem_GHZ_1st;
 extern size_t   Nem_GHZ_1st_len;
 
-extern uint8_t *Level_GHZ1;
+extern const uint8_t *Level_GHZ1;
 extern size_t   Level_GHZ1_len;
 
-extern uint8_t *Level_GHZbg;
+extern const uint8_t *Level_GHZbg;
 extern size_t   Level_GHZbg_len;
 
 /* Level PLC graphics (PLC_GHZ + PLC_Main2). Only Nem_GHZ_1st is staged so
    far; the rest are NULL and skipped by AddPLC until their assets land. */
-extern uint8_t *Nem_GHZ_2nd;
+extern const uint8_t *Nem_GHZ_2nd;
 extern size_t   Nem_GHZ_2nd_len;
-extern uint8_t *Nem_Stalk;
+extern const uint8_t *Nem_Stalk;
 extern size_t   Nem_Stalk_len;
-extern uint8_t *Nem_PplRock;
+extern const uint8_t *Nem_PplRock;
 extern size_t   Nem_PplRock_len;
-extern uint8_t *Nem_Crabmeat;
+extern const uint8_t *Nem_Crabmeat;
 extern size_t   Nem_Crabmeat_len;
-extern uint8_t *Nem_Buzz;
+extern const uint8_t *Nem_Buzz;
 extern size_t   Nem_Buzz_len;
-extern uint8_t *Nem_Chopper;
+extern const uint8_t *Nem_Chopper;
 extern size_t   Nem_Chopper_len;
-extern uint8_t *Nem_Newtron;
+extern const uint8_t *Nem_Newtron;
 extern size_t   Nem_Newtron_len;
-extern uint8_t *Nem_Motobug;
+extern const uint8_t *Nem_Motobug;
 extern size_t   Nem_Motobug_len;
-extern uint8_t *Nem_Spikes;
+extern const uint8_t *Nem_Spikes;
 extern size_t   Nem_Spikes_len;
-extern uint8_t *Nem_HSpring;
+extern const uint8_t *Nem_HSpring;
 extern size_t   Nem_HSpring_len;
-extern uint8_t *Nem_VSpring;
+extern const uint8_t *Nem_VSpring;
 extern size_t   Nem_VSpring_len;
-extern uint8_t *Nem_Monitors;
+extern const uint8_t *Nem_Monitors;
 extern size_t   Nem_Monitors_len;
-extern uint8_t *Nem_Shield;
+extern const uint8_t *Nem_Shield;
 extern size_t   Nem_Shield_len;
-extern uint8_t *Nem_Stars;
+extern const uint8_t *Nem_Stars;
 extern size_t   Nem_Stars_len;
 
 /* Cheat codes */
@@ -132,88 +132,108 @@ extern const uint32_t LevSel_Ptrs_len;
 
 /* Title screen animation scripts and sprite mappings
    Loaded at runtime from assets/ */
-extern uint8_t *Ani_TSon;
+extern const uint8_t *Ani_TSon;
 extern size_t   Ani_TSon_len;
 
-extern uint8_t *Ani_PSBTM;
+extern const uint8_t *Ani_PSBTM;
 extern size_t   Ani_PSBTM_len;
 
-extern uint8_t *Map_TSon;
+extern const uint8_t *Map_TSon;
 extern size_t   Map_TSon_len;
 
-extern uint8_t *Map_PSB;
+extern const uint8_t *Map_PSB;
 extern size_t   Map_PSB_len;
 
-extern uint8_t *Map_Cred;
+extern const uint8_t *Map_Cred;
 extern size_t   Map_Cred_len;
 
-extern uint8_t *Nem_TitleCard;
+extern const uint8_t *Nem_TitleCard;
 extern size_t   Nem_TitleCard_len;
 
 /* Zone title card sprite mappings */
-extern uint8_t *Map_Card;
+extern const uint8_t *Map_Card;
 extern size_t   Map_Card_len;
+
+/* Sonic sprite mappings */
+extern const uint8_t *Map_Sonic;
+extern size_t   Map_Sonic_len;
+
+/* Sonic animation and dynamic PLC data (raw ASM assets) */
+extern const uint8_t *Art_Sonic;
+extern size_t   Art_Sonic_len;
+extern const uint8_t *SonicDynPLC;
+extern size_t   SonicDynPLC_len;
+extern const uint8_t *Ani_Sonic;
+extern size_t   Ani_Sonic_len;
 
 /* HUD graphics (artnem/HUD.nem = SCOR/TIME/RING text; artnem/hud_lives.nem
    = lives icon + "SONIC x N"; artunc numbers are the 8x16/8x8 digits) */
-extern uint8_t *Nem_Hud;
+extern const uint8_t *Nem_Hud;
 extern size_t   Nem_Hud_len;
-extern uint8_t *Nem_Lives;
+extern const uint8_t *Nem_Lives;
 extern size_t   Nem_Lives_len;
-extern uint8_t *Art_Hud;
+extern const uint8_t *Art_Hud;
 extern size_t   Art_Hud_len;
-extern uint8_t *Art_LivesNums;
+extern const uint8_t *Art_LivesNums;
 extern size_t   Art_LivesNums_len;
 
 /* HUD sprite mappings */
-extern uint8_t *Map_HUD;
+extern const uint8_t *Map_HUD;
 extern size_t   Map_HUD_len;
 
 /* Ring graphics, mappings and animation scripts */
-extern uint8_t *Nem_Ring;
+extern const uint8_t *Nem_Ring;
 extern size_t   Nem_Ring_len;
-extern uint8_t *Map_Ring;
+extern const uint8_t *Map_Ring;
 extern size_t   Map_Ring_len;
-extern uint8_t *Ani_Ring;
+extern const uint8_t *Ani_Ring;
 extern size_t   Ani_Ring_len;
 
 /* Object placement data (objpos binaries) */
-extern uint8_t *ObjPos_GHZ1;
+extern const uint8_t *ObjPos_GHZ1;
 extern size_t   ObjPos_GHZ1_len;
 
 /* Per-zone collision indexes (ColPointers, sonic.asm:3116-3121).
    Only GHZ is staged; the rest are NULL until their collide/*.bin lands. */
-extern uint8_t *Col_GHZ;
+extern const uint8_t *Col_GHZ;
 extern size_t   Col_GHZ_len;
-extern uint8_t *Col_LZ;
+extern const uint8_t *Col_LZ;
 extern size_t   Col_LZ_len;
-extern uint8_t *Col_MZ;
+extern const uint8_t *Col_MZ;
 extern size_t   Col_MZ_len;
-extern uint8_t *Col_SLZ;
+extern const uint8_t *Col_SLZ;
 extern size_t   Col_SLZ_len;
-extern uint8_t *Col_SYZ;
+extern const uint8_t *Col_SYZ;
 extern size_t   Col_SYZ_len;
-extern uint8_t *Col_SBZ;
+extern const uint8_t *Col_SBZ;
 extern size_t   Col_SBZ_len;
 
 /* Uncompressed level art for AnimateLevelAct (AnimateLevelGfx.asm).
    MZ/SBZ art only loads once those zones are playable. */
-extern uint8_t *Art_GhzWater;
+extern const uint8_t *Art_GhzWater;
 extern size_t   Art_GhzWater_len;
-extern uint8_t *Art_GhzFlower1;
+extern const uint8_t *Art_GhzFlower1;
 extern size_t   Art_GhzFlower1_len;
-extern uint8_t *Art_GhzFlower2;
+extern const uint8_t *Art_GhzFlower2;
 extern size_t   Art_GhzFlower2_len;
-extern uint8_t *Art_MzLava1;
+extern const uint8_t *Art_MzLava1;
 extern size_t   Art_MzLava1_len;
-extern uint8_t *Art_MzLava2;
+extern const uint8_t *Art_MzLava2;
 extern size_t   Art_MzLava2_len;
-extern uint8_t *Art_MzTorch;
+extern const uint8_t *Art_MzTorch;
 extern size_t   Art_MzTorch_len;
-extern uint8_t *Art_SbzSmoke;
+extern const uint8_t *Art_SbzSmoke;
 extern size_t   Art_SbzSmoke_len;
-extern uint8_t *Art_BigRing;
+extern const uint8_t *Art_BigRing;
 extern size_t   Art_BigRing_len;
+
+/* Collision index tables (AngleMap, CollArray1, CollArray2) */
+extern const uint8_t *Col_AngleMap;
+extern size_t   Col_AngleMap_len;
+extern const uint8_t *Col_CollArray1;
+extern size_t   Col_CollArray1_len;
+extern const uint8_t *Col_CollArray2;
+extern size_t   Col_CollArray2_len;
 
 /* Initialize all assets from the assets/ directory.
    Returns 0 on success, -1 on any failure. */

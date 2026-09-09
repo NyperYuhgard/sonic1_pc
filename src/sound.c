@@ -24,7 +24,7 @@ static const snd_map_t bgm_map[] = {
     { bgm_Invincible,  "assets/Music/Invincibility.ogg" },
     { bgm_ExtraLife,   "assets/Music/ActComplete.ogg" },
     { bgm_SS,          "assets/Music/SpecialStage.ogg" },
-    { bgm_Title,       "assets/Music/TitleScreen.ogg" },
+    { bgm_Title,       "assets/Music/Titlescreen.ogg" },
     { bgm_Ending,      "assets/Music/Ending.ogg" },
     { bgm_Boss,        "assets/Music/Boss.ogg" },
     { bgm_FZ,          "assets/Music/Final.ogg" },

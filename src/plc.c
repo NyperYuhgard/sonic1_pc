@@ -18,7 +18,7 @@
    =================================================================== */
 
 typedef struct {
-    uint8_t **src;                      /* -> runtime-loaded asset pointer */
+    const uint8_t **src;                      /* -> runtime-loaded asset pointer */
     uint16_t  dest;                     /* destination art tile number */
 } plc_entry;
 

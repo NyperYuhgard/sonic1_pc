@@ -1,6 +1,8 @@
 #include "assets.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 
 uint8_t *Assets_Load(const char *path, size_t *out_size) {
     FILE *f = fopen(path, "rb");
@@ -28,6 +30,6 @@ uint8_t *Assets_Load(const char *path, size_t *out_size) {
     return buf;
 }
 
-void Assets_Free(uint8_t *buf) {
-    free(buf);
+void Assets_Free(const uint8_t *buf) {
+    free((void *)buf);
 }

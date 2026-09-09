@@ -26,6 +26,7 @@ set(SOURCES
     src/level.c
     src/plc.c
     src/hud.c
+    src/collision.c
 )
 
 # Executable

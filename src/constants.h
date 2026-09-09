@@ -373,6 +373,13 @@ enum {
 #define sonic_duck_height   (20 / 2)
 #define sonic_quick_size    (20 / 2)
 
+/* Sonic physics constants (from 01 Sonic.asm lines 5-8 and ObjectFall.asm line 5) */
+#define son_maxspeed        0x600
+#define son_acceleration    0x0C
+#define son_deceleration    0x80
+#define son_jumpspeed       0x680
+#define gravity             0x38
+
 /* ---------------------------------------------------------------------------
    Miscellaneous object scratch-RAM offsets
    --------------------------------------------------------------------------- */

@@ -3,6 +3,8 @@
 #include "constants.h"
 #include "data.h"
 #include "sound.h"
+#include "collision.h"
+#include "plc.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -522,11 +524,296 @@ static void TitleCard_Main(void *obj) {
 
 /* ===========================================================================
    SonicPlayer object (id_SonicPlayer = $01)
-   STUB — will be ported from _incObj/01 Sonic - Main.asm in a later pass.
+   Ported from _incObj/01 Sonic.asm (REV01, FixBugs=0)
    =========================================================================== */
+
+static void Sonic_Main(void *obj);
+static void Sonic_Control(void *obj);
+static void Sonic_Hurt(void *obj);
+static void Sonic_Death(void *obj);
+static void Sonic_ResetLevel(void *obj);
+
+static void Sonic_Move(void *obj);
+static void Sonic_MoveLeft(void *obj);
+static void Sonic_MoveRight(void *obj);
+
+static void Sonic_RollSpeed(void *obj);
+static void Sonic_RollLeft(void *obj);
+static void Sonic_RollRight(void *obj);
+static void Sonic_Roll(void *obj);
+static void Sonic_ChkRoll(void *obj);
+
+static void Sonic_JumpDirection(void *obj);
+static void Sonic_JumpHeight(void *obj);
+static void Sonic_Jump(void *obj);
+
+static void Sonic_LevelBound(void *obj);
+static void KillSonic(void);
+
+static void Sonic_AngledRollSpeed(void *obj);
+static void Sonic_Floor(void *obj);
+static void Sonic_FloorDown(void *obj);
+static void Sonic_FloorLeft(void *obj);
+static void Sonic_FloorUp(void *obj);
+static void Sonic_FloorRight(void *obj);
+static void Sonic_ResetOnFloor(void *obj);
+static void Sonic_SlopeResistWalk(void *obj);
+static void Sonic_SlopeResistRoll(void *obj);
+static void Sonic_SlopeRepel(void *obj);
+static void Sonic_JumpAngle(void *obj);
+
+static void Sonic_Display(void *obj);
+static void Sonic_RecordPosition(void *obj);
+static void Sonic_Water(void *obj);
+static void Sonic_Animate(void *obj);
+static void Sonic_LoadGfx(void *obj);
+static void Sonic_Loops(void *obj);
+
+static void Sonic_AngleSpeed(void *obj);
+static void Sonic_ResetScr(void *obj);
+static void Sonic_LookUp(void *obj);
+static void Sonic_Duck(void *obj);
+static void Sonic_CheckDpadLetGo(void *obj);
+static void Sonic_WallSpeedAdjust(void *obj);
+
+static void Sonic_RollJumpLock(void *obj);
+static void Sonic_SquashUnused(void *obj);
+
+static void Sonic_HurtStop(void *obj);
+static void Sonic_HandleDeath(void *obj);
+
+/* ===========================================================================
+   Sonic mode implementations (forward declared for Sonic_Modes array)
+   =========================================================================== */
+static void Sonic_MdNormal(void *obj);
+static void Sonic_MdJump(void *obj);
+static void Sonic_MdRoll(void *obj);
+static void Sonic_MdJump2(void *obj);
+
+static void (*const Sonic_Modes[4])(void *) = {
+    Sonic_MdNormal, Sonic_MdJump, Sonic_MdRoll, Sonic_MdJump2
+};
+
 static void SonicPlayer_Main(void *obj) {
-    /* TODO: full player physics + collision */
-    (void)obj;
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t routine = obRoutine(o);
+
+    switch (routine) {
+        case 0: Sonic_Main(o); break;
+        case 2: Sonic_Control(o); break;
+        case 4: Sonic_Hurt(o); break;
+        case 6: Sonic_Death(o); break;
+        case 8: Sonic_ResetLevel(o); break;
+    }
+}
+
+/* ===========================================================================
+   Sonic_Main — Routine 0: initialization
+   =========================================================================== */
+static void Sonic_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    obRoutine(o) = 2;                          /* advance to Sonic_Control */
+    obHeight(o) = sonic_height;
+    obWidth(o) = sonic_width;
+    obMap(o) = (uint32_t)(uintptr_t)Map_Sonic;
+    obGfx(o) = ArtTile_Sonic;
+    obPriority(o) = 2;
+    obActWid(o) = 48 / 2;
+    obRender(o) = sprite_cam_field;
+    RAM_WORD(v_sonspeedmax) = son_maxspeed;
+    RAM_WORD(v_sonspeedacc) = son_acceleration;
+    RAM_WORD(v_sonspeeddec) = son_deceleration;
+}
+
+/* ===========================================================================
+   Sonic_Control — Routine 2: main control loop
+   =========================================================================== */
+static void Sonic_Control(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (RAM_WORD(f_debugmode)) {
+        if (RAM_BYTE(v_jpadpress1) & btnB) {
+            RAM_WORD(v_debuguse) = 1;
+            RAM_BYTE(f_lockctrl) = 0;
+            return;
+        }
+    }
+
+    if (!RAM_BYTE(f_lockctrl)) {
+        RAM_BYTE(v_jpadhold2) = RAM_BYTE(v_jpadhold1);
+    }
+
+    if (RAM_BYTE(f_playerctrl) & 1) {
+        goto ignore_modes;
+    }
+
+    uint8_t status = obStatus(o) & 0x06;       /* in-air | rolling */
+    void (*mode)(void *) = Sonic_Modes[status >> 1];
+    mode(o);
+
+ignore_modes:
+    Sonic_Display(o);
+    Sonic_RecordPosition(o);
+    Sonic_Water(o);
+    angleright(o) = RAM_BYTE(v_anglebuffer);
+    angleleft(o) = RAM_BYTE(v_anglebuffer2);
+
+    if (RAM_BYTE(f_wtunnelmode)) {
+        if (obAnim(o) == 0) {
+            obAnim(o) = obPrevAni(o);
+        }
+    }
+
+    Sonic_Animate(o);
+
+    if (!RAM_BYTE(f_playerctrl)) {
+        /* ReactToItem not yet ported */
+    }
+
+    Sonic_Loops(o);
+    Sonic_LoadGfx(o);
+}
+
+/* ===========================================================================
+   Sonic_Display — display sprite + handle power-up expiration
+   =========================================================================== */
+static const uint8_t music_list[] = {
+    bgm_GHZ, bgm_LZ, bgm_MZ, bgm_SLZ, bgm_SYZ, bgm_SBZ, bgm_FZ
+};
+
+static void Sonic_Display(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    int16_t flash = flashtime(o);
+    if (flash) {
+        flashtime(o) = flash - 1;
+        if ((flash >> 3) & 1) {
+            goto chk_invincible;
+        }
+    }
+
+    DisplaySprite(obj);
+
+chk_invincible:
+    if (RAM_BYTE(v_invinc)) {
+        int16_t inv = invtime(o);
+        if (inv) {
+            invtime(o) = inv - 1;
+            if (!invtime(o)) {
+                if (!RAM_BYTE(f_lockscreen)) {
+                    if (RAM_WORD(v_air) >= 12) {
+                        uint8_t zone = RAM_BYTE(v_zone);
+                        if (RAM_WORD(v_zone_act) != id_LZ_act4) {
+                            Sound_Queue(music_list[zone], false);
+                        } else {
+                            Sound_Queue(bgm_SBZ, false);
+                        }
+                    }
+                }
+                RAM_BYTE(v_invinc) = 0;
+            }
+        }
+    }
+
+    if (RAM_BYTE(v_shoes)) {
+        int16_t shoe = shoetime(o);
+        if (shoe) {
+            shoetime(o) = shoe - 1;
+            if (!shoetime(o)) {
+                RAM_WORD(v_sonspeedmax) = son_maxspeed;
+                RAM_WORD(v_sonspeedacc) = son_acceleration;
+                RAM_WORD(v_sonspeeddec) = son_deceleration;
+                /* FixBugs: underwater fix already handled in Sonic_Water */
+                RAM_BYTE(v_shoes) = 0;
+                Sound_Queue(bgm_Slowdown, false);
+            }
+        }
+    }
+}
+
+/* ===========================================================================
+   Sonic_RecordPosition — record position for invincibility stars
+   =========================================================================== */
+static void Sonic_RecordPosition(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    uint16_t idx = RAM_WORD(v_trackpos);
+    uint8_t *a1 = RAM_ADDR(v_tracksonic + idx);
+    *(int16_t *)a1 = obX(o);
+    a1 += 2;
+    *(int16_t *)a1 = obY(o);
+    RAM_BYTE(v_trackbyte) += 4;
+}
+
+/* ===========================================================================
+   ResumeMusic — resume level music after countdown / underwater
+   Ported from _incObj/sub ResumeMusic.asm
+   =========================================================================== */
+static void ResumeMusic(void) {
+    if (RAM_WORD(v_air) > 12) {
+        uint16_t bgm = bgm_LZ;
+        if (RAM_WORD(v_zone_act) == id_LZ_act4) {
+            bgm = bgm_SBZ;
+        }
+        if (RAM_BYTE(v_invinc)) {
+            bgm = bgm_Invincible;
+        }
+        if (RAM_BYTE(f_lockscreen)) {
+            bgm = bgm_Boss;
+        }
+        Sound_Queue(bgm, false);
+    }
+    RAM_WORD(v_air) = 30;
+    RAM_BYTE(v_sonicbubbles + 0x2C) = 0;  /* bub_time offset */
+}
+
+/* ===========================================================================
+   Sonic_Water — underwater handling (LZ only)
+   =========================================================================== */
+static void Sonic_Water(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    if (RAM_BYTE(v_zone) != id_LZ) return;
+
+    int16_t water_y = RAM_WORD(v_waterpos1);
+    if (obY(o) <= water_y) {
+        /* below water surface - entering water */
+        uint8_t was_underwater = obStatus(o) & (1 << 6);
+        obStatus(o) |= (1 << 6);   /* set underwater flag */
+        if (was_underwater) {
+            return;  /* already underwater */
+        }
+        /* just entered water */
+        ResumeMusic();
+        {
+            uint8_t *bubbles = RAM_ADDR(v_sonicbubbles);
+            RAM_BYTE(v_sonicbubbles) = id_DrownCount;
+            obSubtype(bubbles) = 0x81;
+        }
+        RAM_WORD(v_sonspeedmax) = son_maxspeed / 2;
+        RAM_WORD(v_sonspeedacc) = son_acceleration / 2;
+        RAM_WORD(v_sonspeeddec) = son_deceleration / 2;
+        obVelX(o) = (int16_t)(obVelX(o) >> 1);
+        obVelY(o) = (int16_t)(obVelY(o) >> 2);
+        if (obVelY(o) != 0) {
+            /* load splash object, play sound */
+        }
+    } else {
+        /* above water surface - exiting water */
+        uint8_t was_underwater = obStatus(o) & (1 << 6);
+        obStatus(o) &= ~(1 << 6);  /* clear underwater flag */
+        if (!was_underwater) {
+            return;  /* already above water */
+        }
+        /* just exited water */
+        ResumeMusic();
+        RAM_WORD(v_sonspeedmax) = son_maxspeed;
+        RAM_WORD(v_sonspeedacc) = son_acceleration;
+        RAM_WORD(v_sonspeeddec) = son_deceleration;
+        obVelY(o) = (int16_t)(obVelY(o) << 1);
+        if (obVelY(o) != 0) {
+            /* load splash object, play sound */
+            if (obVelY(o) < -0x1000) obVelY(o) = -0x1000;
+        }
+    }
 }
 
 /* ===========================================================================
@@ -914,6 +1201,1444 @@ static void RingLoss_Main(void *obj) {
         case 4: RingLoss_Collect(o); break;
         case 6: RingLoss_Sparkle(o); break;
         case 8: RingLoss_Delete(o); break;
+    }
+}
+
+/* ===========================================================================
+    Sonic animation IDs and frame constants
+    =========================================================================== */
+
+#define id_Walk        0x00
+#define id_Run         0x01
+#define id_Roll        0x02
+#define id_Roll2       0x03
+#define id_Push        0x04
+#define id_Wait        0x05
+#define id_Balance     0x06
+#define id_LookUp      0x07
+#define id_Duck        0x08
+#define id_Warp1       0x09
+#define id_Warp2       0x0A
+#define id_Warp3       0x0B
+#define id_Warp4       0x0C
+#define id_Stop        0x0D
+#define id_Float1      0x0E
+#define id_Float2      0x0F
+#define id_Spring      0x10
+#define id_Hang        0x11
+#define id_Leap1       0x12
+#define id_Leap2       0x13
+#define id_Surf        0x14
+#define id_GetAir      0x15
+#define id_Burnt       0x16
+#define id_Drown       0x17
+#define id_Death       0x18
+#define id_Shrink      0x19
+#define id_Hurt        0x1A
+#define id_Slide       0x1B
+#define id_Null        0x1C
+#define id_Float3      0x1D
+#define id_Float4      0x1E
+
+#define fr_Null        0x00
+#define fr_Stand       0x01
+#define fr_Wait1       0x02
+#define fr_Wait2       0x03
+#define fr_Wait3       0x04
+#define fr_LookUp      0x05
+#define fr_Walk11      0x06
+#define fr_Walk12      0x07
+#define fr_Walk13      0x08
+#define fr_Walk14      0x09
+#define fr_Walk15      0x0A
+#define fr_Walk16      0x0B
+#define fr_Walk21      0x0C
+#define fr_Walk22      0x0D
+#define fr_Walk23      0x0E
+#define fr_Walk24      0x0F
+#define fr_Walk25      0x10
+#define fr_Walk26      0x11
+#define fr_Walk31      0x12
+#define fr_Walk32      0x13
+#define fr_Walk33      0x14
+#define fr_Walk34      0x15
+#define fr_Walk35      0x16
+#define fr_Walk36      0x17
+#define fr_Walk41      0x18
+#define fr_Walk42      0x19
+#define fr_Walk43      0x1A
+#define fr_Walk44      0x1B
+#define fr_Walk45      0x1C
+#define fr_Walk46      0x1D
+#define fr_Run11       0x1E
+#define fr_Run12       0x1F
+#define fr_Run13       0x20
+#define fr_Run14       0x21
+#define fr_Run21       0x22
+#define fr_Run22       0x23
+#define fr_Run23       0x24
+#define fr_Run24       0x25
+#define fr_Run31       0x26
+#define fr_Run32       0x27
+#define fr_Run33       0x28
+#define fr_Run34       0x29
+#define fr_Run41       0x2A
+#define fr_Run42       0x2B
+#define fr_Run43       0x2C
+#define fr_Run44       0x2D
+#define fr_Roll1       0x2E
+#define fr_Roll2       0x2F
+#define fr_Roll3       0x30
+#define fr_Roll4       0x31
+#define fr_Roll5       0x32
+#define fr_Warp1       0x33
+#define fr_Warp2       0x34
+#define fr_Warp3       0x35
+#define fr_Warp4       0x36
+#define fr_Stop1       0x37
+#define fr_Stop2       0x38
+#define fr_Duck        0x39
+#define fr_Balance1    0x3A
+#define fr_Balance2    0x3B
+#define fr_Float1      0x3C
+#define fr_Float2      0x3D
+#define fr_Float3      0x3E
+#define fr_Float4      0x3F
+#define fr_Spring      0x40
+#define fr_Hang1       0x41
+#define fr_Hang2       0x42
+#define fr_Leap1       0x43
+#define fr_Leap2       0x44
+#define fr_Push1       0x45
+#define fr_Push2       0x46
+#define fr_Push3       0x47
+#define fr_Push4       0x48
+#define fr_Surf        0x49
+#define fr_BubStand    0x4A
+#define fr_Burnt       0x4B
+#define fr_Drown       0x4C
+#define fr_Death       0x4D
+#define fr_Shrink1     0x4E
+#define fr_Shrink2     0x4F
+#define fr_Shrink3     0x50
+#define fr_Shrink4     0x51
+#define fr_Shrink5     0x52
+#define fr_Float5      0x53
+#define fr_Float6      0x54
+#define fr_Injury      0x55
+#define fr_GetAir      0x56
+#define fr_Slide       0x57
+
+#define afEnd          0xFF
+#define afBack         0xFE
+#define afChange       0xFD
+
+/* ===========================================================================
+     Sonic animation script stubs (loaded from data.c)
+     =========================================================================== */
+
+extern const uint8_t *Ani_Sonic;
+extern const uint8_t *SonicDynPLC;
+extern const uint8_t *Art_Sonic;
+
+static void Sonic_Move(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (RAM_BYTE(f_slidemode)) {
+        Sonic_AngleSpeed(o);
+        return;
+    }
+    if (locktime(o)) {
+        Sonic_ResetScr(o);
+        return;
+    }
+    if (RAM_BYTE(v_jpadhold2) & btnL) {
+        Sonic_MoveLeft(o);
+    }
+    if (RAM_BYTE(v_jpadhold2) & btnR) {
+        Sonic_MoveRight(o);
+    }
+    {
+        uint8_t d0 = obAngle(o);
+        d0 += 0x20;
+        d0 &= 0xC0;
+        if (d0) {
+            Sonic_ResetScr(o);
+            return;
+        }
+        if (obInertia(o)) {
+            Sonic_ResetScr(o);
+            return;
+        }
+        obStatus(o) &= ~(1 << 5);
+        if (!(obStatus(o) & (1 << 3))) {
+            goto chkbalance;
+        }
+        {
+            uint8_t d0 = standonobject(o);
+            uint8_t *a1 = (uint8_t *)Object_GetSlot(d0);
+            if (a1 >= ObjRAM && a1 < ObjRAM + NUM_OBJECTS * OBJECT_SIZE) {
+                if (obStatus(a1) < 0x80) {
+                    int16_t d1 = obActWid(a1);
+                    int16_t d2 = d1 + d1 - 4;
+                    int16_t d1x = obX(o) - obX(a1);
+                    if (d1x < 4) {
+                        goto leftbalance;
+                    }
+                    if (d1x >= d2) {
+                        goto rightbalance;
+                    }
+                    Sonic_LookUp(o);
+                    return;
+                } else {
+                    Sonic_LookUp(o);
+                    return;
+                }
+            } else {
+                Sonic_LookUp(o);
+                return;
+            }
+        }
+    }
+    return;
+
+chkbalance:
+    {
+        int16_t dist, angle;
+        ObjFloorDist(o, &dist, &angle);
+        if (dist < 12) {
+            Sonic_LookUp(o);
+            return;
+        }
+        if (angleright(o) == 3) {
+            goto rightbalance;
+        }
+        if (angleleft(o) != 3) {
+            Sonic_LookUp(o);
+            return;
+        }
+    }
+
+leftbalance:
+    obStatus(o) |= (1 << 0);
+    goto balance;
+
+rightbalance:
+    obStatus(o) &= ~(1 << 0);
+
+balance:
+    obAnim(o) = id_Balance;
+    Sonic_ResetScr(o);
+}
+
+static void Sonic_MdNormal(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    Sonic_Jump(o);
+    Sonic_SlopeResistWalk(o);
+    Sonic_Move(o);
+    Sonic_Roll(o);
+    Sonic_LevelBound(o);
+    SpeedToPos(o);
+    Sonic_AnglePos(o);
+    Sonic_SlopeRepel(o);
+}
+
+static void Sonic_MdJump(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    Sonic_JumpHeight(o);
+    Sonic_JumpDirection(o);
+    Sonic_LevelBound(o);
+    ObjectFall(o);
+    if (obStatus(o) & (1 << 6)) {
+        obVelY(o) = (int16_t)(obVelY(o) - (gravity - 0x10));
+    }
+    Sonic_JumpAngle(o);
+    Sonic_Floor(o);
+}
+
+static void Sonic_MdRoll(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    Sonic_Jump(o);
+    Sonic_SlopeResistRoll(o);
+    Sonic_RollSpeed(o);
+    Sonic_LevelBound(o);
+    SpeedToPos(o);
+    Sonic_AnglePos(o);
+    Sonic_SlopeRepel(o);
+}
+
+static void Sonic_MdJump2(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    Sonic_JumpHeight(o);
+    Sonic_JumpDirection(o);
+    Sonic_LevelBound(o);
+    ObjectFall(o);
+    if (obStatus(o) & (1 << 6)) {
+        obVelY(o) = (int16_t)(obVelY(o) - (gravity - 0x10));
+    }
+    Sonic_JumpAngle(o);
+    Sonic_Floor(o);
+}
+
+static void Sonic_MoveLeft(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d0 = obInertia(o);
+    int16_t d5 = RAM_WORD(v_sonspeedacc);
+    int16_t d6 = RAM_WORD(v_sonspeedmax);
+
+    if (d0 > 0) {
+        d0 = d0 - RAM_WORD(v_sonspeeddec);
+        if (d0 < 0) {
+            d0 = -0x80;
+        }
+        obInertia(o) = d0;
+        {
+            uint8_t d1 = obAngle(o);
+            d1 += 0x20;
+            d1 &= 0xC0;
+            if (d1) {
+                goto nostopping;
+            }
+            if (d0 < 0x400) {
+                goto nostopping;
+            }
+            obAnim(o) = id_Stop;
+            obStatus(o) &= ~(1 << 0);
+            Sound_Queue(sfx_Skid, false);
+        }
+        goto nostopping;
+    }
+
+    obStatus(o) |= (1 << 0);
+    if (d0 == 0) {
+        obStatus(o) &= ~(1 << 5);
+        obPrevAni(o) = id_Run;
+    }
+    d0 = d0 - d5;
+    {
+        int16_t d1 = -d6;
+        if (d0 > d1) {
+            d0 = d1;
+        }
+    }
+    obInertia(o) = d0;
+    obAnim(o) = id_Walk;
+
+nostopping:
+    return;
+}
+
+static void Sonic_MoveRight(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d0 = obInertia(o);
+    int16_t d5 = RAM_WORD(v_sonspeedacc);
+    int16_t d6 = RAM_WORD(v_sonspeedmax);
+
+    if (d0 < 0) {
+        d0 = d0 + RAM_WORD(v_sonspeeddec);
+        if (d0 >= 0) {
+            d0 = 0x80;
+        }
+        obInertia(o) = d0;
+        {
+            uint8_t d1 = obAngle(o);
+            d1 += 0x20;
+            d1 &= 0xC0;
+            if (d1) {
+                goto nostopping;
+            }
+            if (d0 > -0x400) {
+                goto nostopping;
+            }
+            obAnim(o) = id_Stop;
+            obStatus(o) |= (1 << 0);
+            Sound_Queue(sfx_Skid, false);
+        }
+        goto nostopping;
+    }
+
+    obStatus(o) &= ~(1 << 0);
+    if (obStatus(o) & (1 << 0)) {
+        obStatus(o) &= ~(1 << 5);
+        obPrevAni(o) = id_Run;
+    }
+    d0 = d0 + d5;
+    if (d0 > d6) {
+        d0 = d6;
+    }
+    obInertia(o) = d0;
+    obAnim(o) = id_Walk;
+
+nostopping:
+    return;
+}
+
+static void Sonic_RollSpeed(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d5 = RAM_WORD(v_sonspeedacc) / 2;
+
+    if (RAM_BYTE(f_slidemode)) {
+        Sonic_AngledRollSpeed(o);
+        return;
+    }
+    if (locktime(o)) {
+        if (!(RAM_BYTE(v_jpadhold2) & btnR)) {
+            return;
+        }
+    }
+    if (RAM_BYTE(v_jpadhold2) & btnL) {
+        Sonic_RollLeft(o);
+    }
+    if (RAM_BYTE(v_jpadhold2) & btnR) {
+        Sonic_RollRight(o);
+    }
+    {
+        int16_t d0 = obInertia(o);
+        if (d0 == 0) {
+            goto Sonic_RollSlowdownDone;
+        }
+        if (d0 < 0) {
+            d0 = d0 + d5;
+            if (d0 < 0) {
+                obInertia(o) = d0;
+            } else {
+                obInertia(o) = 0;
+            }
+        } else {
+            d0 = d0 - d5;
+            if (d0 > 0) {
+                obInertia(o) = d0;
+            } else {
+                obInertia(o) = 0;
+            }
+        }
+    }
+
+Sonic_RollSlowdownDone:
+    if (obInertia(o) == 0) {
+        obStatus(o) &= ~(1 << 2);
+        obHeight(o) = sonic_height;
+        obWidth(o) = sonic_width;
+        obAnim(o) = id_Wait;
+        obY(o) = (int16_t)(obY(o) - (sonic_height - sonic_roll_height));
+    }
+    Sonic_AngledRollSpeed(o);
+}
+
+static void Sonic_AngledRollSpeed(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d0, d1;
+    CalcSine(obAngle(o), &d0, &d1);
+    d0 = (int16_t)(((int32_t)d0 * obInertia(o)) >> 8);
+    d1 = (int16_t)(((int32_t)d1 * obInertia(o)) >> 8);
+    if (d0 > 0x1000) d0 = 0x1000;
+    if (d0 < -0x1000) d0 = -0x1000;
+    if (d1 > 0x1000) d1 = 0x1000;
+    if (d1 < -0x1000) d1 = -0x1000;
+    obVelY(o) = d0;
+    obVelX(o) = d1;
+    Sonic_WallSpeedAdjust(o);
+}
+
+static void Sonic_RollLeft(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d0 = obInertia(o);
+
+    if (d0 == 0 || d0 < 0) {
+        obStatus(o) |= (1 << 0);
+        obAnim(o) = id_Roll;
+        return;
+    }
+    d0 = d0 - RAM_WORD(v_sonspeeddec);
+    if (d0 < 0) {
+        d0 = -0x80;
+    }
+    obInertia(o) = d0;
+}
+
+static void Sonic_RollRight(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d0 = obInertia(o);
+
+    if (d0 < 0) {
+        d0 = d0 + RAM_WORD(v_sonspeeddec);
+        if (d0 >= 0) {
+            d0 = 0x80;
+        }
+        obInertia(o) = d0;
+        return;
+    }
+    obStatus(o) &= ~(1 << 0);
+    obAnim(o) = id_Roll;
+}
+
+static void Sonic_Roll(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (RAM_BYTE(f_slidemode)) {
+        return;
+    }
+    {
+        int16_t d0 = obInertia(o);
+        if (d0 < 0) {
+            d0 = -d0;
+        }
+        if (d0 < 0x80) {
+            return;
+        }
+        if (RAM_BYTE(v_jpadhold2) & (btnL | btnR)) {
+            return;
+        }
+        if (!(RAM_BYTE(v_jpadhold2) & btnDn)) {
+            return;
+        }
+    }
+    Sonic_ChkRoll(o);
+}
+
+static void Sonic_ChkRoll(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (obStatus(o) & (1 << 2)) {
+        return;
+    }
+    obStatus(o) |= (1 << 2);
+    obHeight(o) = sonic_roll_height;
+    obWidth(o) = sonic_roll_width;
+    obAnim(o) = id_Roll;
+    obY(o) = (int16_t)(obY(o) + (sonic_height - sonic_roll_height));
+    Sound_Queue(sfx_Roll, false);
+    if (obInertia(o) == 0) {
+        obInertia(o) = 0x200;
+    }
+}
+
+static void Sonic_Jump(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (!(RAM_BYTE(v_jpadpress2) & btnABC)) {
+        return;
+    }
+    {
+        uint8_t d0 = obAngle(o);
+        d0 += 0x80;
+        {
+            int16_t headroom = Sonic_CalcHeadroom(d0);
+            if (headroom < 6) {
+                return;
+            }
+        }
+    }
+    {
+        if (obStatus(o) & (1 << 6)) {
+            {
+                uint8_t d0 = obAngle(o);
+                d0 -= 0x40;
+                {
+                    int16_t s0, s1;
+                    CalcSine(d0, &s0, &s1);
+                    obVelX(o) = (int16_t)(obVelX(o) + ((int16_t)((uint16_t)s1 << 8) >> 8));
+                    obVelY(o) = (int16_t)(obVelY(o) + ((int16_t)((uint16_t)s0 << 8) >> 8));
+                }
+            }
+        }
+        obStatus(o) |= (1 << 1);
+        obStatus(o) &= ~(1 << 5);
+        jumping(o) = 1;
+        sticktoconvex(o) = 0;
+        Sound_Queue(sfx_Jump, false);
+        obHeight(o) = sonic_roll_height;
+        obWidth(o) = sonic_roll_width;
+        obAnim(o) = id_Roll;
+        obStatus(o) |= (1 << 2);
+        obY(o) = (int16_t)(obY(o) + (sonic_height - sonic_roll_height));
+    }
+}
+
+static void Sonic_JumpHeight(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (jumping(o)) {
+        int16_t d1 = -0x400;
+        if (obStatus(o) & (1 << 6)) {
+            d1 = -0x200;
+        }
+        if (obVelY(o) <= d1) {
+            return;
+        }
+        if (!(RAM_BYTE(v_jpadhold2) & btnABC)) {
+            obVelY(o) = d1;
+        }
+        return;
+    }
+    if (obVelY(o) < -0xFC0) {
+        obVelY(o) = -0xFC0;
+    }
+}
+
+static void Sonic_JumpDirection(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d6 = RAM_WORD(v_sonspeedmax);
+    int16_t d5 = RAM_WORD(v_sonspeedacc) * 2;
+
+    if (obStatus(o) & (1 << 4)) {
+        Sonic_RollJumpLock(o);
+        return;
+    }
+    {
+        int16_t d0 = obVelX(o);
+        if (RAM_BYTE(v_jpadhold2) & btnL) {
+            obStatus(o) |= (1 << 0);
+            d0 = d0 - d5;
+            {
+                int16_t d1 = -d6;
+                if (d0 <= d1) {
+                    d0 = d1;
+                }
+            }
+        }
+        if (RAM_BYTE(v_jpadhold2) & btnR) {
+            obStatus(o) &= ~(1 << 0);
+            d0 = d0 + d5;
+            if (d0 >= d6) {
+                d0 = d6;
+            }
+        }
+        obVelX(o) = d0;
+    }
+    Sonic_RollJumpLock(o);
+}
+
+static void Sonic_RollJumpLock(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (RAM_WORD(v_lookshift) == 0x60) {
+        goto Sonic_AirDrag;
+    }
+    if (RAM_WORD(v_lookshift) < 0x60) {
+        RAM_WORD(v_lookshift) = RAM_WORD(v_lookshift) + 2;
+    } else {
+        RAM_WORD(v_lookshift) = RAM_WORD(v_lookshift) - 2;
+    }
+
+Sonic_AirDrag:
+    if (obVelY(o) < -0x400) {
+        return;
+    }
+    {
+        int16_t d0 = obVelX(o);
+        int16_t d1 = d0;
+        d1 = d1 >> 5;
+        if (d1 == 0) {
+            return;
+        }
+        if (d0 < 0) {
+            d0 = d0 - d1;
+            if (d0 < 0) {
+                obVelX(o) = d0;
+            } else {
+                obVelX(o) = 0;
+            }
+        } else {
+            d0 = d0 - d1;
+            if (d0 > 0) {
+                obVelX(o) = d0;
+            } else {
+                obVelX(o) = 0;
+            }
+        }
+    }
+}
+
+static void Sonic_LevelBound(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int32_t d1 = (int32_t)((uint16_t)obX(o)) | ((int32_t)((uint16_t)obSubpixelX(o)) << 16);
+    int16_t d0 = obVelX(o);
+    d0 = (int16_t)(((uint16_t)d0) << 8);
+    d1 = d1 + d0;
+    d1 = (int32_t)((int16_t)(d1 >> 16)) | ((int32_t)((uint16_t)(d1 & 0xFFFF)) << 16);
+
+    {
+        int16_t limit = RAM_WORD(v_limitleft2) + 16;
+        if ((int16_t)d1 < limit) {
+            goto sides;
+        }
+    }
+    {
+        int16_t limit = RAM_WORD(v_limitright2) + (320 - 24);
+        if (RAM_BYTE(f_lockscreen)) {
+            limit = limit + 64;
+        }
+        if ((int16_t)d1 > limit) {
+            goto sides;
+        }
+    }
+    {
+        int16_t limit = RAM_WORD(v_limitbtm2) + 224;
+        if ((int16_t)obY(o) >= limit) {
+            goto bottom;
+        }
+        return;
+    }
+
+bottom:
+    if (RAM_WORD(v_zone_act) == id_SBZ_act2) {
+        if ((int16_t)obX(o) >= 0x2000) {
+            RAM_BYTE(v_lastlamp) = 0;
+            RAM_WORD(f_restart) = 1;
+            RAM_WORD(v_zone_act) = id_LZ_act4;
+            return;
+        }
+    }
+    KillSonic();
+
+sides:
+    obX(o) = (int16_t)d1;
+    obSubpixelX(o) = 0;
+    obVelX(o) = 0;
+    obInertia(o) = 0;
+    goto bottom;
+}
+
+static void Sonic_SlopeResistWalk(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t d0 = obAngle(o);
+    d0 += 0x60;
+    if (d0 >= 0xC0) {
+        return;
+    }
+    {
+        int16_t s0, s1;
+        CalcSine(obAngle(o), &s0, &s1);
+        int16_t d0 = (int16_t)(((int32_t)s1 * 0x20) >> 8);
+        if (obInertia(o) == 0) {
+            return;
+        }
+        if (obInertia(o) < 0) {
+            obInertia(o) = obInertia(o) + d0;
+        } else if (d0 != 0) {
+            obInertia(o) = obInertia(o) + d0;
+        }
+    }
+}
+
+static void Sonic_SlopeResistRoll(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t d0 = obAngle(o);
+    d0 += 0x60;
+    if (d0 >= 0xC0) {
+        return;
+    }
+    {
+        int16_t s0, s1;
+        CalcSine(obAngle(o), &s0, &s1);
+        int16_t d0 = (int16_t)(((int32_t)s1 * 0x50) >> 8);
+        if (obInertia(o) < 0) {
+            if (d0 >= 0) {
+                d0 = d0 >> 2;
+            }
+            obInertia(o) = obInertia(o) + d0;
+        } else if (d0 >= 0) {
+            obInertia(o) = obInertia(o) + d0;
+        } else {
+            d0 = d0 >> 2;
+            obInertia(o) = obInertia(o) + d0;
+        }
+    }
+}
+
+static void Sonic_SlopeRepel(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (sticktoconvex(o)) {
+        return;
+    }
+    if (locktime(o)) {
+        locktime(o) = locktime(o) - 1;
+        return;
+    }
+    {
+        uint8_t d0 = obAngle(o);
+        d0 += 0x20;
+        d0 &= 0xC0;
+        if (d0 == 0) {
+            return;
+        }
+        {
+            int16_t d0 = obInertia(o);
+            if (d0 < 0) {
+                d0 = -d0;
+            }
+            if (d0 < 0x280) {
+                obInertia(o) = 0;
+                obStatus(o) |= (1 << 1);
+                locktime(o) = 30;
+            }
+        }
+    }
+}
+
+static void Sonic_JumpAngle(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t d0 = obAngle(o);
+
+    if (d0 == 0) {
+        return;
+    }
+    if (d0 < 0x80) {
+        d0 = d0 - 2;
+        if (d0 >= 0x80) {
+            d0 = 0;
+        }
+    } else {
+        d0 = d0 + 2;
+        if (d0 < 0x80) {
+            d0 = 0;
+        }
+    }
+    obAngle(o) = d0;
+}
+
+static void Sonic_Floor(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d1 = obVelX(o);
+    int16_t d2 = obVelY(o);
+    uint8_t d0 = CalcAngle(d1, d2);
+    RAM_BYTE(v_unused3) = d0;
+    d0 = d0 - 0x20;
+    RAM_BYTE(v_unused4) = d0;
+    d0 = d0 & 0xC0;
+    RAM_BYTE(v_unused5) = d0;
+
+    if (d0 == 0x40) {
+        Sonic_FloorLeft(o);
+    } else if (d0 == 0x80) {
+        Sonic_FloorUp(o);
+    } else if (d0 == 0xC0) {
+        Sonic_FloorRight(o);
+    } else {
+        Sonic_FloorDown(o);
+    }
+}
+
+static void Sonic_FloorDown(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d1;
+
+    d1 = Sonic_FindWallLeft_Quick(o);
+    if (d1 < 0) {
+        obX(o) = (int16_t)(obX(o) + d1);
+        obVelX(o) = 0;
+    }
+    d1 = Sonic_FindWallRight_Quick(o);
+    if (d1 < 0) {
+        obX(o) = (int16_t)(obX(o) + d1);
+        obVelX(o) = 0;
+    }
+    Sonic_FindFloor(o, NULL, &d1, NULL);
+    if (d1 >= 0) {
+        return;
+    }
+    {
+        uint8_t d2 = (uint8_t)obVelY(o);
+        d2 = d2 + 8;
+        d2 = (uint8_t)(-d2);
+        if ((int8_t)d2 < (int8_t)d1) {
+            return;
+        }
+    }
+    obY(o) = (int16_t)(obY(o) + d1);
+    obAngle(o) = 0;
+    Sonic_ResetOnFloor(o);
+    obAnim(o) = id_Walk;
+}
+
+static void Sonic_FloorLeft(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d1;
+
+    d1 = Sonic_FindWallLeft_Quick(o);
+    if (d1 < 0) {
+        obX(o) = (int16_t)(obX(o) + d1);
+        obVelX(o) = 0;
+        obInertia(o) = obVelY(o);
+        return;
+    }
+    if (obVelY(o) >= 0) {
+        return;
+    }
+    Sonic_FindFloor(o, NULL, &d1, NULL);
+    if (d1 >= 0) {
+        return;
+    }
+    obY(o) = (int16_t)(obY(o) + d1);
+    obAngle(o) = 0;
+    Sonic_ResetOnFloor(o);
+    obAnim(o) = id_Walk;
+    obVelY(o) = 0;
+    obInertia(o) = obVelX(o);
+}
+
+static void Sonic_FloorUp(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d1;
+
+    d1 = Sonic_FindWallLeft_Quick(o);
+    if (d1 < 0) {
+        obX(o) = (int16_t)(obX(o) + d1);
+        obVelX(o) = 0;
+    }
+    d1 = Sonic_FindWallRight_Quick(o);
+    if (d1 < 0) {
+        obX(o) = (int16_t)(obX(o) + d1);
+        obVelX(o) = 0;
+    }
+    Sonic_FindCeiling(o, NULL, &d1);
+    if (d1 < 0) {
+        obY(o) = (int16_t)(obY(o) + d1);
+        if (obVelY(o) < 0) {
+            obVelY(o) = 0;
+        }
+    }
+}
+
+static void Sonic_FloorRight(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d1;
+
+    d1 = Sonic_FindWallRight_Quick(o);
+    if (d1 < 0) {
+        obX(o) = (int16_t)(obX(o) + d1);
+        obVelX(o) = 0;
+        obInertia(o) = obVelY(o);
+        return;
+    }
+    if (obVelY(o) >= 0) {
+        return;
+    }
+    Sonic_FindCeiling(o, NULL, &d1);
+    if (d1 < 0) {
+        obY(o) = (int16_t)(obY(o) + d1);
+        if (obVelY(o) < 0) {
+            obVelY(o) = 0;
+        }
+    }
+}
+
+void Sonic_ResetOnFloor(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (obStatus(o) & (1 << 4)) {
+        /* roll-jump cleanup */
+    }
+    obStatus(o) &= ~((1 << 5) | (1 << 1) | (1 << 4));
+    if (obStatus(o) & (1 << 2)) {
+        obStatus(o) &= ~(1 << 2);
+        obHeight(o) = sonic_height;
+        obWidth(o) = sonic_width;
+        obY(o) = (int16_t)(obY(o) - (sonic_height - sonic_roll_height));
+    }
+    obAnim(o) = id_Walk;
+    jumping(o) = 0;
+    RAM_WORD(v_itembonus) = 0;
+}
+
+static void Sonic_Hurt(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    SpeedToPos(o);
+    obVelY(o) = (int16_t)(obVelY(o) + (gravity - 8));
+    if (obStatus(o) & (1 << 6)) {
+        obVelY(o) = (int16_t)(obVelY(o) - (gravity - 0x18));
+    }
+    Sonic_HurtStop(o);
+    Sonic_LevelBound(o);
+    Sonic_RecordPosition(o);
+    Sonic_Animate(o);
+    Sonic_LoadGfx(o);
+    DisplaySprite(o);
+}
+
+static void Sonic_HurtStop(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d0 = RAM_WORD(v_limitbtm2) + 224;
+
+    if ((int16_t)obY(o) >= d0) {
+        KillSonic();
+        return;
+    }
+    Sonic_Floor(o);
+    if (obStatus(o) & (1 << 1)) {
+        return;
+    }
+    obVelY(o) = 0;
+    obVelX(o) = 0;
+    obInertia(o) = 0;
+    obAnim(o) = id_Walk;
+    obRoutine(o) = obRoutine(o) - 2;
+    flashtime(o) = 2 * 60;
+}
+
+static void Sonic_Death(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    Sonic_HandleDeath(o);
+    ObjectFall(o);
+    Sonic_RecordPosition(o);
+    Sonic_Animate(o);
+    Sonic_LoadGfx(o);
+    DisplaySprite(o);
+}
+
+static void Sonic_HandleDeath(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d0 = RAM_WORD(v_limitbtm2) + 0x100;
+
+    if ((int16_t)obY(o) < d0) {
+        return;
+    }
+    obVelY(o) = -gravity;
+    obRoutine(o) = obRoutine(o) + 2;
+    RAM_BYTE(f_timecount) = 0;
+    RAM_BYTE(f_lifecount) = RAM_BYTE(f_lifecount) + 1;
+    RAM_BYTE(v_lives) = RAM_BYTE(v_lives) - 1;
+    if (RAM_BYTE(v_lives) != 0) {
+        restartime(o) = 60;
+        if (RAM_BYTE(f_timeover)) {
+            restartime(o) = 0;
+            RAM_BYTE(v_gameovertext1) = id_GameOverCard;
+            RAM_BYTE(v_gameovertext2) = id_GameOverCard;
+            obFrame(RAM_ADDR(v_gameovertext2)) = 1;
+            RAM_BYTE(f_timeover) = 0;
+            goto playGameOverBgm;
+        }
+        return;
+    }
+    RAM_WORD(f_restart) = 0;
+    RAM_BYTE(v_gameovertext1) = id_GameOverCard;
+    RAM_BYTE(v_gameovertext2) = id_GameOverCard;
+    obFrame(RAM_ADDR(v_gameovertext2)) = 1;
+    RAM_BYTE(f_timeover) = 0;
+
+playGameOverBgm:
+    Sound_Queue(bgm_GameOver, false);
+    AddPLC(plcid_GameOver);
+}
+
+static void Sonic_ResetLevel(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (restartime(o) == 0) {
+        return;
+    }
+    restartime(o) = restartime(o) - 1;
+    if (restartime(o) != 0) {
+        return;
+    }
+    RAM_WORD(f_restart) = 1;
+}
+
+static void Sonic_AngleSpeed(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t s0, s1;
+    CalcSine(obAngle(o), &s0, &s1);
+    obVelX(o) = (int16_t)(((int32_t)s1 * obInertia(o)) >> 8);
+    obVelY(o) = (int16_t)(((int32_t)s0 * obInertia(o)) >> 8);
+}
+
+static void Sonic_ResetScr(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (RAM_WORD(v_lookshift) == 0x60) {
+        Sonic_CheckDpadLetGo(o);
+        return;
+    }
+    if (RAM_WORD(v_lookshift) < 0x60) {
+        RAM_WORD(v_lookshift) = RAM_WORD(v_lookshift) + 4;
+    } else {
+        RAM_WORD(v_lookshift) = RAM_WORD(v_lookshift) - 2;
+    }
+    Sonic_CheckDpadLetGo(o);
+}
+
+static void Sonic_LookUp(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (RAM_BYTE(v_jpadhold2) & btnUp) {
+        obAnim(o) = id_LookUp;
+        if (RAM_WORD(v_lookshift) < 0xC8) {
+            RAM_WORD(v_lookshift) = RAM_WORD(v_lookshift) + 2;
+        }
+        Sonic_CheckDpadLetGo(o);
+        return;
+    }
+    Sonic_Duck(o);
+}
+
+static void Sonic_Duck(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (RAM_BYTE(v_jpadhold2) & btnDn) {
+        obAnim(o) = id_Duck;
+        if (RAM_WORD(v_lookshift) > 8) {
+            RAM_WORD(v_lookshift) = RAM_WORD(v_lookshift) - 2;
+        }
+        Sonic_CheckDpadLetGo(o);
+        return;
+    }
+    Sonic_ResetScr(o);
+}
+
+static void Sonic_CheckDpadLetGo(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t d0 = RAM_BYTE(v_jpadhold2) & (btnL | btnR);
+
+    if (d0) {
+        Sonic_AngleSpeed(o);
+        return;
+    }
+    {
+        int16_t d0 = obInertia(o);
+        if (d0 == 0) {
+            Sonic_AngleSpeed(o);
+            return;
+        }
+        if (d0 < 0) {
+            d0 = d0 + RAM_WORD(v_sonspeedacc);
+            if (d0 < 0) {
+                obInertia(o) = d0;
+            } else {
+                obInertia(o) = 0;
+            }
+        } else {
+            d0 = d0 - RAM_WORD(v_sonspeedacc);
+            if (d0 > 0) {
+                obInertia(o) = d0;
+            } else {
+                obInertia(o) = 0;
+            }
+        }
+    }
+    Sonic_AngleSpeed(o);
+}
+
+static void Sonic_WallSpeedAdjust(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (obAngle(o) >= 0x40 && obAngle(o) < 0xC0) {
+        return;
+    }
+    if (obInertia(o) == 0) {
+        return;
+    }
+    {
+        uint8_t d0 = obAngle(o);
+        int16_t d1 = 0x40;
+        if (obInertia(o) < 0) {
+            d1 = -0x40;
+        }
+        d0 = d0 + d1;
+        {
+            int16_t dist = Sonic_CalcRoomAhead(d0);
+            if (dist >= 0) {
+                return;
+            }
+            dist = dist << 8;
+            d0 = d0 + 0x20;
+            d0 = d0 & 0xC0;
+            if (d0 == 0) {
+                obVelY(o) = (int16_t)(obVelY(o) + dist);
+            } else if (d0 == 0x40) {
+                obVelX(o) = (int16_t)(obVelX(o) - dist);
+            } else if (d0 == 0x80) {
+                obVelY(o) = (int16_t)(obVelY(o) - dist);
+            } else {
+                obVelX(o) = (int16_t)(obVelX(o) + dist);
+            }
+        }
+    }
+}
+
+static void Sonic_SquashUnused(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t d0 = obAngle(o);
+    d0 += 0x20;
+    d0 &= 0xC0;
+    if (d0 != 0) {
+        return;
+    }
+    {
+        int16_t d1;
+        Sonic_FindCeiling(o, NULL, &d1);
+        if (d1 >= 0) {
+            return;
+        }
+        obInertia(o) = 0;
+        obVelX(o) = 0;
+        obVelY(o) = 0;
+        obAnim(o) = id_Warp3;
+    }
+}
+
+static void Sonic_Loops(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (RAM_BYTE(v_zone) != id_SLZ) {
+        if (RAM_BYTE(v_zone) != 0) {
+            return;
+        }
+    }
+    {
+        uint16_t d0 = obY(o) >> 1;
+        d0 = d0 & 0x380;
+        d0 = d0 + (obX(o) & 0x7F);
+        {
+            uint8_t *a1 = RAM_ADDR(v_lvllayout_fg);
+            uint8_t d1 = a1[d0];
+            if (d1 == RAM_BYTE(v_256roll1) || d1 == RAM_BYTE(v_256roll2)) {
+                Sonic_ChkRoll(o);
+            } else if (d1 == RAM_BYTE(v_256loop1)) {
+                if (!(obStatus(o) & (1 << 1))) {
+                    if (obX(o) < 44) {
+                        obRender(o) &= ~sprite_looping;
+                    } else if (obX(o) < 224) {
+                        if (obAngle(o) == 0 || obAngle(o) > 0x80) {
+                            obRender(o) |= sprite_looping;
+                        } else {
+                            obRender(o) &= ~sprite_looping;
+                        }
+                    } else {
+                        obRender(o) |= sprite_looping;
+                    }
+                } else {
+                    obRender(o) &= ~sprite_looping;
+                }
+            } else if (d1 == RAM_BYTE(v_256loop2)) {
+                if (obStatus(o) & (1 << 1)) {
+                    obRender(o) &= ~sprite_looping;
+                } else if (obX(o) < 44) {
+                    obRender(o) &= ~sprite_looping;
+                } else if (obX(o) < 224) {
+                    if (!(obRender(o) & sprite_looping)) {
+                        if (obAngle(o) == 0 || obAngle(o) > 0x80) {
+                            obRender(o) |= sprite_looping;
+                        } else {
+                            obRender(o) &= ~sprite_looping;
+                        }
+                    } else {
+                        if (obAngle(o) > 0x80) {
+                            obRender(o) &= ~sprite_looping;
+                        }
+                    }
+                } else {
+                    obRender(o) &= ~sprite_looping;
+                }
+            } else {
+                obRender(o) &= ~sprite_looping;
+            }
+        }
+    }
+}
+
+static void Sonic_Animate(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t anim_id = obAnim(o);
+
+    if (anim_id != obPrevAni(o)) {
+        obPrevAni(o) = anim_id;
+        obAniFrame(o) = 0;
+        obTimeFrame(o) = 0;
+    }
+
+    const uint8_t *anim_data = Ani_Sonic + ((const uint16_t *)Ani_Sonic)[anim_id];
+    uint8_t frame_interval = anim_data[0];
+
+    if ((int8_t)frame_interval >= 0) {
+        AnimateSprite(o, anim_data);
+        return;
+    }
+
+    /* Special animation (walk/run/roll/push) */
+    obTimeFrame(o)--;
+    if ((int8_t)obTimeFrame(o) >= 0) {
+        return;
+    }
+
+    switch (frame_interval) {
+        case 0xFF: /* Walk/Run */
+            {
+                uint8_t angle = obAngle(o);
+                uint8_t status = obStatus(o);
+                uint8_t flip = status & sprite_xflip;
+                if (!flip) {
+                    angle = ~angle;
+                }
+                angle = angle + 0x10;
+                uint8_t render = obRender(o);
+                if (angle >= 0x80) {
+                    render = (render & ~(sprite_xflip | sprite_yflip)) | (sprite_xflip | sprite_yflip);
+                } else {
+                    render = (render & ~(sprite_xflip | sprite_yflip)) | flip;
+                }
+                obRender(o) = render;
+
+                if (status & (1 << 5)) {
+                    /* TODO: push animation */
+                    return;
+                }
+
+                angle = angle >> 4;
+                angle = angle & 6;
+                int16_t speed = obInertia(o);
+                if (speed < 0) speed = -speed;
+
+                const uint8_t *a1;
+                uint8_t d3;
+                if (speed >= 0x600) {
+                    a1 = Ani_Sonic + ((const uint16_t *)Ani_Sonic)[id_Run];
+                    d3 = angle + angle;
+                } else {
+                    a1 = Ani_Sonic + ((const uint16_t *)Ani_Sonic)[id_Walk];
+                    d3 = angle + (angle >> 1) + angle; /* angle * 3 */
+                }
+
+                speed = -speed + 0x800;
+                if (speed < 0) speed = 0;
+                speed = speed >> 8;
+                obTimeFrame(o) = (uint8_t)speed;
+
+                uint8_t frame_idx = obAniFrame(o);
+                uint8_t frame_id = a1[1 + frame_idx];
+                obFrame(o) = frame_id & 0x1F;
+                obAniFrame(o) = frame_idx + 1;
+                obFrame(o) = obFrame(o) + d3;
+            }
+            break;
+
+        case 0xFE: /* Roll/Jump */
+            {
+                int16_t speed = obInertia(o);
+                if (speed < 0) speed = -speed;
+                const uint8_t *a1;
+                if (speed >= 0x600) {
+                    a1 = Ani_Sonic + ((const uint16_t *)Ani_Sonic)[id_Roll2];
+                } else {
+                    a1 = Ani_Sonic + ((const uint16_t *)Ani_Sonic)[id_Roll];
+                }
+                speed = -speed + 0x400;
+                if (speed < 0) speed = 0;
+                speed = speed >> 8;
+                obTimeFrame(o) = (uint8_t)speed;
+
+                uint8_t flip = obStatus(o) & sprite_xflip;
+                obRender(o) = (obRender(o) & ~(sprite_xflip | sprite_yflip)) | flip;
+
+                uint8_t frame_idx = obAniFrame(o);
+                uint8_t frame_id = a1[1 + frame_idx];
+                obFrame(o) = frame_id & 0x1F;
+                obAniFrame(o) = frame_idx + 1;
+            }
+            break;
+
+        case 0xFD: /* Push */
+            {
+                int16_t speed = obInertia(o);
+                if (speed < 0) speed = -speed;
+                speed = speed + 0x800;
+                if (speed < 0) speed = 0;
+                speed = speed >> 6;
+                obTimeFrame(o) = (uint8_t)speed;
+
+                uint8_t flip = obStatus(o) & sprite_xflip;
+                obRender(o) = (obRender(o) & ~(sprite_xflip | sprite_yflip)) | flip;
+
+                const uint8_t *a1 = Ani_Sonic + ((const uint16_t *)Ani_Sonic)[id_Push];
+
+                uint8_t frame_idx = obAniFrame(o);
+                uint8_t frame_id = a1[1 + frame_idx];
+                obFrame(o) = frame_id & 0x1F;
+                obAniFrame(o) = frame_idx + 1;
+            }
+            break;
+    }
+}
+
+static void Sonic_LoadGfx(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t d0 = obFrame(o);
+
+    if (d0 == RAM_BYTE(v_sonframenum)) {
+        return;
+    }
+    RAM_BYTE(v_sonframenum) = d0;
+    {
+        const uint8_t *a2 = SonicDynPLC + ((const uint16_t *)SonicDynPLC)[d0];
+        uint8_t d1 = a2[0];
+        if (d1 == 0) {
+            return;
+        }
+        d1 = d1 - 1;
+        uint8_t *a3 = RAM_ADDR(v_sgfx_buffer);
+        RAM_BYTE(f_sonframechg) = 1;
+        for (;;) {
+            uint8_t d2 = a2[1];
+            uint8_t d0 = d2 >> 4;
+            d2 = d2 << 8;
+            d2 = d2 | a2[2];
+            d2 = d2 << 5;
+            {
+                const uint8_t *a1 = Art_Sonic + d2;
+                for (int i = 0; i < d0; i++) {
+                    a3[0] = a1[0];
+                    a3[1] = a1[1];
+                    a3[2] = a1[2];
+                    a3[3] = a1[3];
+                    a3[4] = a1[4];
+                    a3[5] = a1[5];
+                    a3[6] = a1[6];
+                    a3[7] = a1[7];
+                    a3 = a3 + 8;
+                    a1 = a1 + 8;
+                }
+            }
+            a2 = a2 + 3;
+            if (d1 == 0) {
+                break;
+            }
+            d1 = d1 - 1;
+        }
+    }
+}
+
+static void KillSonic(void) {
+    uint8_t *o = (uint8_t *)Object_GetSlot(0);
+    obRoutine(o) = 6;
+    obAnim(o) = id_Death;
+    obFrame(o) = fr_Death;
+    obVelX(o) = 0;
+    obVelY(o) = -0x100;
+    obInertia(o) = 0;
+    obStatus(o) = obStatus(o) & ~(1 << 1);
+    RAM_BYTE(v_lives) = RAM_BYTE(v_lives) - 1;
+    if (RAM_BYTE(v_lives) == 0) {
+        RAM_WORD(f_restart) = 0;
+        RAM_BYTE(v_gameovertext1) = id_GameOverCard;
+        RAM_BYTE(v_gameovertext2) = id_GameOverCard;
+        obFrame(RAM_ADDR(v_gameovertext2)) = 1;
+        RAM_BYTE(f_timeover) = 0;
+        Sound_Queue(bgm_GameOver, false);
+        AddPLC(plcid_GameOver);
+        return;
+    }
+    restartime(o) = 60;
+    if (RAM_BYTE(f_timeover)) {
+        restartime(o) = 0;
+        RAM_BYTE(v_gameovertext1) = id_GameOverCard;
+        RAM_BYTE(v_gameovertext2) = id_GameOverCard;
+        obFrame(RAM_ADDR(v_gameovertext1)) = 2;
+        obFrame(RAM_ADDR(v_gameovertext2)) = 3;
+        Sound_Queue(bgm_GameOver, false);
+        AddPLC(plcid_GameOver);
     }
 }
 

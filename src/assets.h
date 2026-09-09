@@ -10,6 +10,6 @@
 uint8_t *Assets_Load(const char *path, size_t *out_size);
 
 /* Free a buffer returned by Assets_Load */
-void Assets_Free(uint8_t *buf);
+void Assets_Free(const uint8_t *buf);
 
 #endif /* SONIC1_ASSETS_H */
