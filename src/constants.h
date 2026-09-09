@@ -918,10 +918,6 @@ enum {
 #define id_EndEggman                      0x8B
 #define id_TryChaos                       0x8C
 
-/* PLC IDs for bosses (from disasm "_inc/Pattern Load Cues.asm") */
-#define plcid_EggmanSBZ2                  0x1E
-#define plcid_FZBoss                      0x1F
-
 /* Level select */
 #define levsel_sndtest_row                0x14
 #define levsel_line_count                 21

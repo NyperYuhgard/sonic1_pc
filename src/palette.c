@@ -16,9 +16,9 @@ void Palette_LoadFromData(const uint8_t *data, uint16_t *dest, int count) {
     }
 }
 
-/* Palette index entry: data pointer, target RAM address, count (longwords - 1) */
+/* Palette index entry: data pointer (const!), target RAM address, count (longwords - 1) */
 typedef struct {
-    uint8_t *data;
+    const uint8_t *data; /* Arreglado: ahora es const uint8_t* para evitar warnings de asignación */
     uint16_t       target_ram_offset; /* offset into ram[] (e.g. v_palette_line_1) */
     uint16_t       count;             /* longwords - 1 */
 } PalEntry;
