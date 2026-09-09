@@ -181,6 +181,40 @@ extern size_t   Ani_Ring_len;
 extern uint8_t *ObjPos_GHZ1;
 extern size_t   ObjPos_GHZ1_len;
 
+/* Per-zone collision indexes (ColPointers, sonic.asm:3116-3121).
+   Only GHZ is staged; the rest are NULL until their collide/*.bin lands. */
+extern uint8_t *Col_GHZ;
+extern size_t   Col_GHZ_len;
+extern uint8_t *Col_LZ;
+extern size_t   Col_LZ_len;
+extern uint8_t *Col_MZ;
+extern size_t   Col_MZ_len;
+extern uint8_t *Col_SLZ;
+extern size_t   Col_SLZ_len;
+extern uint8_t *Col_SYZ;
+extern size_t   Col_SYZ_len;
+extern uint8_t *Col_SBZ;
+extern size_t   Col_SBZ_len;
+
+/* Uncompressed level art for AnimateLevelAct (AnimateLevelGfx.asm).
+   MZ/SBZ art only loads once those zones are playable. */
+extern uint8_t *Art_GhzWater;
+extern size_t   Art_GhzWater_len;
+extern uint8_t *Art_GhzFlower1;
+extern size_t   Art_GhzFlower1_len;
+extern uint8_t *Art_GhzFlower2;
+extern size_t   Art_GhzFlower2_len;
+extern uint8_t *Art_MzLava1;
+extern size_t   Art_MzLava1_len;
+extern uint8_t *Art_MzLava2;
+extern size_t   Art_MzLava2_len;
+extern uint8_t *Art_MzTorch;
+extern size_t   Art_MzTorch_len;
+extern uint8_t *Art_SbzSmoke;
+extern size_t   Art_SbzSmoke_len;
+extern uint8_t *Art_BigRing;
+extern size_t   Art_BigRing_len;
+
 /* Initialize all assets from the assets/ directory.
    Returns 0 on success, -1 on any failure. */
 int Data_Init(void);

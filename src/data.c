@@ -144,6 +144,43 @@ size_t   Map_Ring_len = 0;
 uint8_t *Ani_Ring = NULL;
 size_t   Ani_Ring_len = 0;
 
+/* Uncompressed level art for AnimateLevelAct (AnimateLevelGfx.asm).
+   Art_MzLava1/2 and Art_MzTorch are for MZ, Art_SbzSmoke for SBZ,
+   Art_BigRing for the giant ring object; only the GHZ art + BigRing
+   are reachable while GHZ is the playable zone. */
+uint8_t *Art_GhzWater = NULL;
+size_t   Art_GhzWater_len = 0;
+uint8_t *Art_GhzFlower1 = NULL;
+size_t   Art_GhzFlower1_len = 0;
+uint8_t *Art_GhzFlower2 = NULL;
+size_t   Art_GhzFlower2_len = 0;
+uint8_t *Art_MzLava1 = NULL;
+size_t   Art_MzLava1_len = 0;
+uint8_t *Art_MzLava2 = NULL;
+size_t   Art_MzLava2_len = 0;
+uint8_t *Art_MzTorch = NULL;
+size_t   Art_MzTorch_len = 0;
+uint8_t *Art_SbzSmoke = NULL;
+size_t   Art_SbzSmoke_len = 0;
+uint8_t *Art_BigRing = NULL;
+size_t   Art_BigRing_len = 0;
+
+/* Per-zone collision indexes (ColPointers, sonic.asm:3116-3121).
+   Only GHZ is staged so far; the rest stay NULL (ColIndexLoad picks a
+   NULL pointer) until their collide/*.bin lands. */
+uint8_t *Col_GHZ = NULL;
+size_t   Col_GHZ_len = 0;
+uint8_t *Col_LZ = NULL;
+size_t   Col_LZ_len = 0;
+uint8_t *Col_MZ = NULL;
+size_t   Col_MZ_len = 0;
+uint8_t *Col_SLZ = NULL;
+size_t   Col_SLZ_len = 0;
+uint8_t *Col_SYZ = NULL;
+size_t   Col_SYZ_len = 0;
+uint8_t *Col_SBZ = NULL;
+size_t   Col_SBZ_len = 0;
+
 /* ============================================================================
    Asset loading
    ============================================================================ */
@@ -472,6 +509,44 @@ int Data_Init(void) {
         ObjPos_GHZ1_len = 0;
     }
 
+    if (load_asset("collide/GHZ.bin", &Col_GHZ, &Col_GHZ_len) != 0) {
+        Col_GHZ = NULL;
+        Col_GHZ_len = 0;
+    }
+
+    if (load_asset("artunc/GHZ Waterfall.unc", &Art_GhzWater, &Art_GhzWater_len) != 0) {
+        Art_GhzWater = NULL;
+        Art_GhzWater_len = 0;
+    }
+    if (load_asset("artunc/GHZ Flower Large.unc", &Art_GhzFlower1, &Art_GhzFlower1_len) != 0) {
+        Art_GhzFlower1 = NULL;
+        Art_GhzFlower1_len = 0;
+    }
+    if (load_asset("artunc/GHZ Flower Small.unc", &Art_GhzFlower2, &Art_GhzFlower2_len) != 0) {
+        Art_GhzFlower2 = NULL;
+        Art_GhzFlower2_len = 0;
+    }
+    if (load_asset("artunc/MZ Lava Surface.unc", &Art_MzLava1, &Art_MzLava1_len) != 0) {
+        Art_MzLava1 = NULL;
+        Art_MzLava1_len = 0;
+    }
+    if (load_asset("artunc/MZ Lava.unc", &Art_MzLava2, &Art_MzLava2_len) != 0) {
+        Art_MzLava2 = NULL;
+        Art_MzLava2_len = 0;
+    }
+    if (load_asset("artunc/MZ Background Torch.unc", &Art_MzTorch, &Art_MzTorch_len) != 0) {
+        Art_MzTorch = NULL;
+        Art_MzTorch_len = 0;
+    }
+    if (load_asset("artunc/SBZ Background Smoke.unc", &Art_SbzSmoke, &Art_SbzSmoke_len) != 0) {
+        Art_SbzSmoke = NULL;
+        Art_SbzSmoke_len = 0;
+    }
+    if (load_asset("artunc/Giant Ring.unc", &Art_BigRing, &Art_BigRing_len) != 0) {
+        Art_BigRing = NULL;
+        Art_BigRing_len = 0;
+    }
+
     if (load_asset("artnem/jap_credits.nem", &Nem_JapNames, &Nem_JapNames_len) != 0) {
         Nem_JapNames = NULL;
         Nem_JapNames_len = 0;
@@ -544,6 +619,15 @@ void Data_Quit(void) {
     FREE_ASSET(Map_Ring);
     FREE_ASSET(Ani_Ring);
     FREE_ASSET(ObjPos_GHZ1);
+    FREE_ASSET(Col_GHZ);
+    FREE_ASSET(Art_GhzWater);
+    FREE_ASSET(Art_GhzFlower1);
+    FREE_ASSET(Art_GhzFlower2);
+    FREE_ASSET(Art_MzLava1);
+    FREE_ASSET(Art_MzLava2);
+    FREE_ASSET(Art_MzTorch);
+    FREE_ASSET(Art_SbzSmoke);
+    FREE_ASSET(Art_BigRing);
 #undef FREE_ASSET
 }
 

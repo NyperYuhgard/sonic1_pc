@@ -17,6 +17,7 @@ void LevelDataLoad(void);
 /* Collision */
 void ColIndexLoad(void);
 void ConvertCollisionArray(void);
+const uint8_t *GetColIndex(void);
 
 /* Player / HUD spawning (called during init) */
 void LevelSpawnPlayer(void);

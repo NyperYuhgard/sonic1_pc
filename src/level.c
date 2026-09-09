@@ -506,11 +506,35 @@ void ConvertCollisionArray(void) {
 }
 
 /* ===================================================================
-   ColIndexLoad — stub
-   Sets v_collindex to point at the collision index for the current zone.
+   Collision index (ColIndexLoad, sonic.asm:3104-3110 + ColPointers
+   table 3116-3121).  The ASM stores a 32-bit ROM pointer in the RAM
+   long v_collindex (0xF796); host asset pointers are malloc'd and can
+   exceed 32 bits, so the current zone's index lives in this static
+   (same fix the opl_* pointers use).  Empty zones pick a NULL pointer.
    =================================================================== */
+static const uint8_t *col_index_ptr = NULL;
+
+const uint8_t *GetColIndex(void) {
+    return col_index_ptr;
+}
+
 void ColIndexLoad(void) {
-    /* TODO: set v_collindex based on v_zone */
+    /* ColPointers (sonic.asm:3116-3121); locals so the runtime asset
+       pointers are allowed as initializers. */
+    const uint8_t *const col_pointers[] = {
+        Col_GHZ,            /* 0: Green Hill */
+        Col_LZ,             /* 1: Labyrinth */
+        Col_MZ,             /* 2: Marble */
+        Col_SLZ,            /* 3: Star Light */
+        Col_SYZ,            /* 4: Spring Yard */
+        Col_SBZ,            /* 5: Scrap Brain */
+    };
+
+    uint8_t zone = (uint8_t)v_zone;                     /* move.b (v_zone).w,d0 */
+    if (zone >= (uint8_t)(sizeof(col_pointers) / sizeof(col_pointers[0]))) {
+        return;                                         /* no Ending entry */
+    }
+    col_index_ptr = col_pointers[zone];                 /* move.l ColPointers(pc,d0.w),(v_collindex).w */
 }
 
 /* ===================================================================
@@ -773,10 +797,298 @@ void ObjPosLoad(void) {
 }
 
 /* ===================================================================
-   AnimateLevelAct — per-frame animated tile updates (stub)
+   AnimateLevelAct — ported from _inc/AnimateLevelGfx.asm
+
+   LoadTiles (AnimateLevelGfx.asm:415-421): copy `count` 8x8 tiles
+   (Raw art, 4BPP) from src to VRAM at a byte address.
    =================================================================== */
+static void load_tiles_vram(const uint8_t *src, uint32_t vram_byte, int count) {
+    VDP_WriteVRAM(src, vram_byte, (uint32_t)count * tile_size);
+}
+
+/* AniArt_GiantRing (AnimateLevelGfx.asm:577-601): the giant ring object
+   sets v_gfxbigring to Art_BigRing_size; each frame we copy 14 tiles
+   further forward through the (uncompressed) art.  No giant ring exists
+   in GHZ act 1, so v_gfxbigring stays 0 here; the body is just the same
+   count-down copy (host-bounds-guarded, per the v_collindex fix). */
+static void anis_giant_ring(void) {
+    if (v_gfxbigring == 0) {
+        return;
+    }
+    v_gfxbigring = (uint16_t)(v_gfxbigring - 14 * tile_size);  /* subi.w #.size*tile_size */
+    if ((int16_t)v_gfxbigring < 0) {
+        v_gfxbigring = 0;                                      /* host safety: no wrap loop */
+        return;
+    }
+    const uint8_t *a1 = Art_BigRing + v_gfxbigring;            /* lea (a1,d0.w),a1 */
+    if ((uint32_t)v_gfxbigring + 14 * tile_size > Art_BigRing_len) {
+        return;                                                /* host safety */
+    }
+    load_tiles_vram(a1, ArtTile_Giant_Ring * tile_size + v_gfxbigring, 14);
+}
+
+/* AniArt_GHZ (AnimateLevelGfx.asm:41-113): waterfall, big flower and
+   small flower, each on its own v_laniX timer/frame pair. */
+static const uint8_t flower_seq[4] = { 0, 1, 2, 1 };           /* .flowerSeq */
+
+static void anis_ghz(void) {
+    if (!Art_GhzWater || !Art_GhzFlower1 || !Art_GhzFlower2) {
+        return;
+    }
+
+    /* AniArt_GHZ_Waterfall (.size = 8) */
+    if ((int8_t)(--v_lani0_time) < 0) {                        /* bpl = time remains */
+        v_lani0_time = 6 - 1;
+        const uint8_t *a1 = Art_GhzWater;
+        uint8_t d0 = v_lani0_frame;                            /* frame ID before increment */
+        v_lani0_frame++;
+        if (d0 & 1) {                                          /* 2 frames */
+            a1 += 8 * tile_size;
+        }
+        load_tiles_vram(a1, ArtTile_GHZ_Waterfall * tile_size, 8);
+    }
+
+    /* AniArt_GHZ_Bigflower (.size = 16) */
+    if ((int8_t)(--v_lani1_time) < 0) {
+        v_lani1_time = 16 - 1;
+        const uint8_t *a1 = Art_GhzFlower1;
+        uint8_t d0 = v_lani1_frame;
+        v_lani1_frame++;
+        if (d0 & 1) {                                          /* 2 frames */
+            a1 += 16 * tile_size;
+        }
+        load_tiles_vram(a1, ArtTile_GHZ_Big_Flower_1 * tile_size, 16);
+    }
+
+    /* AniArt_GHZ_Smallflower (.size = 12) */
+    if ((int8_t)(--v_lani2_time) >= 0) {
+        return;
+    }
+    v_lani2_time = 8 - 1;
+    uint8_t d0 = v_lani2_frame;
+    v_lani2_frame++;
+    d0 &= 3;                                                   /* 4 counter frames */
+    d0 = flower_seq[d0];                                       /* actual flower frame 0-2 */
+    if (!(d0 & 1)) {                                           /* frames 0 and 2 hold longer */
+        v_lani2_time = 128 - 1;
+    }
+    uint32_t off = (uint32_t)d0 * 3 * 0x80;                    /* lsl #7 * 3 (frame * 12 tiles) */
+    load_tiles_vram(Art_GhzFlower2 + off, ArtTile_GHZ_Small_Flower * tile_size, 12);
+}
+
+/* AniArt_MZ_Magma (AnimateLevelGfx.asm:428-566): the 16 routines select
+   a 4-byte window [j..j+3] (mod 16) out of each 16-byte art row; the
+   table below mirrors AniArt_MZMagma's offsets (each entry is the byte
+   start of the longword the ASM routine writes). */
+static const uint8_t magma_col_start[16] = {
+    0,  1,  2,  3,  4,  5,  6,  7,
+    8,  9,  10, 11, 12, 13, 14, 15,
+};
+
+static void anis_mz(void) {
+    if (!Art_MzLava1 || !Art_MzLava2 || !Art_MzTorch) {
+        return;
+    }
+
+    /* AniArt_MZ_Lava (.size = 8) */
+    if ((int8_t)(--v_lani0_time) < 0) {
+        v_lani0_time = 20 - 1;
+        uint8_t d0 = v_lani0_frame;
+        v_lani0_frame = (uint8_t)((d0 + 1) % 3);               /* 3 frames, wraps */
+        d0 = v_lani0_frame;                                    /* mulu uses the NEW frame */
+        load_tiles_vram(Art_MzLava1 + (uint32_t)d0 * (8 * tile_size),
+                        ArtTile_MZ_Animated_Lava * tile_size, 8);
+    }
+
+    /* AniArt_MZ_Magma: column collation, oscillated over 4 columns.
+       v_oscillate+$A is the sine-wave sync position (OscillateNumDo);
+       the port holds v_lani1_frame increment too (unused downstream). */
+    if ((int8_t)(--v_lani1_time) < 0) {
+        v_lani1_time = 2 - 1;
+        v_lani1_frame++;                                       /* increment frame counter (unused) */
+        const uint8_t *a4 = Art_MzLava2 + ((uint32_t)v_lani0_frame << 9);  /* ror.w #7 -> *$200 */
+        uint16_t d3 = RAM_WORD(0xFE5E + 0xA);                  /* v_oscillate+$A */
+        uint8_t *dst = &vdp.vram[ArtTile_MZ_Animated_Magma * tile_size];
+        for (int iter = 0; iter < 4; iter++) {                 /* move.w #4-1,d2 */
+            int j = ((d3 * 2) & 0x1E) >> 1;                    /* andi.w #$1E */
+            j = magma_col_start[j];                            /* jump into collation table */
+            const uint8_t *a1 = a4;
+            for (int row = 0; row < 0x20; row++) {             /* dbf d1,#$20-1 */
+                for (int b = 0; b < 4; b++) {
+                    dst[b] = a1[(j + b) & 15];
+                }
+                dst += 4;
+                a1 += 0x10;
+            }
+            d3 += 4;
+        }
+    }
+
+    /* AniArt_MZ_Torch (.size = 6) */
+    if ((int8_t)(--v_lani2_time) < 0) {
+        v_lani2_time = 8 - 1;
+        uint8_t d0 = v_lani3_frame;                            /* old frame */
+        v_lani3_frame++;
+        v_lani3_frame &= 3;                                    /* 3 frames, wraps */
+        if ((uint32_t)d0 * (6 * tile_size) + 6 * tile_size <= Art_MzTorch_len) {
+            load_tiles_vram(Art_MzTorch + (uint32_t)d0 * (6 * tile_size),
+                            ArtTile_MZ_Torch * tile_size, 6);
+        }
+    }
+}
+
+/* AniArt_SBZ (AnimateLevelGfx.asm:207-286): two smoke puffs, each with
+   an 8-frame cycle (frame 0 = blank + reschedule) shared on one art. */
+static void anis_sbz(void) {
+    if (!Art_SbzSmoke) {
+        return;
+    }
+
+    /* .check_smokePuff1 */
+    if (v_lani2_frame != 0) {
+        v_lani2_frame--;                                       /* subq.b #1 */
+        goto check_smokePuff2;
+    }
+    /* .smokePuff1 */
+    if ((int8_t)(--v_lani0_time) >= 0) {
+        goto check_smokePuff2;
+    }
+    v_lani0_time = 8 - 1;
+    {
+        uint8_t d0 = v_lani0_frame;
+        v_lani0_frame++;
+        d0 &= 7;                                               /* 8 frames */
+        if (d0 != 0) {                                         /* beq .untilNextPuff1 */
+            d0--;
+            load_tiles_vram(Art_SbzSmoke + (uint32_t)d0 * (12 * tile_size),
+                            ArtTile_SBZ_Smoke_Puff_1 * tile_size, 12);
+            return;
+        }
+        /* .untilNextPuff1 */
+        v_lani2_frame = 3 * 60;
+        /* .clearSky — write 6 blank tiles twice (12 total) */
+        load_tiles_vram(Art_SbzSmoke, ArtTile_SBZ_Smoke_Puff_1 * tile_size, 6);
+        load_tiles_vram(Art_SbzSmoke, ArtTile_SBZ_Smoke_Puff_1 * tile_size + 6 * tile_size, 6);
+    }
+
+check_smokePuff2:
+    /* .check_smokePuff2 */
+    if (v_lani2_time != 0) {
+        v_lani2_time--;
+        return;
+    }
+    /* .smokePuff2 */
+    if ((int8_t)(--v_lani1_time) >= 0) {
+        return;
+    }
+    v_lani1_time = 8 - 1;
+    {
+        uint8_t d0 = v_lani1_frame;
+        v_lani1_frame++;
+        d0 &= 7;
+        if (d0 != 0) {                                         /* beq .untilNextPuff2 */
+            d0--;
+            load_tiles_vram(Art_SbzSmoke + (uint32_t)d0 * (12 * tile_size),
+                            ArtTile_SBZ_Smoke_Puff_2 * tile_size, 12);
+            return;
+        }
+        /* .untilNextPuff2 */
+        v_lani2_time = 2 * 60;
+        /* .clearSky */
+        load_tiles_vram(Art_SbzSmoke, ArtTile_SBZ_Smoke_Puff_2 * tile_size, 6);
+        load_tiles_vram(Art_SbzSmoke, ArtTile_SBZ_Smoke_Puff_2 * tile_size + 6 * tile_size, 6);
+    }
+}
+
+/* AniArt_Ending (AnimateLevelGfx.asm:294-392): the flowers.  The flower
+   patterns are prerendered into the 256x256-definition RAM by the ending
+   loader (not ported yet), so the RAM-sourced reads are zero until then. */
+static const uint8_t ending_flower2_seq[8] = { 0, 0, 0, 1, 2, 2, 2, 1 };
+static const uint8_t ending_flower34_seq[4] = { 0, 1, 2, 1 };
+
+static void anis_ending(void) {
+    if (!Art_GhzFlower1 || !Art_GhzFlower2) {
+        return;
+    }
+
+    /* AniArt_Ending_BigFlower (.size = 16) */
+    if ((int8_t)(--v_lani1_time) < 0) {
+        v_lani1_time = 8 - 1;
+        const uint8_t *a1 = Art_GhzFlower1;
+        uint8_t *a2 = RAM_ADDR(v_256x256 + 0x4A * chunk_size); /* v_256x256_def+$4A*chunk_size */
+        uint8_t d0 = v_lani1_frame;
+        v_lani1_frame++;
+        if (d0 & 1) {                                          /* 2 frames */
+            a1 += 16 * tile_size;
+            a2 += 16 * tile_size;
+        }
+        load_tiles_vram(a1, ArtTile_GHZ_Big_Flower_1 * tile_size, 16);
+        load_tiles_vram(a2, ArtTile_GHZ_Big_Flower_2 * tile_size, 16);
+    }
+
+    /* AniArt_Ending_SmallFlower (.size = 12) */
+    if ((int8_t)(--v_lani2_time) < 0) {
+        v_lani2_time = 8 - 1;
+        uint8_t d0 = v_lani2_frame;
+        v_lani2_frame++;
+        d0 &= 7;                                               /* 8 counter frames */
+        d0 = ending_flower2_seq[d0];                           /* actual flower frame */
+        load_tiles_vram(Art_GhzFlower2 + (uint32_t)d0 * 3 * 0x80,
+                        ArtTile_GHZ_Small_Flower * tile_size, 12);
+    }
+
+    /* AniArt_Ending_Flower3 (.size = 16) */
+    if ((int8_t)(--v_lani4_time) < 0) {
+        v_lani4_time = 15 - 1;
+        uint8_t d0 = v_lani4_frame;
+        v_lani4_frame++;
+        d0 &= 3;
+        d0 = ending_flower34_seq[d0];
+        uint32_t off = (uint32_t)d0 * 2 * 0x100;               /* lsl #8 * 2 */
+        load_tiles_vram(RAM_ADDR(v_256x256 + 0x4C * chunk_size) + off,
+                        ArtTile_GHZ_Flower_3 * tile_size, 16);
+    }
+
+    /* AniArt_Ending_Flower4 (.size = 16) */
+    if ((int8_t)(--v_lani5_time) >= 0) {
+        return;
+    }
+    v_lani5_time = 12 - 1;
+    uint8_t d0 = v_lani5_frame;
+    v_lani5_frame++;
+    d0 &= 3;
+    d0 = ending_flower34_seq[d0];
+    uint32_t off = (uint32_t)d0 * 2 * 0x100;
+    load_tiles_vram(RAM_ADDR(v_256x256 + 0x4F * chunk_size) + off,
+                    ArtTile_GHZ_Flower_4 * tile_size, 16);
+}
+
+static void anis_none(void) {
+    /* AniArt_none (AnimateLevelGfx.asm:400-401) — zones without animated gfx */
+}
+
+/* AniArt_Index (AnimateLevelGfx.asm:25-32): word-relative jump table. */
+static const void (*const aniart_index[])(void) = {
+    anis_ghz,     /* GHZ */
+    anis_none,    /* LZ */
+    anis_mz,      /* MZ */
+    anis_none,    /* SLZ */
+    anis_none,    /* SYZ */
+    anis_sbz,     /* SBZ */
+    anis_ending,  /* Ending */
+};
+
+/* AnimateLevelAct — AnimateLevelGfx (AnimateLevelGfx.asm:6-21) */
 void AnimateLevelAct(void) {
-    /* TODO: per-zone animated tile cycling */
+    if (f_pause != 0) {                                        /* don't animate gfx while paused */
+        return;
+    }
+    anis_giant_ring();                                         /* public call inside due to (a6) */
+    uint8_t zone = (uint8_t)v_zone;                            /* get current zone ID */
+    if (zone >= (uint8_t)(sizeof(aniart_index) / sizeof(aniart_index[0]))) {
+        return;                                                /* zonewarning AniArt_Index,2 */
+    }
+    aniart_index[zone]();                                      /* jmp AniArt_Index(pc,d0.w) */
 }
 
 /* ===================================================================
