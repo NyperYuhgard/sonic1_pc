@@ -26,6 +26,12 @@ extern size_t   Eni_SegaLogo_len;
 #define palid_Sonic     3
 #define palid_GHZ       4
 #define palid_ZoneStart palid_GHZ   /* first level palette entry (Pal_Levels) */
+#define palid_LZ        5
+#define palid_MZ        6
+#define palid_SLZ       7
+#define palid_SYZ       8
+#define palid_SBZ1      9
+#define palid_Ending    19
 
 /* Title Screen assets */
 extern uint8_t *Pal_Title;
@@ -83,6 +89,37 @@ extern size_t   Level_GHZ1_len;
 extern uint8_t *Level_GHZbg;
 extern size_t   Level_GHZbg_len;
 
+/* Level PLC graphics (PLC_GHZ + PLC_Main2). Only Nem_GHZ_1st is staged so
+   far; the rest are NULL and skipped by AddPLC until their assets land. */
+extern uint8_t *Nem_GHZ_2nd;
+extern size_t   Nem_GHZ_2nd_len;
+extern uint8_t *Nem_Stalk;
+extern size_t   Nem_Stalk_len;
+extern uint8_t *Nem_PplRock;
+extern size_t   Nem_PplRock_len;
+extern uint8_t *Nem_Crabmeat;
+extern size_t   Nem_Crabmeat_len;
+extern uint8_t *Nem_Buzz;
+extern size_t   Nem_Buzz_len;
+extern uint8_t *Nem_Chopper;
+extern size_t   Nem_Chopper_len;
+extern uint8_t *Nem_Newtron;
+extern size_t   Nem_Newtron_len;
+extern uint8_t *Nem_Motobug;
+extern size_t   Nem_Motobug_len;
+extern uint8_t *Nem_Spikes;
+extern size_t   Nem_Spikes_len;
+extern uint8_t *Nem_HSpring;
+extern size_t   Nem_HSpring_len;
+extern uint8_t *Nem_VSpring;
+extern size_t   Nem_VSpring_len;
+extern uint8_t *Nem_Monitors;
+extern size_t   Nem_Monitors_len;
+extern uint8_t *Nem_Shield;
+extern size_t   Nem_Shield_len;
+extern uint8_t *Nem_Stars;
+extern size_t   Nem_Stars_len;
+
 /* Cheat codes */
 extern const uint8_t LevSelCode_US[];
 extern const uint32_t LevSelCode_US_len;
@@ -131,6 +168,18 @@ extern size_t   Art_LivesNums_len;
 /* HUD sprite mappings */
 extern uint8_t *Map_HUD;
 extern size_t   Map_HUD_len;
+
+/* Ring graphics, mappings and animation scripts */
+extern uint8_t *Nem_Ring;
+extern size_t   Nem_Ring_len;
+extern uint8_t *Map_Ring;
+extern size_t   Map_Ring_len;
+extern uint8_t *Ani_Ring;
+extern size_t   Ani_Ring_len;
+
+/* Object placement data (objpos binaries) */
+extern uint8_t *ObjPos_GHZ1;
+extern size_t   ObjPos_GHZ1_len;
 
 /* Initialize all assets from the assets/ directory.
    Returns 0 on success, -1 on any failure. */

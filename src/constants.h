@@ -282,6 +282,37 @@ enum {
 #define sprite_rendered     (1 << sprite_rendered_bit)
 
 /* ---------------------------------------------------------------------------
+   Collision types (obColType) — Sonic ReactToItem.asm
+   Hitbox sizes are stored as box extents; col_?x? values are hitbox indexes
+   --------------------------------------------------------------------------- */
+#define col_none            0x00  /* marker for no-collision objects */
+#define col_badnik          0x00  /* destroyable badniks */
+#define col_boss            0x00  /* Eggman bosses */
+#define col_item            0x40  /* monitors, rings, giant rings */
+#define col_hurt            0x80  /* damaging objects when touched */
+#define col_special         0xC0  /* objects with special collision properties */
+
+#define col_40x40           0x01  /* GHZ ball */
+#define col_24x40           0x02  /* (unused) */
+#define col_40x24           0x03  /* (unused) */
+#define col_8x32            0x04  /* GHZ spike pole, SYZ boss spike */
+#define col_24x36           0x05  /* Ball Hog, Burrobot */
+#define col_32x32           0x06  /* Crabmeat, Monitor, SBZ spikeball, Prison */
+#define col_12x12           0x07  /* Cannonball, Crab/Buzz missile, Ring */
+#define col_48x24           0x08  /* Buzz Bomber */
+#define col_24x32           0x09  /* Chopper */
+#define col_32x24           0x0A  /* Jaws */
+#define col_16x16           0x0B  /* MZ fire, Fireball, Batbrain, LZ spikeball */
+#define col_40x32           0x0C  /* Newtron, Motobug, Yadrin */
+#define col_40x16           0x0D  /* Newtron */
+#define col_28x28           0x0E  /* Roller */
+#define col_48x48           0x0F  /* Bosses */
+#define col_80x32           0x10  /* MZ vertical stomper */
+#define col_32x48           0x11  /* MZ sideways stomper */
+#define col_16x32           0x12  /* Giant ring */
+#define col_64x224          0x13  /* MZ geyser */
+
+/* ---------------------------------------------------------------------------
    Object variables — byte offsets into the 64-byte object structure
    --------------------------------------------------------------------------- */
 #define obID            0
@@ -501,13 +532,35 @@ enum {
 #define plcid_Main             0
 #define plcid_Main2            1
 #define plcid_Explode          2
-#define plcid_GHZAnimals       0x15
-#define plcid_Signpost         0x1A
-#define plcid_SpecialStage     0x1B
-#define plcid_Boss             0x1C
-#define plcid_Ending           0x1D
-#define plcid_TryAgain         0x1E
-#define plcid_SSResult         0x1F
+#define plcid_GameOver         3
+#define plcid_GHZ              4
+#define plcid_GHZ2             5
+#define plcid_LZ               6
+#define plcid_LZ2              7
+#define plcid_MZ               8
+#define plcid_MZ2              9
+#define plcid_SLZ              10
+#define plcid_SLZ2             11
+#define plcid_SYZ              12
+#define plcid_SYZ2             13
+#define plcid_SBZ              14
+#define plcid_SBZ2             15
+#define plcid_TitleCard        16
+#define plcid_Boss             17
+#define plcid_Signpost         18
+#define plcid_Warp             19
+#define plcid_SpecialStage     20
+#define plcid_GHZAnimals       21
+#define plcid_LZAnimals        22
+#define plcid_MZAnimals        23
+#define plcid_SLZAnimals       24
+#define plcid_SYZAnimals       25
+#define plcid_SBZAnimals       26
+#define plcid_SSResult         27
+#define plcid_Ending           28
+#define plcid_TryAgain         29
+#define plcid_EggmanSBZ2       30
+#define plcid_FZBoss           31
 
 /* ---------------------------------------------------------------------------
     Boss locations

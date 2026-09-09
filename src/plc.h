@@ -18,7 +18,7 @@ void AddPLC(int id);
 /* Start a new PLC (clear + add) */
 void NewPLC(int id);
 
-/* Process one pending PLC entry per frame (stub — does nothing) */
+/* Process one pending PLC entry per frame */
 void RunPLC(void);
 
 #endif /* SONIC1_PLC_H */

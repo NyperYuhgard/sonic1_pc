@@ -86,6 +86,37 @@ size_t   Level_GHZ1_len = 0;
 uint8_t *Level_GHZbg = NULL;
 size_t   Level_GHZbg_len = 0;
 
+/* Level PLC graphics (PLC_GHZ + PLC_Main2). Only Nem_GHZ_1st is staged so
+   far; these stay NULL (AddPLC skips them) until their assets land. */
+uint8_t *Nem_GHZ_2nd = NULL;
+size_t   Nem_GHZ_2nd_len = 0;
+uint8_t *Nem_Stalk = NULL;
+size_t   Nem_Stalk_len = 0;
+uint8_t *Nem_PplRock = NULL;
+size_t   Nem_PplRock_len = 0;
+uint8_t *Nem_Crabmeat = NULL;
+size_t   Nem_Crabmeat_len = 0;
+uint8_t *Nem_Buzz = NULL;
+size_t   Nem_Buzz_len = 0;
+uint8_t *Nem_Chopper = NULL;
+size_t   Nem_Chopper_len = 0;
+uint8_t *Nem_Newtron = NULL;
+size_t   Nem_Newtron_len = 0;
+uint8_t *Nem_Motobug = NULL;
+size_t   Nem_Motobug_len = 0;
+uint8_t *Nem_Spikes = NULL;
+size_t   Nem_Spikes_len = 0;
+uint8_t *Nem_HSpring = NULL;
+size_t   Nem_HSpring_len = 0;
+uint8_t *Nem_VSpring = NULL;
+size_t   Nem_VSpring_len = 0;
+uint8_t *Nem_Monitors = NULL;
+size_t   Nem_Monitors_len = 0;
+uint8_t *Nem_Shield = NULL;
+size_t   Nem_Shield_len = 0;
+uint8_t *Nem_Stars = NULL;
+size_t   Nem_Stars_len = 0;
+
 uint8_t *Nem_Hud = NULL;
 size_t   Nem_Hud_len = 0;
 
@@ -100,6 +131,18 @@ size_t   Art_LivesNums_len = 0;
 
 uint8_t *Map_HUD = NULL;
 size_t   Map_HUD_len = 0;
+
+uint8_t *ObjPos_GHZ1 = NULL;
+size_t   ObjPos_GHZ1_len = 0;
+
+uint8_t *Nem_Ring = NULL;
+size_t   Nem_Ring_len = 0;
+
+uint8_t *Map_Ring = NULL;
+size_t   Map_Ring_len = 0;
+
+uint8_t *Ani_Ring = NULL;
+size_t   Ani_Ring_len = 0;
 
 /* ============================================================================
    Asset loading
@@ -254,6 +297,76 @@ int Data_Init(void) {
         Nem_GHZ_1st_len = 0;
     }
 
+    if (load_asset("artnem/ghz2.nem", &Nem_GHZ_2nd, &Nem_GHZ_2nd_len) != 0) {
+        Nem_GHZ_2nd = NULL;
+        Nem_GHZ_2nd_len = 0;
+    }
+
+    if (load_asset("artnem/ghz_stalk.nem", &Nem_Stalk, &Nem_Stalk_len) != 0) {
+        Nem_Stalk = NULL;
+        Nem_Stalk_len = 0;
+    }
+
+    if (load_asset("artnem/ghz_rock.nem", &Nem_PplRock, &Nem_PplRock_len) != 0) {
+        Nem_PplRock = NULL;
+        Nem_PplRock_len = 0;
+    }
+
+    if (load_asset("artnem/crabmeat.nem", &Nem_Crabmeat, &Nem_Crabmeat_len) != 0) {
+        Nem_Crabmeat = NULL;
+        Nem_Crabmeat_len = 0;
+    }
+
+    if (load_asset("artnem/buzz.nem", &Nem_Buzz, &Nem_Buzz_len) != 0) {
+        Nem_Buzz = NULL;
+        Nem_Buzz_len = 0;
+    }
+
+    if (load_asset("artnem/chopper.nem", &Nem_Chopper, &Nem_Chopper_len) != 0) {
+        Nem_Chopper = NULL;
+        Nem_Chopper_len = 0;
+    }
+
+    if (load_asset("artnem/newtron.nem", &Nem_Newtron, &Nem_Newtron_len) != 0) {
+        Nem_Newtron = NULL;
+        Nem_Newtron_len = 0;
+    }
+
+    if (load_asset("artnem/motobug.nem", &Nem_Motobug, &Nem_Motobug_len) != 0) {
+        Nem_Motobug = NULL;
+        Nem_Motobug_len = 0;
+    }
+
+    if (load_asset("artnem/spikes.nem", &Nem_Spikes, &Nem_Spikes_len) != 0) {
+        Nem_Spikes = NULL;
+        Nem_Spikes_len = 0;
+    }
+
+    if (load_asset("artnem/hspring.nem", &Nem_HSpring, &Nem_HSpring_len) != 0) {
+        Nem_HSpring = NULL;
+        Nem_HSpring_len = 0;
+    }
+
+    if (load_asset("artnem/vspring.nem", &Nem_VSpring, &Nem_VSpring_len) != 0) {
+        Nem_VSpring = NULL;
+        Nem_VSpring_len = 0;
+    }
+
+    if (load_asset("artnem/monitors.nem", &Nem_Monitors, &Nem_Monitors_len) != 0) {
+        Nem_Monitors = NULL;
+        Nem_Monitors_len = 0;
+    }
+
+    if (load_asset("artnem/shield.nem", &Nem_Shield, &Nem_Shield_len) != 0) {
+        Nem_Shield = NULL;
+        Nem_Shield_len = 0;
+    }
+
+    if (load_asset("artnem/stars.nem", &Nem_Stars, &Nem_Stars_len) != 0) {
+        Nem_Stars = NULL;
+        Nem_Stars_len = 0;
+    }
+
     if (load_asm_asset("anim/titlesonic.asm", &Ani_TSon, &Ani_TSon_len, 0) != 0) {
         Ani_TSon = NULL;
         Ani_TSon_len = 0;
@@ -339,6 +452,26 @@ int Data_Init(void) {
         Map_HUD_len = 0;
     }
 
+    if (load_asset("artnem/rings.nem", &Nem_Ring, &Nem_Ring_len) != 0) {
+        Nem_Ring = NULL;
+        Nem_Ring_len = 0;
+    }
+
+    if (load_asm_asset("maps/rings.asm", &Map_Ring, &Map_Ring_len, 1) != 0) {
+        Map_Ring = NULL;
+        Map_Ring_len = 0;
+    }
+
+    if (load_asm_asset("anim/rings.asm", &Ani_Ring, &Ani_Ring_len, 0) != 0) {
+        Ani_Ring = NULL;
+        Ani_Ring_len = 0;
+    }
+
+    if (load_asset("objpos/ghz1.bin", &ObjPos_GHZ1, &ObjPos_GHZ1_len) != 0) {
+        ObjPos_GHZ1 = NULL;
+        ObjPos_GHZ1_len = 0;
+    }
+
     if (load_asset("artnem/jap_credits.nem", &Nem_JapNames, &Nem_JapNames_len) != 0) {
         Nem_JapNames = NULL;
         Nem_JapNames_len = 0;
@@ -386,6 +519,20 @@ void Data_Quit(void) {
     FREE_ASSET(Blk256_GHZ);
     FREE_ASSET(Eni_Title);
     FREE_ASSET(Nem_GHZ_1st);
+    FREE_ASSET(Nem_GHZ_2nd);
+    FREE_ASSET(Nem_Stalk);
+    FREE_ASSET(Nem_PplRock);
+    FREE_ASSET(Nem_Crabmeat);
+    FREE_ASSET(Nem_Buzz);
+    FREE_ASSET(Nem_Chopper);
+    FREE_ASSET(Nem_Newtron);
+    FREE_ASSET(Nem_Motobug);
+    FREE_ASSET(Nem_Spikes);
+    FREE_ASSET(Nem_HSpring);
+    FREE_ASSET(Nem_VSpring);
+    FREE_ASSET(Nem_Monitors);
+    FREE_ASSET(Nem_Shield);
+    FREE_ASSET(Nem_Stars);
     FREE_ASSET(Nem_TitleCard);
     FREE_ASSET(Map_Card);
     FREE_ASSET(Nem_Hud);
@@ -393,6 +540,10 @@ void Data_Quit(void) {
     FREE_ASSET(Art_Hud);
     FREE_ASSET(Art_LivesNums);
     FREE_ASSET(Map_HUD);
+    FREE_ASSET(Nem_Ring);
+    FREE_ASSET(Map_Ring);
+    FREE_ASSET(Ani_Ring);
+    FREE_ASSET(ObjPos_GHZ1);
 #undef FREE_ASSET
 }
 

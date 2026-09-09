@@ -646,6 +646,10 @@ static inline void RAM_SET_U32(uint32_t addr, uint32_t v) {
 #define cardMainX(obj)   (*(int16_t *)((uint8_t *)(obj) + 0x30))  /* target X while moving in */
 #define cardFinalX(obj)  (*(int16_t *)((uint8_t *)(obj) + 0x32))  /* target X while moving out */
 
+/* Ring/RingLoss specific fields */
+#define ring_origX(obj)      (*(int16_t *)((uint8_t *)(obj) + 0x32))  /* objoff_32: original ring X when spawned */
+#define ring_respawnbit(obj) (*(uint8_t *)((uint8_t *)(obj) + 0x34))  /* objoff_34: respawn list bit to clear */
+
 /* ---------------------------------------------------------------------------
    Sound driver RAM (SMPS) — within the block starting at v_snddriver_ram.
    Offsets relative to v_snddriver_ram. (Audio is a stub; see sound.h/.c)

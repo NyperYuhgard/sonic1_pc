@@ -29,6 +29,39 @@ extern void WaitForVBlank(void);
 static int level_init_done = 0;
 
 /* ===================================================================
+   Level Headers (from _inc/LevelHeaders.asm)
+   16 bytes per entry, one per zone, selected by v_zone (ASM indexes
+   by v_zone*$10). Byte offsets match the ASM layout; the gfx/map16/
+   map256 pointer fields are unused here (asset pointers come from
+   data.c), so only plc1/plc2/pal are looked up.
+   =================================================================== */
+typedef struct {
+    uint8_t  plc1;      /* +0:   first level PLC id */
+    uint8_t  gfx[3];    /* +1..3: level gfx pointer (unused) */
+    uint8_t  plc2;      /* +4:   second level PLC id */
+    uint8_t  map16[3];  /* +5..7: 16x16 block data pointer (unused) */
+    uint8_t  map256[4]; /* +8..B: 256x256 chunk data pointer (unused) */
+    uint8_t  reserved;  /* +C:   0 */
+    uint8_t  music;     /* +D:   music (unused; MusicList used instead) */
+    uint8_t  pal;       /* +E:   palette id */
+    uint8_t  pal2;      /* +F:   palette id (duplicate) */
+} level_header;
+
+#define LHEAD(plc1, plc2, music, pal) \
+    { plc1, {0,0,0}, plc2, {0,0,0}, {0,0,0,0}, 0, music, pal, pal }
+
+static const level_header level_headers[] = {
+    /*                                         music     palette      */
+    LHEAD(plcid_GHZ,  plcid_GHZ2, bgm_GHZ, palid_GHZ),    /* 0: Green Hill */
+    LHEAD(plcid_LZ,   plcid_LZ2,   bgm_LZ,  palid_LZ),    /* 1: Labyrinth */
+    LHEAD(plcid_MZ,   plcid_MZ2,   bgm_MZ,  palid_MZ),    /* 2: Marble */
+    LHEAD(plcid_SLZ,  plcid_SLZ2,  bgm_SLZ, palid_SLZ),   /* 3: Star Light */
+    LHEAD(plcid_SYZ,  plcid_SYZ2,  bgm_SYZ, palid_SYZ),   /* 4: Spring Yard */
+    LHEAD(plcid_SBZ,  plcid_SBZ2,  bgm_SBZ, palid_SBZ1),  /* 5: Scrap Brain */
+    LHEAD(0,          0,           bgm_SBZ, palid_Ending),/* 6: Ending */
+};
+
+/* ===================================================================
    Level size loading (from _inc/LevelSizeLoad & BgScrollSpeed.asm)
    =================================================================== */
 
@@ -252,7 +285,21 @@ static void Level_Enter(void) {
     if (Nem_TitleCard) {
         NemDecToVRAM(Nem_TitleCard, ArtTile_Title_Card * tile_size);
     }
-    /* TODO: level art AddPLC queue — decoded inline by LevelDataLoad here */
+    /* Queue the level art PLCs (sonic.asm:2725-2737): read the 1st PLC id
+       from the current zone's LevelHeaders entry, then plcid_Main2.
+       Unstaged entries (NULL) are skipped by AddPLC. Nem_GHZ_1st is
+       queued here per the ASM and decompressed by RunPLC during the
+       title-card reveal (Phase G). */
+    {
+        uint8_t zone = (uint8_t)v_zone;
+        if (zone < (uint8_t)(sizeof(level_headers) / sizeof(level_headers[0]))) {
+            uint8_t plc = level_headers[zone].plc1;
+            if (plc != 0) {
+                AddPLC(plc);
+            }
+        }
+    }
+    AddPLC(plcid_Main2);
 
     /* ------------------------------------------------------------------
        Phase C: Clear RAM regions (sonic.asm:2739-2743)
@@ -326,6 +373,7 @@ static void Level_Enter(void) {
         WaitForVBlank();
         ExecuteObjects();        /* first call spawns the four card elements */
         BuildSprites();
+        RunPLC();                /* ASM processes the level PLCs each VBlank */
         settle_frames++;
     } while (settle_frames < 120 && !TitleCardsSettled());
 
@@ -417,8 +465,6 @@ void LoadTilesFromStart(void) {
    mappings, FG/BG layout, and the zone palette into the fade buffer.
    =================================================================== */
 void LevelDataLoad(void) {
-    uint8_t zone = (uint8_t)(v_zone_act >> 8);
-
     /* --- 16x16 Block Mappings --- */
     if (Blk16_GHZ) {
         uint16_t *buf = (uint16_t *)RAM_ADDR(v_16x16);
@@ -434,12 +480,14 @@ void LevelDataLoad(void) {
     /* --- Level Layout (FG/BG) --- */
     LevelLayoutLoad();
 
-    /* --- Palette --- */
-    switch (zone) {
-    default:
-    case 0: /* Green Hill (and other zones, once assets are loaded) */
-        PalLoad_Fade(palid_GHZ);
-        break;
+    /* --- Palette (from the current zone's LevelHeaders entry) ---
+       Non-GHZ palettes no-op until their palette assets are wired in
+       Palette_Init (PalLoad guards on a NULL source). */
+    {
+        uint8_t zone = (uint8_t)(v_zone_act >> 8);
+        if (zone < (uint8_t)(sizeof(level_headers) / sizeof(level_headers[0]))) {
+            PalLoad_Fade(level_headers[zone].pal);
+        }
     }
 }
 
@@ -510,12 +558,218 @@ void LevelSpawnHUD(void) {
 }
 
 /* ===================================================================
-   ObjPosLoad — object position manager stub
-   Reads object layout data and spawns objects when the camera reaches
-   their X position. Called once per frame.
+   ObjPosLoad — object position manager (ported 1:1 from
+   _inc/ObjPosLoad.asm, REV01, FixBugs=0)
+   Reads the objpos list and spawns objects as the camera scrolls.
    =================================================================== */
+
+/* The four objpos list pointers at v_opl_data (0xF770/+4/+8/+0xC) hold full
+   heap addresses in this port (the RAM words would truncate them to 32 bits),
+   so they live in statics instead of the mirror RAM. opl_ptr_right/
+   opl_ptr_left mirror v_opl_data/+4; opl_ptr_sec mirrors +8/+0xC (the
+   secondary list, always blank). */
+static uint8_t *opl_ptr_right;
+static uint8_t *opl_ptr_left;
+static uint8_t *opl_ptr_sec;
+
+static uint16_t opl_be16(const uint8_t *p) {
+    return (uint16_t)((p[0] << 8) | p[1]);
+}
+
+/* OPL_SpawnObj: check the respawn flag and spawn one object.
+   a0p: in/out pointer into the objpos list; a2: v_objstate;
+   d2: position in the respawn list.
+   Returns 0 if the object was spawned (or skipped because it was already
+   broken), nonzero if there was no free object slot. */
+static int OPL_SpawnObj(uint8_t **a0p, uint8_t *a2, uint8_t d2) {
+    uint8_t *a0 = *a0p;
+    uint8_t *a1;
+    uint16_t d0;
+
+    if (a0[4] & 0x80) {                         /* remember respawn flag */
+        uint8_t old = a2[2 + d2];
+        a2[2 + d2] = (uint8_t)(old | 0x80);     /* bset #7 (FixBugs=0: set always) */
+        if (old & 0x80) {                       /* already destroyed before */
+            a0 += 6;
+            *a0p = a0;
+            return 0;
+        }
+    }
+
+    a1 = (uint8_t *)FindFreeObj();
+    if (!a1) return 1;                          /* bne .fail */
+
+    obX(a1) = (int16_t)opl_be16(a0);            /* move.w (a0)+,obX */
+    a0 += 2;
+    d0 = opl_be16(a0);                          /* move.w (a0)+,d0 (y + flip bits) */
+    a0 += 2;
+    obY(a1) = (int16_t)(d0 & 0x0FFF);           /* andi.w #$FFF: ignore flip bits */
+    obRender(a1) = (uint8_t)((d0 & 0x4000) ? sprite_xflip : 0)
+                 | (uint8_t)((d0 & 0x8000) ? sprite_yflip : 0); /* rol #2 + andi.b */
+    obStatus(a1) = obRender(a1);
+    d0 = a0[0];                                 /* move.b (a0)+,d0 (object id) */
+    a0 += 1;
+    if (d0 & 0x80) obRespawnNo(a1) = d2;        /* remember bit: give respawn slot */
+    obID(a1)       = (uint8_t)(d0 & 0x7F);      /* ignore respawn bit */
+    obSubtype(a1)  = a0[0];                     /* move.b (a0)+,obSubtype */
+    a0 += 1;
+
+    *a0p = a0;
+    return 0;
+}
+
+static void OPL_Next(void);
+
+/* OPL_Main: initialise the spawn windows and respawn list. */
+static void OPL_Main(void) {
+    uint8_t *a2 = RAM_ADDR(v_objstate);
+    uint8_t *a0, *start;
+    uint16_t d6;
+
+    if (ObjPos_GHZ1 == NULL) return;            /* no objpos data mapped */
+
+    v_opl_routine = (uint8_t)(v_opl_routine + 2); /* goto OPL_Next next */
+
+    /* d0 = (v_zone_act << 2) & 0xFFF indexes ObjPos_Index; the only mapped
+       entry (GHZ1) points at ObjPos_GHZ1, so a0 is that list directly. */
+    a0 = ObjPos_GHZ1;
+    opl_ptr_right = a0;                         /* move.l a0,(v_opl_data)   */
+    opl_ptr_left  = a0;                         /* move.l a0,(v_opl_data+4) */
+    opl_ptr_sec   = NULL;                       /* move.l a1,(v_opl_data+8/+C) */
+
+    *a2 = 0x01;                                 /* move.w #$101,(a2)+ */
+    *(a2 + 1) = 0x01;
+    a2 += 2;
+    /* FixBugs=0: the loop counter is measured in words ($5E), but the loop
+       clears longwords, so $17C bytes are cleared instead of $BE. */
+    for (int i = 0x5E; i >= 0; i--) {
+        *(uint32_t *)a2 = 0;
+        a2 += 4;
+    }
+
+    /* .use_screen_x: d6 = (v_screenposx - 128), clamped at 0, & ~0x7F */
+    d6 = (uint16_t)v_screenposx;
+    if (d6 >= 128) d6 -= 128;
+    else           d6 = 0;
+    d6 &= 0xFF80;
+
+    a0   = opl_ptr_right;
+    start = a0;
+    while (opl_be16(a0) < d6) {                 /* bls .found_right: stop when x >= d6 */
+        if (a0[4] & 0x80) {                     /* remember flag */
+            (*a2)++;                            /* addq.b #1,(a2) (ASM's d2 read is dead) */
+        }
+        a0 += 6;
+    }
+    opl_ptr_right = a0;                         /* .found_right: move.l a0,(v_opl_data) */
+
+    a0 = start;                                 /* movea.l (v_opl_data+4),a0 */
+    if (d6 >= 128) {                            /* bcs.s .found_left (borrow when < 128) */
+        d6 -= 128;                              /* subi.w #128,d6 */
+        while (opl_be16(a0) < d6) {             /* bls .found_left */
+            if (a0[4] & 0x80) (*(a2 + 1))++;    /* addq.b #1,1(a2) */
+            a0 += 6;
+        }
+    }
+    opl_ptr_left = a0;                          /* .found_left: move.l a0,(v_opl_data+4) */
+
+    v_opl_screen = 0xFFFF;                      /* move.w #-1,(v_opl_screen) */
+
+    OPL_Next();                                 /* fall-through to OPL_Next */
+}
+
+/* OPL_MovedLeft: recycle the respawn list while the camera moves left. */
+static void OPL_MovedLeft(uint16_t d6) {
+    uint8_t *a2 = RAM_ADDR(v_objstate);
+    uint8_t *a0;
+    uint8_t d2 = 0;
+    int16_t d6s;
+
+    v_opl_screen = d6;                          /* move.w d6,(v_opl_screen) */
+    a0 = opl_ptr_left;                          /* movea.l (v_opl_data+4),a0 */
+    d6s = (int16_t)d6 - 128;                    /* subi.w #128,d6 */
+    if (d6s >= 0) {                             /* bcs.s .found_left */
+        while (1) {
+            uint16_t cx = opl_be16(a0 - 6);     /* cmp.w -6(a0),d6 */
+            if ((int16_t)cx <= d6s) break;      /* bge.s .found_left: stop when x <= d6 */
+            a0 -= 6;                            /* subq.w #6,a0 */
+            if (a0[4] & 0x80) {                 /* remember flag */
+                (*(a2 + 1))--;                  /* subq.b #1,1(a2) */
+                d2 = *(a2 + 1);                 /* move.b 1(a2),d2 */
+            }
+            if (OPL_SpawnObj(&a0, a2, d2)) {    /* bne.s .failed_to_spawn */
+                if (a0[4] & 0x80) (*(a2 + 1))++; /* revert second counter */
+                a0 += 6;                        /* addq.w #6,a0 */
+                break;
+            }
+            a0 -= 6;                            /* goto previous objpos entry */
+        }
+    }
+    opl_ptr_left = a0;                          /* .found_left: move.l a0,(v_opl_data+4) */
+
+    /* right side: recycle the right respawn slots, no spawning */
+    a0 = opl_ptr_right;                         /* movea.l (v_opl_data),a0 */
+    d6s += 128 + 320 + 320;                     /* addi.w #128+320+320,d6 */
+    while (1) {
+        uint16_t cx = opl_be16(a0 - 6);         /* cmp.w -6(a0),d6 */
+        if (d6s > (int16_t)cx) break;           /* bgt.s .found_right: stop when x < d6 */
+        if (a0[-2] & 0x80) (*a2)--;             /* subq.b #1,(a2) (flag at -2(a0)) */
+        a0 -= 6;                                /* subq.w #6,a0 */
+    }
+    opl_ptr_right = a0;                         /* .found_right: move.l a0,(v_opl_data) */
+}
+
+/* OPL_MovedRight: spawn objects as the camera moves right (or on the first
+   frame, since v_opl_screen starts at -1). */
+static void OPL_MovedRight(uint16_t d6) {
+    uint8_t *a2 = RAM_ADDR(v_objstate);
+    uint8_t *a0;
+    uint8_t d2 = 0;
+    uint16_t d6u;
+
+    v_opl_screen = d6;                          /* move.w d6,(v_opl_screen) */
+    a0 = opl_ptr_right;                         /* movea.l (v_opl_data),a0 */
+    d6u = d6 + 320 + 320;                       /* addi.w #320+320,d6 */
+
+    while (1) {                                 /* .loop_find_right */
+        if (opl_be16(a0) <= d6u) break;         /* bls.s .found_right: stop when x >= d6 */
+        if (a0[4] & 0x80) {                     /* remember flag */
+            d2 = *a2;                           /* move.b (a2),d2 */
+            (*a2)++;                            /* addq.b #1,(a2) */
+        }
+        if (OPL_SpawnObj(&a0, a2, d2)) break;   /* bne -> .found_right (no free slot) */
+    }
+    opl_ptr_right = a0;                         /* .found_right: move.l a0,(v_opl_data) */
+
+    a0 = opl_ptr_left;                          /* movea.l (v_opl_data+4),a0 */
+    if (d6u >= 768) {                           /* bcs.s .found_left (borrow when < 768) */
+        d6u -= 320 + 320 + 128;                 /* subi.w #320+320+128,d6 */
+        while (1) {                             /* .loop_find_left */
+            if (opl_be16(a0) <= d6u) break;     /* bls.s .found_left */
+            if (a0[4] & 0x80) (*(a2 + 1))++;    /* addq.b #1,1(a2) */
+            a0 += 6;
+        }
+    }
+    opl_ptr_left = a0;                          /* .found_left: move.l a0,(v_opl_data+4) */
+}
+
+/* OPL_Next: process one frame of object loading. */
+static void OPL_Next(void) {
+    uint16_t d6;
+    int16_t prev;
+
+    if (opl_ptr_right == NULL) return;          /* empty list */
+    d6 = (uint16_t)v_screenposx & 0xFF80;       /* andi.w #$FF80 */
+    prev = (int16_t)v_opl_screen;               /* cmp.w (v_opl_screen),d6 */
+    if ((int16_t)d6 == prev) return;            /* beq.w OPL_NoMove */
+    if ((int16_t)d6 >= prev) OPL_MovedRight(d6); /* bge.s OPL_MovedRight */
+    else                     OPL_MovedLeft(d6);
+}
+
+/* ObjPosLoad: dispatch on the opl routine. */
 void ObjPosLoad(void) {
-    /* TODO: implement object spawning from level layout data */
+    if (v_opl_routine == 0) OPL_Main();
+    else                    OPL_Next();
 }
 
 /* ===================================================================
