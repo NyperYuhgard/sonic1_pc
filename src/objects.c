@@ -199,16 +199,16 @@ void SynchroAnimate(void) {
 void SpeedToPos(void *obj) {
     uint8_t *o = (uint8_t *)obj;
 
-    int32_t x = ((uint32_t)obSubpixelX(o) << 16) | (uint16_t)obX(o);
-    int32_t y = ((uint32_t)obSubpixelY(o) << 16) | (uint16_t)obY(o);
+    int32_t x = ((uint32_t)obX(o) << 16) | (uint16_t)obSubpixelX(o);
+    int32_t y = ((uint32_t)obY(o) << 16) | (uint16_t)obSubpixelY(o);
 
     x += (int32_t)obVelX(o) << 8;
     y += (int32_t)obVelY(o) << 8;
 
-    obX(o)         = (int16_t)(x & 0xFFFF);
-    obSubpixelX(o) = (int16_t)((uint32_t)x >> 16);
-    obY(o)         = (int16_t)(y & 0xFFFF);
-    obSubpixelY(o) = (int16_t)((uint32_t)y >> 16);
+    obX(o)         = (int16_t)((uint32_t)x >> 16);
+    obSubpixelX(o) = (int16_t)(x & 0xFFFF);
+    obY(o)         = (int16_t)((uint32_t)y >> 16);
+    obSubpixelY(o) = (int16_t)(y & 0xFFFF);
 }
 
 /* ===========================================================================
@@ -1863,31 +1863,27 @@ Sonic_AirDrag:
 
 static void Sonic_LevelBound(void *obj) {
     uint8_t *o = (uint8_t *)obj;
-    int32_t d1 = (int32_t)((uint16_t)obX(o)) | ((int32_t)((uint16_t)obSubpixelX(o)) << 16);
+    int32_t d1 = ((uint32_t)obX(o) << 16) | (uint16_t)obSubpixelX(o); /* move.l obX(a0),d1 */
     int16_t d0 = obVelX(o);
-    d0 = (int16_t)(((uint16_t)d0) << 8);
-    d1 = d1 + d0;
-    d1 = (int32_t)((int16_t)(d1 >> 16)) | ((int32_t)((uint16_t)(d1 & 0xFFFF)) << 16);
+    d1 += ((int32_t)d0) << 8;                      /* ext.l; asl.l #8; add.l d0,d1 */
+    d1 = (int32_t)(int16_t)((uint32_t)d1 >> 16);   /* swap d1: integer X in low word */
 
-    {
-        int16_t limit = v_limitleft2 + 16;
-        if ((int16_t)d1 < limit) {
-            goto sides;
-        }
-    }
-    {
-        int16_t limit = v_limitright2 + (320 - 24);
-        if (f_lockscreen) {
-            limit = limit + 64;
-        }
-        if ((int16_t)d1 > limit) {
-            goto sides;
-        }
+    d0 = v_limitleft2 + 16;                        /* bhi.s .sides */
+    if ((uint16_t)d0 > (uint16_t)(int16_t)d1) {
+        goto sides;
     }
 
-chkbottom: ;
-    int16_t limit_b = v_limitbtm2 + 224;
-    if ((int16_t)obY(o) >= limit_b) {
+    d0 = v_limitright2 + (320 - 24);
+    if (!f_lockscreen) {
+        d0 = d0 + 64;
+    }
+    if ((uint16_t)(int16_t)d1 >= (uint16_t)d0) {   /* bls.s .sides */
+        goto sides;
+    }
+
+chkbottom:
+    d0 = v_limitbtm2 + 224;                        /* FixBugs=0: no boundary override */
+    if ((int16_t)obY(o) > d0) {                    /* blt.s .bottom */
         goto bottom;
     }
     return;
@@ -1905,7 +1901,7 @@ bottom:
     return;
 
 sides:
-    obX(o) = (int16_t)d1;
+    obX(o) = d0;                                   /* move.w d0,obX(a0) */
     obSubpixelX(o) = 0;
     obVelX(o) = 0;
     obInertia(o) = 0;
