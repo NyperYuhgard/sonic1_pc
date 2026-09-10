@@ -2467,7 +2467,77 @@ static void Sonic_Animate(void *obj) {
     uint8_t frame_interval = anim_data[0];
 
     if ((int8_t)frame_interval >= 0) {
-        AnimateSprite(o, anim_data);
+        /* Normal animation — inline SAnim_Do logic (faithful to ASM) */
+        uint8_t status = obStatus(o);
+        uint8_t render = obRender(o);
+        render = (render & ~(sprite_xflip | sprite_yflip)) | (status & sprite_xflip);
+        obRender(o) = render;
+
+        obTimeFrame(o)--;
+        if ((int8_t)obTimeFrame(o) >= 0) {
+            return;
+        }
+        obTimeFrame(o) = frame_interval;
+
+        uint8_t frame_idx = obAniFrame(o);
+        uint8_t frame_id = anim_data[1 + frame_idx];
+
+        if ((int8_t)frame_id >= 0) {
+            /* Normal frame */
+            uint8_t frame = frame_id & 0x1F;
+            obFrame(o) = frame;
+            obAniFrame(o) = frame_idx + 1;
+        } else {
+            /* Special animation flags — cascade like ASM */
+            switch (frame_id) {
+                case 0xFF: /* afEnd — loop to beginning */
+                    obAniFrame(o) = 0;
+                    frame_id = anim_data[1];
+                    {
+                        uint8_t frame = frame_id & 0x1F;
+                        obFrame(o) = frame;
+                        status = obStatus(o);
+                        render = obRender(o);
+                        render = (render & ~(sprite_xflip | sprite_yflip)) | (status & sprite_xflip);
+                        obRender(o) = render;
+                        obAniFrame(o) = 1;
+                    }
+                    break;
+
+                case 0xFE: /* afBack — go back N frames */
+                    {
+                        uint8_t back = anim_data[2 + frame_idx];
+                        obAniFrame(o) -= back;
+                        frame_idx = obAniFrame(o);
+                        frame_id = anim_data[1 + frame_idx];
+                        uint8_t frame = frame_id & 0x1F;
+                        obFrame(o) = frame;
+                        status = obStatus(o);
+                        render = obRender(o);
+                        render = (render & ~(sprite_xflip | sprite_yflip)) | (status & sprite_xflip);
+                        obRender(o) = render;
+                        obAniFrame(o)++;
+                    }
+                    break;
+
+                case 0xFD: /* afChange — change to different animation */
+                    obAnim(o) = anim_data[2 + frame_idx];
+                    break;
+
+                case 0xFC: /* afRoutine — increment routine counter */
+                    obRoutine(o) += 2;
+                    break;
+
+                case 0xFB: /* afReset — reset animation and 2nd routine */
+                    obAniFrame(o) = 0;
+                    ob2ndRout(o) = 0;
+                    break;
+
+                case 0xFA: /* af2ndRoutine — increment 2nd routine counter */
+                    ob2ndRout(o) += 2;
+                    break;
+            }
+        }
         return;
     }
 
@@ -2512,7 +2582,8 @@ static void Sonic_Animate(void *obj) {
                     d3 = angle + angle;
                 } else {
                     a1 = Ani_Sonic + ((const uint16_t *)Ani_Sonic)[id_Walk];
-                    d3 = angle + (angle >> 1) + angle; /* angle * 3 */
+                    d3 = angle + (angle >> 1);
+                d3 += d3; /* angle * 3 */
                 }
 
                 speed = -speed + 0x800;
@@ -2584,43 +2655,40 @@ static void Sonic_LoadGfx(void *obj) {
         return;
     }
     v_sonframenum = d0;
-    {
-        const uint8_t *a2 = SonicDynPLC + ((const uint16_t *)SonicDynPLC)[d0];
-        uint8_t d1 = a2[0];
-        if (d1 == 0) {
-            return;
-        }
-        d1 = d1 - 1;
-        uint8_t *a3 = RAM_ADDR(v_sgfx_buffer);
-        f_sonframechg = 1;
-        for (;;) {
-            uint8_t d2hi = a2[1];
-            uint8_t d0 = d2hi >> 4;
-            uint16_t d2 = (uint16_t)(d2hi << 8);
-            d2 = d2 | a2[2];
-            d2 = (uint16_t)(d2 << 5);
-            {
-                const uint8_t *a1 = Art_Sonic + d2;
-                for (int i = 0; i < d0 + 1; i++) {
-                    a3[0] = a1[0];
-                    a3[1] = a1[1];
-                    a3[2] = a1[2];
-                    a3[3] = a1[3];
-                    a3[4] = a1[4];
-                    a3[5] = a1[5];
-                    a3[6] = a1[6];
-                    a3[7] = a1[7];
-                    a3 = a3 + 8;
-                    a1 = a1 + 8;
-                }
-            }
-            a2 = a2 + 3;
-            if (d1 == 0) {
-                break;
-            }
-            d1 = d1 - 1;
-        }
+
+    // 1. Leer offset Big-Endian de la tabla
+    uint16_t offset = (SonicDynPLC[d0 * 2] << 8) | SonicDynPLC[d0 * 2 + 1];
+    const uint8_t *a2 = SonicDynPLC + offset;
+
+    uint8_t d1 = *a2++; // Número de entradas DPLC
+    if (d1 == 0) {
+        return;
     }
+
+    uint8_t *a3 = RAM_ADDR(v_sgfx_buffer);
+    f_sonframechg = 1;
+
+    do {
+        uint8_t byte1 = *a2++;
+        uint8_t byte2 = *a2++;
+
+        // d0 = Cantidad de tiles - 1 (se extrae del nybble alto)
+        uint8_t tile_count = (byte1 >> 4) + 1;
+
+        // d2 = Offset de tile (nybble bajo de byte1 + byte2)
+        uint16_t tile_offset = ((byte1 & 0x0F) << 8) | byte2;
+
+        // Cada tile son $20 (32) bytes en el arte sin comprimir
+        const uint8_t *a1 = Art_Sonic + (tile_offset * 32);
+
+        // Copiar 'tile_count' tiles completos (32 bytes cada uno)
+        for (int i = 0; i < tile_count; i++) {
+            // Un tile completo son 32 bytes (equivalente a los 8 movem.l del 68k)
+            for (int b = 0; b < 32; b++) {
+                *a3++ = *a1++;
+            }
+        }
+    } while (--d1 > 0);
 }
 
 /* ===========================================================================
