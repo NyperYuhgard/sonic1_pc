@@ -4,6 +4,7 @@
 #include "constants.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <limits.h>
@@ -201,6 +202,12 @@ size_t   Col_SYZ_len = 0;
 const uint8_t *Col_SBZ = NULL;
 size_t   Col_SBZ_len = 0;
 
+/* Level start location arrays (from _inc/LevelSizeLoad & BgScrollSpeed.asm) */
+const uint8_t *StartLocArray = NULL;
+size_t   StartLocArray_len = 0;
+const uint8_t *EndingStLocArray = NULL;
+size_t   EndingStLocArray_len = 0;
+
 /* ============================================================================
    Asset loading
    ============================================================================ */
@@ -239,11 +246,48 @@ static int load_asset(const char *name, const uint8_t **out_ptr, size_t *out_len
         fprintf(stderr, "[Data] Failed to load asset: %s\n", path);
         return -1;
     }
-    *out_ptr = buf;
+    if (out_ptr) *out_ptr = buf;
     return 0;
 }
 
+/* Stage startpos asset references so stage_assets.py copies the raw BINs.
+   The actual concatenation into StartLocArray/EndingStLocArray happens
+   below in Data_Init. */
+static void stage_startpos_assets(void) {
+    (void)load_asset("startpos/ghz1.bin", NULL, NULL);
+    (void)load_asset("startpos/ghz2.bin", NULL, NULL);
+    (void)load_asset("startpos/ghz3.bin", NULL, NULL);
+    (void)load_asset("startpos/lz1.bin", NULL, NULL);
+    (void)load_asset("startpos/lz2.bin", NULL, NULL);
+    (void)load_asset("startpos/lz3.bin", NULL, NULL);
+    (void)load_asset("startpos/sbz3.bin", NULL, NULL);
+    (void)load_asset("startpos/mz1.bin", NULL, NULL);
+    (void)load_asset("startpos/mz2.bin", NULL, NULL);
+    (void)load_asset("startpos/mz3.bin", NULL, NULL);
+    (void)load_asset("startpos/slz1.bin", NULL, NULL);
+    (void)load_asset("startpos/slz2.bin", NULL, NULL);
+    (void)load_asset("startpos/slz3.bin", NULL, NULL);
+    (void)load_asset("startpos/syz1.bin", NULL, NULL);
+    (void)load_asset("startpos/syz2.bin", NULL, NULL);
+    (void)load_asset("startpos/syz3.bin", NULL, NULL);
+    (void)load_asset("startpos/sbz1.bin", NULL, NULL);
+    (void)load_asset("startpos/sbz2.bin", NULL, NULL);
+    (void)load_asset("startpos/fz.bin", NULL, NULL);
+    (void)load_asset("startpos/end1.bin", NULL, NULL);
+    (void)load_asset("startpos/end2.bin", NULL, NULL);
+    (void)load_asset("startpos/Credits Demos/ghz1 (Credits demo 1).bin", NULL, NULL);
+    (void)load_asset("startpos/Credits Demos/ghz1 (Credits demo 2).bin", NULL, NULL);
+    (void)load_asset("startpos/Credits Demos/lz3 (Credits demo).bin", NULL, NULL);
+    (void)load_asset("startpos/Credits Demos/mz2 (Credits demo).bin", NULL, NULL);
+    (void)load_asset("startpos/Credits Demos/sbz1 (Credits demo).bin", NULL, NULL);
+    (void)load_asset("startpos/Credits Demos/sbz2 (Credits demo).bin", NULL, NULL);
+    (void)load_asset("startpos/Credits Demos/slz3 (Credits demo).bin", NULL, NULL);
+    (void)load_asset("startpos/Credits Demos/syz3 (Credits demo).bin", NULL, NULL);
+}
+
 int Data_Init(void) {
+    stage_startpos_assets();
+
     Pal_SegaBG = NULL;
     Pal_SegaBG_len = 0;
     Pal_Sega1 = NULL;
@@ -642,6 +686,89 @@ int Data_Init(void) {
         Art_Text_len = 0;
     }
 
+    {
+        static const char * const startloc_files[] = {
+            "startpos/ghz1.bin", "startpos/ghz2.bin", "startpos/ghz3.bin", NULL,
+            "startpos/lz1.bin", "startpos/lz2.bin", "startpos/lz3.bin", "startpos/sbz3.bin",
+            "startpos/mz1.bin", "startpos/mz2.bin", "startpos/mz3.bin", NULL,
+            "startpos/slz1.bin", "startpos/slz2.bin", "startpos/slz3.bin", NULL,
+            "startpos/syz1.bin", "startpos/syz2.bin", "startpos/syz3.bin", NULL,
+            "startpos/sbz1.bin", "startpos/sbz2.bin", "startpos/fz.bin", NULL,
+            NULL, NULL, NULL, NULL,
+            "startpos/end1.bin", "startpos/end2.bin", NULL, NULL,
+        };
+        size_t total = 28 * 4;
+        uint8_t *buf = (uint8_t *)malloc(total);
+        if (!buf) {
+            StartLocArray = NULL;
+            StartLocArray_len = 0;
+        } else {
+            size_t off = 0;
+            int ok = 1;
+            for (int i = 0; i < 28; i++) {
+                if (!startloc_files[i]) {
+                    buf[off++] = 0x00;
+                    buf[off++] = 0x80;
+                    buf[off++] = 0x00;
+                    buf[off++] = 0xA8;
+                } else {
+                    size_t len;
+                    const uint8_t *tmp = Assets_Load(startloc_files[i], &len);
+                    if (!tmp || len < 4) { ok = 0; break; }
+                    memcpy(buf + off, tmp, 4);
+                    free((void *)tmp);
+                    off += 4;
+                }
+            }
+            if (!ok) {
+                free(buf);
+                StartLocArray = NULL;
+                StartLocArray_len = 0;
+            } else {
+                StartLocArray = buf;
+                StartLocArray_len = total;
+            }
+        }
+    }
+
+    {
+        static const char * const ending_files[] = {
+            "startpos/Credits Demos/ghz1 (Credits demo 1).bin",
+            "startpos/Credits Demos/ghz1 (Credits demo 2).bin",
+            "startpos/Credits Demos/lz3 (Credits demo).bin",
+            "startpos/Credits Demos/mz2 (Credits demo).bin",
+            "startpos/Credits Demos/sbz1 (Credits demo).bin",
+            "startpos/Credits Demos/sbz2 (Credits demo).bin",
+            "startpos/Credits Demos/slz3 (Credits demo).bin",
+            "startpos/Credits Demos/syz3 (Credits demo).bin",
+        };
+        size_t total = 8 * 4;
+        uint8_t *buf = (uint8_t *)malloc(total);
+        if (!buf) {
+            EndingStLocArray = NULL;
+            EndingStLocArray_len = 0;
+        } else {
+            size_t off = 0;
+            int ok = 1;
+            for (int i = 0; i < 8; i++) {
+                size_t len;
+                const uint8_t *tmp = Assets_Load(ending_files[i], &len);
+                if (!tmp || len < 4) { ok = 0; break; }
+                memcpy(buf + off, tmp, 4);
+                free((void *)tmp);
+                off += 4;
+            }
+            if (!ok) {
+                free(buf);
+                EndingStLocArray = NULL;
+                EndingStLocArray_len = 0;
+            } else {
+                EndingStLocArray = buf;
+                EndingStLocArray_len = total;
+            }
+        }
+    }
+
     Palette_Init();
     return 0;
 }
@@ -711,6 +838,8 @@ void Data_Quit(void) {
     FREE_ASSET(Col_AngleMap);
     FREE_ASSET(Col_CollArray1);
     FREE_ASSET(Col_CollArray2);
+    FREE_ASSET(StartLocArray);
+    FREE_ASSET(EndingStLocArray);
 #undef FREE_ASSET
 }
 

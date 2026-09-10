@@ -235,6 +235,12 @@ extern size_t   Col_CollArray1_len;
 extern const uint8_t *Col_CollArray2;
 extern size_t   Col_CollArray2_len;
 
+/* Level start location arrays (from _inc/LevelSizeLoad & BgScrollSpeed.asm) */
+extern const uint8_t *StartLocArray;
+extern size_t   StartLocArray_len;
+extern const uint8_t *EndingStLocArray;
+extern size_t   EndingStLocArray_len;
+
 /* Initialize all assets from the assets/ directory.
    Returns 0 on success, -1 on any failure. */
 int Data_Init(void);

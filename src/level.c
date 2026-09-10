@@ -65,67 +65,225 @@ static const level_header level_headers[] = {
    Level size loading (from _inc/LevelSizeLoad & BgScrollSpeed.asm)
    =================================================================== */
 
-/* Level size array (from _inc/LevelSizeArray.asm): one 6-word entry per act:
-   <unused=$0004> <left> <right> <top> <bottom> <lookshift=$0060> */
+/* LevelSizeArray (from _inc/LevelSizeArray.asm): one 6-word entry per act,
+   indexed by zone*4 + act. */
 static const uint16_t level_size_array[][6] = {
-    /*                                                  GHZ1 */
-    { 0x0004, 0x0000, 0x24BF, 0x0000, 0x0300, 0x0060 },
-    /*                                                  GHZ2 */
-    { 0x0004, 0x0000, 0x1EBF, 0x0000, 0x0300, 0x0060 },
-    /*                                                  GHZ3 */
-    { 0x0004, 0x0000, 0x2960, 0x0000, 0x0300, 0x0060 },
-    /*                                                  GHZ4 (unused) */
-    { 0x0004, 0x0000, 0x2ABF, 0x0000, 0x0300, 0x0060 },
+    {0x0004, 0x0000, 0x24BF, 0x0000, 0x0300, 0x0060},
+    {0x0004, 0x0000, 0x1EBF, 0x0000, 0x0300, 0x0060},
+    {0x0004, 0x0000, 0x2960, 0x0000, 0x0300, 0x0060},
+    {0x0004, 0x0000, 0x2ABF, 0x0000, 0x0300, 0x0060},
+    {0x0004, 0x0000, 0x19BF, 0x0000, 0x0530, 0x0060},
+    {0x0004, 0x0000, 0x10AF, 0x0000, 0x0720, 0x0060},
+    {0x0004, 0x0000, 0x202F, 0xFF00, 0x0800, 0x0060},
+    {0x0004, 0x0000, 0x20BF, 0x0000, 0x0720, 0x0060},
+    {0x0004, 0x0000, 0x17BF, 0x0000, 0x01D0, 0x0060},
+    {0x0004, 0x0000, 0x17BF, 0x0000, 0x0520, 0x0060},
+    {0x0004, 0x0000, 0x1800, 0x0000, 0x0720, 0x0060},
+    {0x0004, 0x0000, 0x16BF, 0x0000, 0x0720, 0x0060},
+    {0x0004, 0x0000, 0x1FBF, 0x0000, 0x0640, 0x0060},
+    {0x0004, 0x0000, 0x1FBF, 0x0000, 0x0640, 0x0060},
+    {0x0004, 0x0000, 0x2000, 0x0000, 0x06C0, 0x0060},
+    {0x0004, 0x0000, 0x3EC0, 0x0000, 0x0720, 0x0060},
+    {0x0004, 0x0000, 0x22C0, 0x0000, 0x0420, 0x0060},
+    {0x0004, 0x0000, 0x28C0, 0x0000, 0x0520, 0x0060},
+    {0x0004, 0x0000, 0x2C00, 0x0000, 0x0620, 0x0060},
+    {0x0004, 0x0000, 0x2EC0, 0x0000, 0x0620, 0x0060},
+    {0x0004, 0x0000, 0x21C0, 0x0000, 0x0720, 0x0060},
+    {0x0004, 0x0000, 0x1E40, 0xFF00, 0x0800, 0x0060},
+    {0x0004, 0x2080, 0x2460, 0x0510, 0x0510, 0x0060},
+    {0x0004, 0x0000, 0x3EC0, 0x0000, 0x0720, 0x0060},
+    {0x0004, 0x0000, 0x0500, 0x0110, 0x0110, 0x0060},
+    {0x0004, 0x0000, 0x0DC0, 0x0110, 0x0110, 0x0060},
+    {0x0004, 0x0000, 0x2FFF, 0x0000, 0x0320, 0x0060},
+    {0x0004, 0x0000, 0x2FFF, 0x0000, 0x0320, 0x0060},
 };
+
+/* LoopChunkNums (from _inc/LevelSizeLoad & BgScrollSpeed.asm): 4 bytes per zone. */
+static const uint8_t loop_chunk_nums[] = {
+    0xB5, 0x7F, 0x1F, 0x20,
+    0x7F, 0x7F, 0x7F, 0x7F,
+    0x7F, 0x7F, 0x7F, 0x7F,
+    0xAA, 0xB4, 0x7F, 0x7F,
+    0x7F, 0x7F, 0x7F, 0x7F,
+    0x7F, 0x7F, 0x7F, 0x7F,
+    0x7F, 0x7F, 0x7F, 0x7F,
+};
+
+/* BGScrollBlockSizes (REV00 only, kept for 1:1 structure). */
+static const uint16_t bg_scroll_block_sizes[] = {
+    0x0070, 0x0100, 0x0100, 0x0100,
+    0x0800, 0x0100, 0x0100, 0x0000,
+    0x0800, 0x0100, 0x0100, 0x0000,
+    0x0800, 0x0100, 0x0100, 0x0000,
+    0x0800, 0x0100, 0x0100, 0x0000,
+    0x0800, 0x0100, 0x0100, 0x0000,
+    0x0800, 0x0100, 0x0100, 0x0000,
+    0x0070, 0x0100, 0x0100, 0x0100,
+};
+
+/* Forward declaration */
+static void BgScrollSpeed(int16_t y, int16_t x);
+
+/* Stub for Lamp_LoadInfo (Object 79) until ported. */
+static void Lamp_LoadInfo(void) {}
 
 void LevelSizeLoad(void) {
     uint8_t zone = (uint8_t)(v_zone_act >> 8);
     uint8_t act  = (uint8_t)(v_zone_act & 0xFF);
+    uint16_t d0, d1;
+    const uint16_t *a0;
+    const uint16_t *a1;
 
-    /* Clear level-change variables */
     v_unused7 = 0;
     v_unused8 = 0;
     v_unused9 = 0;
     v_unused10 = 0;
     v_dle_routine = 0;
-    f_nobgscroll = 0;
+    /* f_nobgscroll is NOT cleared in REV01 (FixBugs=0) */
 
-    /* LevelSizeArray entry index = zone*4 + act */
-    uint32_t idx = (uint32_t)zone * 4 + act;
-    if (idx < sizeof(level_size_array) / sizeof(level_size_array[0])) {
-        const uint16_t *e = level_size_array[idx];
+    uint16_t idx = (uint16_t)zone * 4 + (uint16_t)act;
+    if (idx >= sizeof(level_size_array) / sizeof(level_size_array[0])) {
+        idx = 0;
+    }
+    a0 = level_size_array[idx];
 
-        v_unused11      = e[0];                 /* always $0004 */
-        v_limitleft2    = v_limitleft1  = e[1];
-        v_limitright2   = v_limitright1 = e[2];
-        v_limittop2     = v_limittop1   = e[3];
-        v_limitbtm2     = v_limitbtm1   = e[4];
-        v_lookshift     = e[5];                 /* always $0060 */
-        v_limitleft3    = v_limitleft2 + 0x240;
+    v_unused11      = a0[0];
+    v_limitleft2    = v_limitleft1  = a0[1];
+    v_limitright2   = v_limitright1 = a0[2];
+    v_limittop2     = v_limittop1   = a0[3];
+    v_limitbtm2     = v_limitbtm1   = a0[4];
+    v_limitleft3    = (uint16_t)(v_limitleft2 + 0x240);
+    v_fg_xblock     = 0x10;
+    v_fg_yblock     = 0x10;
 
-        /* Trigger drawing of a whole column on next frame */
-        v_fg_xblock = 0x10;
-        v_fg_yblock = 0x10;
+    d0 = a0[5];
+    v_lookshift     = d0;
+
+    if (RAM_BYTE(v_lastlamp) != 0) {
+        Lamp_LoadInfo();
+        d1 = obX(&ram[v_player]);
+        d0 = obY(&ram[v_player]);
+    } else {
+        uint16_t si = (uint16_t)((uint16_t)zone * 4 + (uint16_t)act);
+        if (StartLocArray && si < 28) {
+            a1 = (const uint16_t *)StartLocArray + si * 2;
+        }
+        if ((int16_t)RAM_WORD(f_demo) >= 0) {
+            if (StartLocArray && si < 28) {
+                d1 = a1[0];
+                obX(&ram[v_player]) = (int16_t)d1;
+                d0 = a1[1];
+                obY(&ram[v_player]) = (int16_t)d0;
+            } else {
+                d1 = 0x0050;
+                obX(&ram[v_player]) = 0x0050;
+                d0 = 0x03B0;
+                obY(&ram[v_player]) = 0x03B0;
+            }
+        } else {
+            uint16_t ci = (uint16_t)((uint16_t)v_creditsnum - 1);
+            if (EndingStLocArray && ci < 8) {
+                a1 = (const uint16_t *)EndingStLocArray + ci * 2;
+                d1 = a1[0];
+                obX(&ram[v_player]) = (int16_t)d1;
+                d0 = a1[1];
+                obY(&ram[v_player]) = (int16_t)d0;
+            } else {
+                d1 = 0x0050;
+                obX(&ram[v_player]) = 0x0050;
+                d0 = 0x03B0;
+                obY(&ram[v_player]) = 0x03B0;
+            }
+        }
     }
 
-    /* Start location. The title screen (FixBugs) uses a fixed spot to avoid
-       conflicts with GHZ1's start location. */
-    int16_t startX = 0x0050;
-    int16_t startY = 0x03B0;
-    obX(&ram[v_player]) = startX;
-    obY(&ram[v_player]) = startY;
+    {
+        int16_t camX = (int16_t)d1 - (320 / 2);
+        if (camX < 0) camX = 0;
+        if (camX >= (int16_t)v_limitright2) camX = (int16_t)v_limitright2;
+        RAM_WORD(v_screenposx) = (uint16_t)camX;
 
-    /* LevSz_InitCameraPositions */
-    int32_t camX = startX - 160;                /* center Sonic horizontally */
-    if (camX < 0) camX = 0;
-    if (camX >= (int32_t)v_limitright2) camX = v_limitright2;
+        int16_t camY = (int16_t)d0 - ((224 / 2) - 16);
+        if (camY < 0) camY = 0;
+        if (camY >= (int16_t)v_limitbtm2) camY = (int16_t)v_limitbtm2;
+        RAM_WORD(v_screenposy) = (uint16_t)camY;
+    }
 
-    int32_t camY = startY - 96;                 /* center Sonic vertically */
-    if (camY < 0) camY = 0;
-    if (camY >= (int32_t)v_limitbtm2) camY = v_limitbtm2;
+    BgScrollSpeed(d0, d1);
 
-    RAM_WORD(0xF700) = (uint16_t)camX;          /* v_screenposx */
-    RAM_WORD(0xF704) = (uint16_t)camY;          /* v_screenposy */
+    if (zone < sizeof(loop_chunk_nums) / 4) {
+        uint8_t *p = RAM_ADDR(v_256loop1);
+        p[0] = loop_chunk_nums[zone * 4 + 0];
+        p[1] = loop_chunk_nums[zone * 4 + 1];
+        p[2] = loop_chunk_nums[zone * 4 + 2];
+        p[3] = loop_chunk_nums[zone * 4 + 3];
+    }
+}
+
+/* ===================================================================
+   Background scroll speed setup (from _inc/LevelSizeLoad & BgScrollSpeed.asm)
+   =================================================================== */
+static void BgScrollSpeed(int16_t y, int16_t x) {
+    if (RAM_BYTE(v_lastlamp) == 0) {
+        RAM_WORD(v_bgscreenposy) = y;
+        RAM_WORD(v_bg2screenposy) = y;
+        RAM_WORD(v_bgscreenposx) = x;
+        RAM_WORD(v_bg2screenposx) = x;
+        RAM_WORD(v_bg3screenposx) = x;
+    }
+
+    switch (v_zone) {
+    case 0:
+        RAM_LONG(v_bgscreenposx) = 0;
+        RAM_LONG(v_bgscreenposy) = 0;
+        RAM_LONG(v_bg2screenposy) = 0;
+        RAM_LONG(v_bg3screenposy) = 0;
+        memset(RAM_ADDR(v_bgscroll_buffer), 0, 12);
+        break;
+    case 1:
+        RAM_WORD(v_bgscreenposy) = (int16_t)(y >> 1);
+        break;
+    case 2:
+        break;
+    case 3:
+        RAM_WORD(v_bgscreenposy) = (int16_t)((y >> 1) + 0xC0);
+        RAM_LONG(v_bgscreenposx) = 0;
+        break;
+    case 4: {
+        int32_t d0 = (int32_t)y << 4;
+        int32_t d2 = d0;
+        d0 = (d0 << 1) + d2;
+        d0 >>= 8;
+        d0 += 1;
+        RAM_WORD(v_bgscreenposy) = (int16_t)d0;
+        RAM_LONG(v_bgscreenposx) = 0;
+        break;
+    }
+    case 5: {
+        int16_t d0 = (int16_t)((uint16_t)y & 0x7F8);
+        d0 >>= 3;
+        d0 += 1;
+        RAM_WORD(v_bgscreenposy) = d0;
+        break;
+    }
+    case 6: {
+        int16_t d0 = RAM_WORD(v_screenposx);
+        d0 >>= 1;
+        RAM_WORD(v_bgscreenposx) = d0;
+        RAM_WORD(v_bg2screenposx) = d0;
+        int16_t d1 = d0;
+        d0 >>= 2;
+        d1 = d0;
+        d0 += d0;
+        d0 += d1;
+        RAM_WORD(v_bg3screenposx) = d0;
+        RAM_LONG(v_bgscreenposy) = 0;
+        RAM_LONG(v_bg2screenposy) = 0;
+        RAM_LONG(v_bg3screenposy) = 0;
+        memset(RAM_ADDR(v_bgscroll_buffer), 0, 12);
+        break;
+    }
+    }
 }
 
 /* ===================================================================
