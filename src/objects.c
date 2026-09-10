@@ -5,6 +5,7 @@
 #include "sound.h"
 #include "collision.h"
 #include "plc.h"
+#include "debugmode.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -25,6 +26,7 @@ static void CreditsText_Main(void *obj);
 static void SonicPlayer_Main(void *obj);
 static void HUD_Main(void *obj);
 static void TitleCard_Main(void *obj);
+static void GameOverCard_Main(void *obj);
 static void Ring_Main(void *obj);
 static void RingLoss_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
@@ -49,6 +51,7 @@ void Objects_Init(void) {
     obj_dispatch[id_SonicPlayer]  = SonicPlayer_Main;
     obj_dispatch[id_HUD]          = HUD_Main;
     obj_dispatch[id_TitleCard]    = TitleCard_Main;
+    obj_dispatch[id_GameOverCard] = GameOverCard_Main;
     obj_dispatch[id_Rings]        = Ring_Main;
     obj_dispatch[id_RingLoss]     = RingLoss_Main;
 
@@ -548,7 +551,7 @@ static void Sonic_JumpHeight(void *obj);
 static void Sonic_Jump(void *obj);
 
 static void Sonic_LevelBound(void *obj);
-static void KillSonic(void);
+void KillSonic(void *obj);
 
 static void Sonic_AngledRollSpeed(void *obj);
 static void Sonic_Floor(void *obj);
@@ -596,6 +599,13 @@ static void (*const Sonic_Modes[4])(void *) = {
 
 static void SonicPlayer_Main(void *obj) {
     uint8_t *o = (uint8_t *)obj;
+
+    /* ASM SonicPlayer: tst.w v_debuguse; if set, jump to DebugMode */
+    if (v_debuguse) {
+        DebugMode_Main(o);
+        return;
+    }
+
     uint8_t routine = obRoutine(o);
 
     switch (routine) {
@@ -631,19 +641,20 @@ static void Sonic_Main(void *obj) {
 static void Sonic_Control(void *obj) {
     uint8_t *o = (uint8_t *)obj;
 
-    if (RAM_WORD(f_debugmode)) {
-        if (RAM_BYTE(v_jpadpress1) & btnB) {
-            RAM_WORD(v_debuguse) = 1;
-            RAM_BYTE(f_lockctrl) = 0;
+    if (f_debugmode) {
+        if (v_jpadpress1 & btnB) {
+            v_debuguse = 1;
+            f_lockctrl = 0;
             return;
         }
     }
 
-    if (!RAM_BYTE(f_lockctrl)) {
-        RAM_BYTE(v_jpadhold2) = RAM_BYTE(v_jpadhold1);
+    if (!f_lockctrl) {
+        v_jpadhold2 = v_jpadhold1;
+        v_jpadpress2 = v_jpadpress1;
     }
 
-    if (RAM_BYTE(f_playerctrl) & 1) {
+    if (f_playerctrl & 1) {
         goto ignore_modes;
     }
 
@@ -1873,13 +1884,13 @@ static void Sonic_LevelBound(void *obj) {
             goto sides;
         }
     }
-    {
-        int16_t limit = RAM_WORD(v_limitbtm2) + 224;
-        if ((int16_t)obY(o) >= limit) {
-            goto bottom;
-        }
-        return;
+
+chkbottom: ;
+    int16_t limit_b = RAM_WORD(v_limitbtm2) + 224;
+    if ((int16_t)obY(o) >= limit_b) {
+        goto bottom;
     }
+    return;
 
 bottom:
     if (RAM_WORD(v_zone_act) == id_SBZ_act2) {
@@ -1890,14 +1901,15 @@ bottom:
             return;
         }
     }
-    KillSonic();
+    KillSonic(o);
+    return;
 
 sides:
     obX(o) = (int16_t)d1;
     obSubpixelX(o) = 0;
     obVelX(o) = 0;
     obInertia(o) = 0;
-    goto bottom;
+    goto chkbottom;
 }
 
 static void Sonic_SlopeResistWalk(void *obj) {
@@ -2164,7 +2176,7 @@ static void Sonic_HurtStop(void *obj) {
     int16_t d0 = RAM_WORD(v_limitbtm2) + 224;
 
     if ((int16_t)obY(o) >= d0) {
-        KillSonic();
+        KillSonic(o);
         return;
     }
     Sonic_Floor(o);
@@ -2214,7 +2226,7 @@ static void Sonic_HandleDeath(void *obj) {
         }
         return;
     }
-    RAM_WORD(f_restart) = 0;
+    restartime(o) = 0;                             /* ASM: move.w #0,restartime(a0) */
     RAM_BYTE(v_gameovertext1) = id_GameOverCard;
     RAM_BYTE(v_gameovertext2) = id_GameOverCard;
     obFrame(RAM_ADDR(v_gameovertext2)) = 1;
@@ -2610,36 +2622,106 @@ static void Sonic_LoadGfx(void *obj) {
     }
 }
 
-static void KillSonic(void) {
-    uint8_t *o = (uint8_t *)Object_GetSlot(0);
-    obRoutine(o) = 6;
-    obAnim(o) = id_Death;
-    obFrame(o) = fr_Death;
-    obVelX(o) = 0;
-    obVelY(o) = -0x100;
-    obInertia(o) = 0;
-    obStatus(o) = obStatus(o) & ~(1 << 1);
-    RAM_BYTE(v_lives) = RAM_BYTE(v_lives) - 1;
-    if (RAM_BYTE(v_lives) == 0) {
-        RAM_WORD(f_restart) = 0;
-        RAM_BYTE(v_gameovertext1) = id_GameOverCard;
-        RAM_BYTE(v_gameovertext2) = id_GameOverCard;
-        obFrame(RAM_ADDR(v_gameovertext2)) = 1;
-        RAM_BYTE(f_timeover) = 0;
-        Sound_Queue(bgm_GameOver, false);
-        AddPLC(plcid_GameOver);
+/* ===========================================================================
+   GameOverCard — Port of Object 39 from _incObj/39 Game Over.asm
+   "GAME OVER" / "TIME OVER" text. Two instances: frame 0 = "GAME",
+   frame 1 = "OVER". They share slots with title card objects.
+   =========================================================================== */
+static void GameOverCard_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t routine = obRoutine(o);
+    /* obTimeFrame is used as a 16-bit word in the ASM (move.w/tst.w/subq.w) */
+    uint16_t *timer = (uint16_t *)(o + 0x1E);
+
+    switch (routine) {
+    case 0: {   /* Over_ChkPLC */
+        if (RAM_LONG(v_plc_buffer)) {
+            return;
+        }
+        obRoutine(o) = 2;
+        __attribute__((fallthrough));
+    }
+    case 2: {   /* Over_MoveIn */
+        int16_t center = 0x80 + (320 / 2);
+        int16_t d1;
+
+        if (obX(o) == center) {
+            *timer = 12 * 60;
+            obRoutine(o) = 4;
+            DisplaySprite(o);
+            return;
+        }
+        /* Initialize position on first entry */
+        if (obX(o) < 0x20 || obX(o) > 0x1E0) {
+            obX(o) = (int16_t)(0x80 - 48);
+            if (obFrame(o) & 1) {
+                obX(o) = (int16_t)(0x80 + 320 + 48);
+            }
+            obScreenY(o) = (int16_t)(0x80 + (224 / 2));
+            obMap(o) = (uint32_t)(uintptr_t)NULL;  /* Map_Over not yet ported */
+            obGfx(o) = (uint16_t)(ArtTile_Game_Over | Tile_Prio);
+            obRender(o) = sprite_cam_screen;
+            obPriority(o) = 0;
+        }
+        d1 = 0x10;
+        if (obX(o) >= center) {
+            d1 = -d1;
+        }
+        obX(o) = (int16_t)(obX(o) + d1);
+        DisplaySprite(o);
         return;
     }
-    restartime(o) = 60;
-    if (RAM_BYTE(f_timeover)) {
-        restartime(o) = 0;
-        RAM_BYTE(v_gameovertext1) = id_GameOverCard;
-        RAM_BYTE(v_gameovertext2) = id_GameOverCard;
-        obFrame(RAM_ADDR(v_gameovertext1)) = 2;
-        obFrame(RAM_ADDR(v_gameovertext2)) = 3;
-        Sound_Queue(bgm_GameOver, false);
-        AddPLC(plcid_GameOver);
+    case 4: {   /* Over_Wait */
+        if (RAM_BYTE(v_jpadpress1) & btnABC) {
+            goto changeMode;
+        }
+        if (obFrame(o) & 1) {
+            DisplaySprite(o);
+            return;
+        }
+        if (*timer == 0) {
+            goto changeMode;
+        }
+        *timer = *timer - 1;
+        DisplaySprite(o);
+        return;
+
+changeMode:
+        if (RAM_BYTE(f_timeover)) {
+            RAM_LONG(v_lamp_time) = 0;
+            RAM_WORD(f_restart) = 1;
+        } else if (RAM_BYTE(v_continues)) {
+            v_gamemode = 0x14;  /* id_Continue */
+        } else {
+            v_gamemode = 0x00;  /* id_Sega */
+        }
+        DisplaySprite(o);
+        return;
     }
+    }
+}
+
+/* ===========================================================================
+   KillSonic — Port of KillSonic from _incObj/Sonic ReactToItem.asm
+   Sets up death state. Lives/game-over logic is in Sonic_HandleDeath (routine 6).
+   Input: obj = Sonic object pointer (a0)
+   =========================================================================== */
+void KillSonic(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (RAM_WORD(v_debuguse)) {
+        return;
+    }
+    RAM_BYTE(v_invinc) = 0;                        /* remove invincibility */
+    obRoutine(o) = 6;                              /* set to Sonic_Death routine */
+    Sonic_ResetOnFloor(o);                         /* reset airborne state */
+    obStatus(o) = obStatus(o) | (1 << 1);          /* bset #1, force airborne */
+    obVelY(o) = (int16_t)-0x700;                   /* launch Sonic upwards while dying */
+    obVelX(o) = 0;                                 /* stop horizontal movement */
+    obInertia(o) = 0;                              /* stop ground movement */
+    obAnim(o) = id_Death;                          /* death animation */
+    obGfx(o) = obGfx(o) | 0x80;                   /* bset #7, high sprite priority */
+    Sound_Queue(sfx_Death, false);                 /* play death sound */
 }
 
 /* ===========================================================================

@@ -497,6 +497,10 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
 
     /* Refresh the debug VRAM viewer window (no-op when closed) */
     render_vram_viewer();
+
+    /* Refresh the debug Object RAM viewer window (no-op when closed) */
+    extern void ObjView_Render(void);
+    ObjView_Render();
 }
 
 void VDP_SaveScreenshot(const char *path) {

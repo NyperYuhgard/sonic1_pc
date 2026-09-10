@@ -641,22 +641,39 @@ static void GM_Title_Screen(void) {
 
     /* Continue looping */
     v_generictimer--;
-
-    /* --- Level select cheat code (D-Pad) --- */
+    /* --- Level select / Debug / Slowmo cheat code (D-Pad + C) --- */
     {
         const uint8_t *code = (v_megadrive >= 0) ? LevSelCode_US : LevSelCode_J;
         uint16_t dcount = v_title_dcount;
         uint8_t pressed = v_jpadpress1 & btnDir;
+
         if (pressed == code[dcount]) {
             dcount++;
-            if (code[dcount] == 0xFF) {
-                f_levselcheat = 1;
-                dcount = 0;
+            if (pressed == 0) {
+                /* Tit_ActivateCheat: D-Pad code completed (0-entry matched) */
+                uint16_t ccount = v_title_ccount;
+                uint16_t d1 = ccount >> 1;
+                d1 &= 3;
+                if (d1 != 0 && v_megadrive >= 0) {
+                    d1 = 1;
+                    RAM_BYTE(f_levselcheat + 1 + d1) = 1;  /* f_debugcheat = 1 (non-Japanese: debug+slowmo) */
+                }
+                RAM_BYTE(f_levselcheat + d1) = 1;          /* activate cheat based on C count */
                 Sound_Queue(sfx_Ring, false);
+
+                if (v_megadrive >= 0) {
+                    /* Non-Japanese: reset dcount (FixBugs) */
+                    dcount = 0;
+                }
             }
             v_title_dcount = dcount;
         } else if (pressed != 0) {
             v_title_dcount = 0;
+        }
+
+        /* Tit_CountC: count C presses */
+        if (v_jpadpress1 & btnC) {
+            v_title_ccount = v_title_ccount + 1;
         }
     }
 }
@@ -945,6 +962,12 @@ int main(int argc, char *argv[]) {
 
     /* Set first game mode */
     v_gamemode = GM_Sega;
+
+    /* Enable all cheats by default (sonic.asm:420-425, CheatsEnabled=1) */
+    f_levselcheat = 1;
+    f_slomocheat = 1;
+    f_debugcheat = 1;
+    f_creditscheat = 1;
 
     printf("Starting main game loop...\n");
     printf("Controls:\n");

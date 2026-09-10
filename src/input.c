@@ -2,6 +2,8 @@
 #include "ram.h"
 #include "constants.h"
 #include "vdp.h"
+#include "objview.h"
+#include "freecamera.h"
 #include <SDL2/SDL.h>
 #include <string.h>
 
@@ -10,6 +12,8 @@ uint8_t joypad_press[2] = {0, 0};
 
 static uint8_t prev_state[2] = {0, 0};
 static int prev_vram_key = 0;
+static int prev_objview_key = 0;
+static int prev_f_key = 0;
 
 void Input_Init(void) {
     memset(joypad_hold, 0, sizeof(joypad_hold));
@@ -25,11 +29,13 @@ void Input_Read(void) {
             extern int running;
             running = 0;
         }
-        /* Closing the VRAM viewer window via the WM stays valid */
+        /* Closing debug viewer windows via the WM */
         if (event.type == SDL_WINDOWEVENT &&
-            event.window.event == SDL_WINDOWEVENT_CLOSE &&
-            (int)event.window.windowID == VDP_ViewerWindowID()) {
-            VDP_ToggleVRAMViewer();
+            event.window.event == SDL_WINDOWEVENT_CLOSE) {
+            if ((int)event.window.windowID == VDP_ViewerWindowID())
+                VDP_ToggleVRAMViewer();
+            else if ((int)event.window.windowID == ObjView_WindowID())
+                ObjView_Toggle();
         }
     }
 
@@ -41,6 +47,18 @@ void Input_Read(void) {
         VDP_ToggleVRAMViewer();
     }
     prev_vram_key = keys[SDL_SCANCODE_P];
+
+    /* Debug: O toggles the Object RAM viewer window (down-edge only) */
+    if (keys[SDL_SCANCODE_O] && !prev_objview_key) {
+        ObjView_Toggle();
+    }
+    prev_objview_key = keys[SDL_SCANCODE_O];
+
+    /* Debug: F toggles free camera mode (down-edge only) */
+    if (keys[SDL_SCANCODE_F] && !prev_f_key) {
+        FreeCamera_Toggle();
+    }
+    prev_f_key = keys[SDL_SCANCODE_F];
 
     uint8_t new_state[2] = {0, 0};
 
@@ -77,4 +95,7 @@ void Input_Read(void) {
     v_jpadpress1 = joypad_press[0];
     v_jpadhold2  = joypad_hold[1];
     v_jpadpress2 = joypad_press[1];
+
+    /* Debug free camera: read keys after joypads are written */
+    FreeCamera_Update(keys);
 }

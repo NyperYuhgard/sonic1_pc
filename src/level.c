@@ -566,13 +566,15 @@ static void Level_Enter(void) {
     }
 
     /* Debug cheat (sonic.asm:2878-2882) */
-    if (RAM_BYTE(f_debugcheat) && (RAM_BYTE(v_jpadhold1) & 0x40)) {
-        RAM_BYTE(f_debugmode) = 1;
+    if (f_debugcheat && (v_jpadhold1 & btnA)) {
+        f_debugmode = 1;
     }
 
-    /* Clear button input states (sonic.asm:2885-2886) */
-    RAM_BYTE(v_jpadhold2) = 0;
-    RAM_BYTE(v_jpadhold1) = 0;
+    /* Clear button input states (sonic.asm:2885-2886: move.w #0 clears both hold+press bytes) */
+    v_jpadhold2 = 0;
+    v_jpadpress2 = 0;
+    v_jpadhold1 = 0;
+    v_jpadpress1 = 0;
 
     /* Initialize object position manager */
     ObjPosLoad();
@@ -777,8 +779,7 @@ void PauseGame(void) {
    =================================================================== */
 void LevelSpawnPlayer(void) {
     uint8_t *player_slot = RAM_ADDR(v_player);
-    memset(player_slot, 0, OBJECT_SIZE);
-    obID(player_slot) = 0x01;  /* id_SonicPlayer = $01 */
+    obID(player_slot) = 0x01;  /* id_SonicPlayer = $01 — only the ID byte, no memset (matches ASM) */
 }
 
 /* ===================================================================
@@ -786,8 +787,7 @@ void LevelSpawnPlayer(void) {
    =================================================================== */
 void LevelSpawnHUD(void) {
     uint8_t *hud_slot = RAM_ADDR(v_hud);
-    memset(hud_slot, 0, OBJECT_SIZE);
-    obID(hud_slot) = 0x21;  /* id_HUD = $21 */
+    obID(hud_slot) = 0x21;  /* id_HUD = $21 — only the ID byte, no memset (matches ASM) */
 }
 
 /* ===================================================================

@@ -27,6 +27,9 @@ set(SOURCES
     src/plc.c
     src/hud.c
     src/collision.c
+    src/objview.c
+    src/freecamera.c
+    src/debugmode.c
 )
 
 # Executable

@@ -70,4 +70,8 @@ void ObjFloorDist(void *obj, int16_t *dist, int16_t *angle);
    macro in Macros.asm. Returns nonzero when out of range. */
 int OutOfRange(void *obj, int16_t ring_origX);
 
+/* Kill Sonic: set death status, animation, velocity, graphics, and queue
+   death sound. Used by Sonic_HandleDeath (normal death) and TimeOver. */
+void KillSonic(void *obj);
+
 #endif /* SONIC1_OBJECTS_H */

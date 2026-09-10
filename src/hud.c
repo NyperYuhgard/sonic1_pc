@@ -4,6 +4,7 @@
 #include "constants.h"
 #include "vdp.h"
 #include "decomp.h"
+#include "objects.h"
 #include <string.h>
 #include <stdint.h>
 
@@ -161,21 +162,120 @@ void Hud_Base(void) {
 }
 
 /* ===========================================================================
-   TimeOver: 9:59:59 reached. Stops the clock; the kill + time-over object
-   loading is not ported yet (player is a stub).
+   TimeOver: 9:59:59 reached. Stops the clock; kill Sonic + set flag.
+   Ported from _inc/HUD Update.asm TimeOver (lines 103-112).
    =========================================================================== */
 static void TimeOver(void) {
     f_timecount = 0;
+
+    KillSonic(Object_GetSlot(0));
+
     f_timeover = 1;
-    /* TODO: KillSonic + load time over objects */
 }
 
 /* ===========================================================================
-   HUD_Update (VBlank): refresh whichever HUD counters are dirty
+   Hud_Lives — ported from _inc/HUD Update.asm Hud_Lives (lines 537-543).
+   Writes lives count at ArtTile_Lives_Counter_Num using 8x8 digits.
+   Always writes both digits so "0" shows for game overs (last digit forced).
+   =========================================================================== */
+static void Hud_Lives(void) {
+    uint32_t vram_byte = ArtTile_Lives_Counter_Num * tile_size;
+    uint32_t lives = v_lives & 0xFF;
+    const uint32_t places[2] = { 10, 1 };
+
+    for (int i = 0; i < 2; i++) {
+        int d = hud_extract_digit(&lives, places[i]);
+        hud_write_8x8(vram_byte, d);
+        vram_byte += 32;
+    }
+}
+
+/* ===========================================================================
+   HudDb_XY_Write — write 8 hex nibbles (two 16-bit words) to VRAM.
+   Ported from _inc/HUD Update.asm HudDb_XY_Write (lines 255-274).
+
+   Each hex digit is one 8x8 tile from Art_Text (32 bytes each).
+   input: value = upper 16 bits = first word, lower 16 bits = second word.
+   =========================================================================== */
+static void hud_write_hex_word(uint32_t vram_byte, uint16_t value) {
+    for (int i = 3; i >= 0; i--) {
+        int nibble = (value >> (i * 4)) & 0xF;
+        if (nibble >= 0xA) nibble += 7;   /* A-F → letter tile offsets */
+        uint32_t src_off = (uint32_t)nibble * 32;
+        if (Art_Text && src_off + 32 <= Art_Text_len) {
+            VDP_WriteVRAM(Art_Text + src_off, vram_byte, 32);
+        } else {
+            VDP_FillVRAM(0, vram_byte, 32);
+        }
+        vram_byte += 32;
+    }
+}
+
+/* ===========================================================================
+   HudDb_XY — display camera + Sonic X/Y positions in hex, replacing the
+   score area.  Ported from _inc/HUD Update.asm HudDb_XY (lines 242-252).
+
+   Layout at ArtTile_HUDScore_E:
+     [CamX_hi CamX_lo SonX_hi SonX_lo]  — 8 tiles (two 16-bit hex words)
+     [CamY_hi CamY_lo SonY_hi SonY_lo]  — 8 tiles
+
+   d1 upper word = camera position, lower word = Sonic position.
+   =========================================================================== */
+static void HudDb_XY(void) {
+    uint32_t vram = ArtTile_HUDScore_E * tile_size;
+
+    /* X row: camera X (upper word) | Sonic X (lower word) */
+    hud_write_hex_word(vram,                  (uint16_t)RAM_WORD(0xF700));  /* cam X */
+    hud_write_hex_word(vram + 4 * 32,         (uint16_t)RAM_WORD(v_player + 8));  /* Sonic X */
+
+    /* Y row: camera Y (upper word) | Sonic Y (lower word) */
+    hud_write_hex_word(vram + 8 * 32,         (uint16_t)RAM_WORD(0xF704));  /* cam Y */
+    hud_write_hex_word(vram + 12 * 32,        (uint16_t)RAM_WORD(v_player + 0xC)); /* Sonic Y */
+}
+
+/* ===========================================================================
+   HUD_Update (VBlank): refresh whichever HUD counters are dirty.
+   Ported from _inc/HUD Update.asm HUD_Update (lines 6-96).
    =========================================================================== */
 void HUD_Update(void) {
-    /* Debug mode HUD (HudDebug) not ported yet — f_debugmode is always 0. */
-    if (f_debugmode & 0xFFFF) {
+    /* Debug mode: show camera + Sonic X/Y in hex (HudDebug path). */
+    if (f_debugmode) {
+        HudDb_XY();
+
+        /* --- rings --- */
+        if (f_ringcount) {
+            if ((int8_t)f_ringcount < 0) {
+                Hud_ResetRings();
+            }
+            f_ringcount = 0;
+            Hud_Rings();
+        }
+
+        /* --- sprite counter → time seconds area --- */
+        {
+            uint8_t sc = v_spritecount;
+            uint32_t p[2] = { 10, 1 };
+            uint32_t v = sc;
+            uint32_t vram = ArtTile_HUDTimeSecs * tile_size;
+            for (int i = 0; i < 2; i++) {
+                int d = hud_extract_digit(&v, p[i]);
+                hud_write_8x16(vram, d);
+                vram += 64;
+            }
+        }
+
+        /* --- lives --- */
+        if (f_lifecount) {
+            f_lifecount = 0;
+            Hud_Lives();
+        }
+
+        /* --- time/ring bonuses --- */
+        if (f_endactbonus) {
+            f_endactbonus = 0;
+            Hud_TimeRingBonus(v_timebonus);
+            Hud_TimeRingBonus(v_ringbonus);
+        }
         return;
     }
 
@@ -231,7 +331,7 @@ void HUD_Update(void) {
     /* --- lives --- */
     if (f_lifecount) {
         f_lifecount = 0;
-        hud_write_lives();
+        Hud_Lives();
     }
 
     /* --- time/ring bonuses (end-of-level cards) --- */
