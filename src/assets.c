@@ -16,7 +16,10 @@ uint8_t *Assets_Load(const char *path, size_t *out_size) {
     }
     fseek(f, 0, SEEK_SET);
 
-    uint8_t *buf = (uint8_t *)malloc((size_t)size + 1);
+    /* The 68k Enigma/Nemesis decoders read a small look-ahead past the end
+       of the compressed stream (in the original game this landed on ROM
+       padding). Allocate slack so those reads stay in bounds. */
+    uint8_t *buf = (uint8_t *)malloc((size_t)size + 16);
     if (!buf) {
         fclose(f);
         return NULL;
@@ -24,7 +27,9 @@ uint8_t *Assets_Load(const char *path, size_t *out_size) {
 
     size_t rd = fread(buf, 1, (size_t)size, f);
     fclose(f);
-    buf[rd] = 0;
+    for (int i = 0; i < 16; i++) {
+        buf[rd + i] = 0;
+    }
 
     if (out_size) *out_size = rd;
     return buf;

@@ -66,8 +66,10 @@ void PalLoad(int index) {
     }
 
     int cram_offset = (int)(e->target_ram_offset - v_palette);
-    if (cram_offset >= 0 && cram_offset + words * 2 <= (int)sizeof(vdp.cram)) {
-        memcpy(&vdp.cram[cram_offset], dest, words * sizeof(uint16_t));
+    if (cram_offset >= 0 && cram_offset <= CRAM_SIZE) {
+        int n = words;
+        if (cram_offset + n > CRAM_SIZE) n = CRAM_SIZE - cram_offset;
+        if (n > 0) memcpy(&vdp.cram[cram_offset], dest, n * sizeof(uint16_t));
     }
 }
 

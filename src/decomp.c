@@ -193,14 +193,17 @@ done_table:
    Decompresses to a RAM word buffer (uint16_t array)
    =========================================================================== */
 
-/* Bit reader helpers following the 68k Enigma decoder's rol-based model. */
+/* Bit reader helpers following the 68k Enigma decoder's rol-based model.
+   Compute in uint32 so the << 16 promotion doesn't overflow signed int. */
 static inline uint16_t eni_rol16(uint16_t x, int n) {
     n &= 15;
-    return (uint16_t)((x << n) | (x >> (16 - n)));
+    uint32_t u = x;
+    return (uint16_t)((u << n) | (u >> (16 - n)));
 }
 static inline uint16_t eni_ror16(uint16_t x, int n) {
     n &= 15;
-    return (uint16_t)((x >> n) | (x << (16 - n)));
+    uint32_t u = x;
+    return (uint16_t)((u >> n) | (u << (16 - n)));
 }
 
 void EniDec(const uint8_t *source, uint16_t *dest, uint16_t starting_art_tile) {

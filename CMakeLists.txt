@@ -54,6 +54,14 @@ target_compile_options(sonic1 PRIVATE
     -Wno-unused-parameter
 )
 
+# Optional AddressSanitizer + UBSan build, for catching wild memory access
+# at the exact source line. Enable with -DSONIC_SANITIZE=ON.
+option(SONIC_SANITIZE "Build with AddressSanitizer and UBSan" OFF)
+if(SONIC_SANITIZE)
+    target_compile_options(sonic1 PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(sonic1 PRIVATE -fsanitize=address,undefined)
+endif()
+
 # Debug build with -O0 -g
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_options(sonic1 PRIVATE -O0 -g -DDEBUG)

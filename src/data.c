@@ -1088,9 +1088,187 @@ typedef struct {
     size_t len;
 } AnimSeg;
 
+static void buf_grow(char **buf, size_t *len, size_t *cap, const void *src, size_t n) {
+    if (n == 0) return;
+    if (*len + n + 1 > *cap) {
+        size_t nc = *cap ? *cap : 256;
+        while (*len + n + 1 > nc) nc *= 2;
+        char *nb = (char *)realloc(*buf, nc);
+        if (!nb) return;
+        *buf = nb;
+        *cap = nc;
+    }
+    memcpy(*buf + *len, src, n);
+    *len += n;
+}
+
+typedef struct {
+    char name[64];
+    int nparams;
+    char params[8][32];
+    char *body;
+    size_t body_len;
+} AsmMacroDef;
+
+/* Expand resource macros (e.g. the "sonani" animation macro that emits
+   "dc.w anim-Ani_Sonic" table entries) into literal text before parsing.
+   Returns a malloc'd buffer the caller must free, or NULL when the text
+   contains no macros (or expansion produced nothing). */
+static char *expand_asm_macros(const char *text) {
+    AsmMacroDef macros[32] = {0};
+    int macro_count = 0;
+
+    /* First pass: record macro definitions ("<name>: macro <params>" ... "endm"). */
+    const char *p = text;
+    while (*p) {
+        const char *line = p;
+        while (*p && *p != '\n') p++;
+        if (*p == '\n') p++;
+
+        const char *ins = strip_label(line);
+        if (ins == line || !is_directive(ins, "macro")) continue;
+        if (macro_count >= 32) break;
+
+        AsmMacroDef *m = &macros[macro_count];
+        const char *q = line;
+        size_t nn = 0;
+        while (*q && (isalnum((unsigned char)*q) || *q == '_') && nn + 1 < sizeof(m->name))
+            m->name[nn++] = *q++;
+        m->name[nn] = '\0';
+        if (!m->name[0]) continue;
+
+        const char *ap = ins + 5;
+        m->nparams = 0;
+        while (*ap && *ap != '\n') {
+            while (*ap && (isspace((unsigned char)*ap) || *ap == ',')) ap++;
+            if (*ap == '\0' || *ap == '\n') break;
+            size_t al = 0;
+            while (*ap && !isspace((unsigned char)*ap) && *ap != ',' && *ap != '\n' && al + 1 < 32)
+                m->params[m->nparams][al++] = *ap++;
+            m->params[m->nparams][al] = '\0';
+            m->nparams++;
+            if (m->nparams >= 8) break;
+        }
+
+        size_t blen = 0, bcap = 0;
+        char *body = NULL;
+        while (*p) {
+            const char *bl = p;
+            while (*p && *p != '\n') p++;
+            int bnl = (*p == '\n');
+            if (bnl) p++;
+            const char *bins = strip_label(bl);
+            if (is_directive(bins, "endm")) break;
+            buf_grow(&body, &blen, &bcap, bl, (size_t)(p - bl));
+        }
+        m->body = body;
+        m->body_len = blen;
+        macro_count++;
+    }
+
+    if (macro_count == 0) {
+        for (int i = 0; i < macro_count; i++) free(macros[i].body);
+        return NULL;
+    }
+
+    char *out = NULL;
+    size_t out_len = 0, out_cap = 0;
+    p = text;
+    while (*p) {
+        const char *line = p;
+        while (*p && *p != '\n') p++;
+        size_t ll = (size_t)(p - line);
+        if (*p == '\n') p++;
+
+        const char *ins = strip_label(line);
+        int m_idx = -1;
+        if (ins != line) {
+            for (int i = 0; i < macro_count; i++) {
+                if (is_directive(ins, macros[i].name)) { m_idx = i; break; }
+            }
+        }
+
+        if (m_idx < 0) {
+            buf_grow(&out, &out_len, &out_cap, line, ll);
+            continue;
+        }
+
+        AsmMacroDef *m = &macros[m_idx];
+        const char *args[8] = {0};
+        int n = 0;
+        const char *ap = ins + strlen(m->name);
+        while (*ap && *ap != '\n' && n < 8) {
+            while (*ap && (isspace((unsigned char)*ap) || *ap == ',')) ap++;
+            if (*ap == '\0' || *ap == '\n' || *ap == ';') break;
+            args[n++] = ap;
+            while (*ap && !isspace((unsigned char)*ap) && *ap != ',' && *ap != '\n' && *ap != ';')
+                ap++;
+        }
+
+        char call_label[64];
+        size_t cn = 0;
+        const char *cl = line;
+        while (*cl && (isalnum((unsigned char)*cl) || *cl == '_' || *cl == '.') && cn + 1 < 64)
+            call_label[cn++] = *cl++;
+        call_label[cn] = '\0';
+
+        const char *bp = m->body;
+        const char *bend = m->body + m->body_len;
+        while (bp < bend) {
+            const char *nlp = memchr(bp, '\n', (size_t)(bend - bp));
+            const char *rl = nlp ? nlp : bend;
+            const char *r = bp;
+            while (r < rl) {
+                if (isalnum((unsigned char)*r) || *r == '_' || *r == '.') {
+                    const char *t = r;
+                    while (r < rl && (isalnum((unsigned char)*r) || *r == '_' || *r == '.')) r++;
+                    size_t tl = (size_t)(r - t);
+                    char tok[64];
+                    size_t ctl = tl < 63 ? tl : 63;
+                    memcpy(tok, t, ctl);
+                    tok[ctl] = '\0';
+                    const char *rep = NULL;
+                    size_t rpl = 0;
+                    if (call_label[0] && strcmp(tok, "__LABEL__") == 0) {
+                        rep = call_label;
+                        rpl = strlen(call_label);
+                    } else {
+                        for (int ai = 0; ai < m->nparams && ai < 8; ai++) {
+                            if (ai < n && args[ai] && strcmp(m->params[ai], tok) == 0) {
+                                const char *ae = args[ai];
+                                while (*ae && !isspace((unsigned char)*ae) && *ae != ',' && *ae != '\n' && *ae != ';')
+                                    ae++;
+                                rep = args[ai];
+                                rpl = (size_t)(ae - args[ai]);
+                                break;
+                            }
+                        }
+                    }
+                    if (rep) buf_grow(&out, &out_len, &out_cap, rep, rpl);
+                    else buf_grow(&out, &out_len, &out_cap, tok, tl);
+                } else {
+                    buf_grow(&out, &out_len, &out_cap, r, 1);
+                    r++;
+                }
+            }
+            if (nlp) {
+                buf_grow(&out, &out_len, &out_cap, "\n", 1);
+                bp = nlp + 1;
+            } else {
+                bp = bend;
+            }
+        }
+    }
+
+    for (int i = 0; i < macro_count; i++) free(macros[i].body);
+    if (out) out[out_len] = '\0';
+    return out;
+}
+
 static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_len) {
     (void)text_len;
-    const char *p = text;
+    char *expanded = expand_asm_macros(text);
+    const char *p = expanded ? expanded : text;
     AnimSeg segs[128] = {0};
     int seg_count = 0;
     char table_name[128][64];
@@ -1196,10 +1374,10 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
     }
 
     *out_len = cursor;
-    if (cursor == 0) return NULL;
+    if (cursor == 0) { free(expanded); return NULL; }
 
     uint8_t *out = (uint8_t *)calloc(1, cursor);
-    if (!out) { *out_len = 0; return NULL; }
+    if (!out) { *out_len = 0; free(expanded); return NULL; }
 
     for (int k = 0; k < table_count; k++) {
         size_t off = (ref_idx[k] >= 0) ? seg_pos[ref_idx[k]] + (size_t)table_delta[k] : 0;
@@ -1208,7 +1386,8 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
     }
 
     for (int j = 0; j < 128; j++)
-        memcpy(out + seg_pos[j], segs[j].bytes, segs[j].len);
+        if (segs[j].bytes && segs[j].len)
+            memcpy(out + seg_pos[j], segs[j].bytes, segs[j].len);
 
     for (int j = 0; j < 128; j++) free(segs[j].bytes);
     return out;
@@ -1368,10 +1547,147 @@ static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len
     for (int j = 0; j < frame_count; j++) {
         MapFrame *fr = &frames[j];
         out[frame_pos[j]] = (uint8_t)fr->count;
-        memcpy(out + frame_pos[j] + 1, fr->pieces, fr->count * 5);
+        if (fr->pieces)
+            memcpy(out + frame_pos[j] + 1, fr->pieces, fr->count * 5);
     }
 
     for (int j = 0; j < frame_count; j++) free(frames[j].pieces);
+    return out;
+}
+
+typedef struct {
+    char name[64];
+    uint8_t *bytes;
+    size_t len;
+} PlcSeg;
+
+/* Parse a Sonic 1 "Dynamic Gfx Script" (DPLC) asset, e.g. "Sonic - Dynamic
+   Gfx Script.asm".  Format per _maps/_MapMacros.asm with SonicDplcVer=1:
+     mappingsTableEntry.w <label>   -> word-offset table entry
+     dplcHeader                     -> dc.b (number of entries)
+     dplcEntry <tiles>, <offset>    -> dc.w (((tiles-1)&$F)<<12)|(offset&$FFF)
+   Output layout: the word-offset table (stored little-endian, matching how
+   the runtime reads it as native uint16), then each script as
+   [count byte][big-endian entry words]. */
+static uint8_t *parse_plc_asm(const char *text, size_t text_len, size_t *out_len) {
+    (void)text_len;
+    PlcSeg segs[128] = {0};
+    int seg_count = 0;
+    int cur = -1;
+    char table_name[128][64];
+    int table_delta[128];
+    int table_count = 0;
+
+    const char *p = text;
+    while (*p) {
+        p = skip_comments_and_spaces(p);
+        if (*p == '\0') break;
+
+        const char *lp = p;
+        while (*p && *p != '\n') p++;
+        if (*p == '\n') p++;
+
+        const char *ins = strip_label(lp);
+        if (*ins == '\0') continue;
+
+        if (is_directive(ins, "mappingsTableEntry.w")) {
+            const char *dp = ins + 20;
+            while (*dp && isspace((unsigned char)*dp)) dp++;
+            if (table_count < 128) {
+                parse_table_expr(dp, table_name[table_count], 64, &table_delta[table_count]);
+                table_count++;
+            }
+            continue;
+        }
+
+        if (is_directive(ins, "dplcHeader")) {
+            if (seg_count < 128) {
+                PlcSeg *sg = &segs[seg_count];
+                if (strip_label(lp) != lp) {
+                    const char *q = lp;
+                    size_t nn = 0;
+                    while (*q && (isalnum((unsigned char)*q) || *q == '_' || *q == '.') && nn + 1 < 64)
+                        sg->name[nn++] = *q++;
+                    sg->name[nn] = '\0';
+                }
+                seg_count++;
+                cur = seg_count - 1;
+            }
+            continue;
+        }
+
+        if (is_directive(ins, "dplcEntry")) {
+            if (cur < 0) continue;
+            const char *dp = ins + 9;
+            while (*dp && isspace((unsigned char)*dp)) dp++;
+            const char *e1 = NULL;
+            long tiles = parse_asm_number(dp, &e1);
+            dp = e1;
+            while (*dp && (isspace((unsigned char)*dp) || *dp == ',')) dp++;
+            long offset = parse_asm_number(dp, NULL);
+
+            uint8_t *nb = (uint8_t *)realloc(segs[cur].bytes, segs[cur].len + 2);
+            if (!nb) break;
+            segs[cur].bytes = nb;
+            unsigned entry = (unsigned)(((tiles - 1) & 0xF) << 12) | (unsigned)(offset & 0xFFF);
+            segs[cur].bytes[segs[cur].len]     = (uint8_t)(entry >> 8);
+            segs[cur].bytes[segs[cur].len + 1] = (uint8_t)(entry & 0xFF);
+            segs[cur].len += 2;
+            continue;
+        }
+
+        /* mappingsTable, label-only lines, even, ... are irrelevant here */
+    }
+
+    size_t total = 2 * (size_t)table_count;
+    size_t seg_pos[128];
+    int ref_idx[128];
+    size_t cursor = total;
+
+    for (int j = 0; j < 128; j++) seg_pos[j] = (size_t)-1;
+    for (int k = 0; k < table_count; k++) {
+        int idx = -1;
+        for (int j = 0; j < seg_count; j++) {
+            if (strcmp(segs[j].name, table_name[k]) == 0) {
+                idx = j;
+                break;
+            }
+        }
+        if (idx < 0 && k < seg_count) idx = k;
+        ref_idx[k] = idx;
+        if (idx < 0) continue;
+        if (seg_pos[idx] == (size_t)-1) {
+            seg_pos[idx] = cursor;
+            cursor += 1 + segs[idx].len;
+        }
+    }
+    for (int j = 0; j < 128; j++) {
+        if (seg_pos[j] == (size_t)-1) {
+            seg_pos[j] = cursor;
+            cursor += 1 + segs[j].len;
+        }
+    }
+
+    *out_len = cursor;
+    if (cursor == 0) return NULL;
+
+    uint8_t *out = (uint8_t *)calloc(1, cursor);
+    if (!out) { *out_len = 0; return NULL; }
+
+    for (int k = 0; k < table_count; k++) {
+        size_t off = (ref_idx[k] >= 0) ? seg_pos[ref_idx[k]] + (size_t)table_delta[k] : 0;
+        out[2 * k]     = (uint8_t)(off & 0xFF);
+        out[2 * k + 1] = (uint8_t)((off >> 8) & 0xFF);
+    }
+
+    for (int j = 0; j < 128; j++) {
+        if (seg_count == 0) break;
+        if (segs[j].len == 0) continue;
+        out[seg_pos[j]] = (uint8_t)(segs[j].len / 2);
+        memcpy(out + seg_pos[j] + 1, segs[j].bytes, segs[j].len);
+    }
+
+    for (int j = 0; j < seg_count; j++) free(segs[j].bytes);
     return out;
 }
 
@@ -1389,6 +1705,8 @@ static int load_asm_asset(const char *name, const uint8_t **out_ptr, size_t *out
     size_t data_len = 0;
     if (is_map) {
         data = parse_map_asm(text, text_len, &data_len);
+    } else if (strstr(text, "dplcEntry")) {
+        data = parse_plc_asm(text, text_len, &data_len);
     } else {
         data = parse_anim_asm(text, text_len, &data_len);
     }

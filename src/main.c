@@ -118,6 +118,13 @@ static void DACDriverLoad(void) {
 static void VBlank_StandardTransfers(void) {
     /* Transfer palette to rendering buffer (palette -> CRAM equivalent) */
     Palette_Update();
+    /* Sonic sprite gfx (sonic.asm VBlank_UpdateScreen: tst.b f_sonframechg ->
+       writeVRAM v_sgfx_buffer,ArtTile_Sonic*tile_size) */
+    if (f_sonframechg) {
+        VDP_WriteVRAM(RAM_ADDR(v_sgfx_buffer), ArtTile_Sonic * tile_size,
+                      v_sgfx_buffer_end - v_sgfx_buffer);
+        f_sonframechg = 0;
+    }
     /* Sprite and hscroll transfers happen during VDP_RenderFrame */
 }
 

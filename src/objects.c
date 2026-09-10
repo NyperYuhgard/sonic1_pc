@@ -698,7 +698,7 @@ static void Sonic_Display(void *obj) {
     int16_t flash = flashtime(o);
     if (flash) {
         flashtime(o) = flash - 1;
-        if ((flash >> 3) & 1) {
+        if (!((flash >> 3) & 1)) {
             goto chk_invincible;
         }
     }
@@ -752,7 +752,12 @@ static void Sonic_RecordPosition(void *obj) {
     *(int16_t *)a1 = obX(o);
     a1 += 2;
     *(int16_t *)a1 = obY(o);
+    /* addq.b #4,(v_trackbyte): on the 68k v_trackbyte is the word's low
+       byte (BE), so the index wraps 4,8,...,$FC,0. RAM here is LE, so the
+       +1 byte no longer overlaps the word's low byte; reproduce the wrap
+       on the word value entirely. */
     v_trackbyte += 4;
+    v_trackpos = (uint16_t)((idx + 4) & 0xFF);
 }
 
 /* ===========================================================================
@@ -2589,14 +2594,14 @@ static void Sonic_LoadGfx(void *obj) {
         uint8_t *a3 = RAM_ADDR(v_sgfx_buffer);
         f_sonframechg = 1;
         for (;;) {
-            uint8_t d2 = a2[1];
-            uint8_t d0 = d2 >> 4;
-            d2 = d2 << 8;
+            uint8_t d2hi = a2[1];
+            uint8_t d0 = d2hi >> 4;
+            uint16_t d2 = (uint16_t)(d2hi << 8);
             d2 = d2 | a2[2];
-            d2 = d2 << 5;
+            d2 = (uint16_t)(d2 << 5);
             {
                 const uint8_t *a1 = Art_Sonic + d2;
-                for (int i = 0; i < d0; i++) {
+                for (int i = 0; i < d0 + 1; i++) {
                     a3[0] = a1[0];
                     a3[1] = a1[1];
                     a3[2] = a1[2];

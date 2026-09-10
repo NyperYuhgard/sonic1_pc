@@ -805,10 +805,9 @@ static void Deform_GHZ(void) {
         int16_t bg2x = cam_int(0xF710);
         int32_t d3 = (int32_t)(uint16_t)bg2x;      /* moveq#0 ; move.w bg2x */
         /* d2 = ((sx - bg2x) << 8) / $68, then << 8 (16.16) */
-        int32_t d2 = (int32_t)(int16_t)((uint16_t)sx - (uint16_t)bg2x);
-        d2 <<= 8;
+        int32_t d2 = (int32_t)(((uint32_t)(int16_t)((uint16_t)sx - (uint16_t)bg2x)) << 8);
         d2 = (int32_t)(int16_t)(d2 / 0x68);        /* divs.w #$68 (16-bit quotient) */
-        d2 <<= 8;
+        d2 = (int32_t)(((uint32_t)d2) << 8);
         for (int i = 0; i < (int)(72 + d0); i++) {
             int16_t bg = (int16_t)(-(int16_t)(uint16_t)(uint32_t)d3 & 0xFFFF);  /* move.w d3,d0 ; neg.w */
             hscroll_row(row++, -fgx, bg);
