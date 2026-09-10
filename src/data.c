@@ -188,7 +188,7 @@ size_t   Col_CollArray2_len = 0;
 
 /* Per-zone collision indexes (ColPointers, sonic.asm:3116-3121).
    Only GHZ is staged so far; the rest stay NULL (ColIndexLoad picks a
-   NULL pointer) until their collide/ *.bin lands. */
+   NULL pointer) until their collide/*.bin lands. */
 const uint8_t *Col_GHZ = NULL;
 size_t   Col_GHZ_len = 0;
 const uint8_t *Col_LZ = NULL;
@@ -774,8 +774,7 @@ int Data_Init(void) {
 }
 
 void Data_Quit(void) {
-/* Arreglado: Casteo explícito a (void*) para evitar advertencias de liberes de const uint8_t* */
-#define FREE_ASSET(p) do { Assets_Free((void *)(p)); p = NULL; } while(0)
+#define FREE_ASSET(p) do { Assets_Free(p); p = NULL; } while(0)
     FREE_ASSET(Pal_SegaBG);
     FREE_ASSET(Pal_Sega1);
     FREE_ASSET(Pal_Sega2);
@@ -1145,7 +1144,7 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
 
 typedef struct {
     char name[64];
-    uint8_t *pieces; /* Arreglado: cambiado de const uint8_t* a uint8_t* para callos/realloc */
+    const uint8_t *pieces;
     size_t count;
 } MapFrame;
 
@@ -1244,8 +1243,7 @@ static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len
             piece[3] = (uint8_t)(tile & 0xFF);
             piece[4] = (uint8_t)(x & 0xFF);
 
-            /* Arreglado: casteo a uint8_t* para evitar warnings con realloc */
-            uint8_t *np = (uint8_t *)realloc(fr->pieces, (fr->count + 1) * 5);
+            const uint8_t *np = (const uint8_t *)realloc(fr->pieces, (fr->count + 1) * 5);
             if (!np) continue;
             fr->pieces = np;
             memcpy(fr->pieces + fr->count * 5, piece, 5);
@@ -1334,13 +1332,14 @@ static int load_asm_asset(const char *name, const uint8_t **out_ptr, size_t *out
     const uint8_t *low = alloc_32bit(data_len);
     if (!low) {
         fprintf(stderr, "[Data] mmap MAP_32BIT failed for: %s\n", path);
-        free((void *)data); /* Arreglado: casteo para librar data constante temporal */
+        free(data);
         return -1;
     }
-    memcpy((void *)low, data, data_len); /* Arreglado: casteo explícito a void* */
-    free((void *)data);
+    memcpy(low, data, data_len);
+    free(data);
 
     *out_ptr = low;
     *out_len = data_len;
     return 0;
 }
+

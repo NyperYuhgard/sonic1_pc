@@ -193,8 +193,8 @@ extern size_t   Ani_Ring_len;
 extern const uint8_t *ObjPos_GHZ1;
 extern size_t   ObjPos_GHZ1_len;
 
-/* Per-zone collision indexes (ColPointers, sonic.asm:3116-3121). */
-/* Only GHZ is staged; the rest are NULL until their collide/ *.bin lands. */
+/* Per-zone collision indexes (ColPointers, sonic.asm:3116-3121).
+   Only GHZ is staged; the rest are NULL until their collide/*.bin lands. */
 extern const uint8_t *Col_GHZ;
 extern size_t   Col_GHZ_len;
 extern const uint8_t *Col_LZ;
