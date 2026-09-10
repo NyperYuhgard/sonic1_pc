@@ -181,7 +181,8 @@ void WaitForVBlank(void) {
     case id_VBlank_Title:        VBlank_StandardTransfers(); break;
     case id_VBlank_Levels:
         VBlank_StandardTransfers();
-        HUD_Update();   /* ASM VBlank_Levels -> VBlank_UpdateScreen -> HUD_Update */
+        AnimateLevelAct();   /* ASM VBlank_UpdateScreen: AnimateLevelGfx before HUD_Update */
+        HUD_Update();        /* ASM VBlank_Levels -> VBlank_UpdateScreen -> HUD_Update */
         break;
     default:                     VBlank_StandardTransfers(); break;
     }
