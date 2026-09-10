@@ -430,8 +430,10 @@ static void Level_Enter(void) {
     /* bset #7, v_gamemode — mark as "in pre-level sequence" */
     v_gamemode = 0x8C;  /* GM_Level | 0x80 */
 
-    /* Fade out music */
-    Sound_Queue(bgm_Fade, false);
+    /* Fade out music (skipped for ending-sequence demos) */
+    if ((int16_t)RAM_WORD(f_demo) >= 0) {
+        Sound_Queue(bgm_Fade, false);
+    }
 
     ClearPLC();
     Palette_FadeOut();
@@ -474,14 +476,14 @@ static void Level_Enter(void) {
     ClearScreen();
 
     /* VDP register configuration for level mode */
-    VDP_SetRegister(0x0B, 0x00);  /* full-screen vertical scrolling */
+    VDP_SetRegister(0x0B, 0x03);  /* mode3: per-row hscroll, full-screen vscroll */
     VDP_SetRegister(0x02, (vram_fg >> 10) & 0x38);  /* FG nametable at $C000 */
     VDP_SetRegister(0x04, (vram_bg >> 13) & 0x07);  /* BG nametable at $E000 */
     VDP_SetRegister(0x05, (vram_sprites >> 9) & 0x7F); /* sprite table */
     VDP_SetRegister(0x10, 0x01);  /* 64-cell hscroll size */
     VDP_SetRegister(0x00, 0x04);  /* 8-colour mode */
     VDP_SetRegister(0x07, 0x20);  /* background colour (line 2, colour 0) */
-    VDP_SetRegister(0x0A, 0x81);  /* HBlank rate (for water) */
+    VDP_SetRegister(0x0A, 223);   /* HBlank rate: scanline 223 (for water) */
 
     /* ------------------------------------------------------------------
        Phase E: Level palette (sonic.asm:2773-2778)
@@ -526,14 +528,12 @@ static void Level_Enter(void) {
        only remaining loop condition is the cards settling.
        ------------------------------------------------------------------ */
     v_vblank_routine = id_VBlank_Levels;
-    int settle_frames = 0;
     do {
         WaitForVBlank();
         ExecuteObjects();        /* first call spawns the four card elements */
         BuildSprites();
         RunPLC();                /* ASM processes the level PLCs each VBlank */
-        settle_frames++;
-    } while (settle_frames < 120 && !TitleCardsSettled());
+    } while (!TitleCardsSettled() || RAM_LONG(v_plc_buffer) != 0);
 
     /* ------------------------------------------------------------------
        Phase H: HUD base graphics (sonic.asm:2857)
@@ -548,6 +548,7 @@ static void Level_Enter(void) {
     PalLoad_Fade(palid_Sonic);     /* load Sonic palette to fade-in buffer */
     LevelSizeLoad();               /* set level boundaries */
     DeformLayers();                /* initialize background deformation */
+    v_fg_scroll_flags |= 0x04;     /* bset #2: draw extra column at left side during start */
 
     LevelDataLoad();               /* load block mappings, layout and palette */
     LoadTilesFromStart();          /* draw FG + BG once before fade-in */
@@ -558,7 +559,20 @@ static void Level_Enter(void) {
 
     /* Spawn player and HUD */
     LevelSpawnPlayer();
-    LevelSpawnHUD();
+
+    /* HUD: skipped in credits demos (sonic.asm:2873-2875) */
+    if ((int16_t)RAM_WORD(f_demo) >= 0) {
+        LevelSpawnHUD();
+    }
+
+    /* Debug cheat (sonic.asm:2878-2882) */
+    if (RAM_BYTE(f_debugcheat) && (RAM_BYTE(v_jpadhold1) & 0x40)) {
+        RAM_BYTE(f_debugmode) = 1;
+    }
+
+    /* Clear button input states (sonic.asm:2885-2886) */
+    RAM_BYTE(v_jpadhold2) = 0;
+    RAM_BYTE(v_jpadhold1) = 0;
 
     /* Initialize object position manager */
     ObjPosLoad();
@@ -570,13 +584,17 @@ static void Level_Enter(void) {
     /* ------------------------------------------------------------------
        Phase J: Clear gameplay counters (sonic.asm:2900-2919)
        ------------------------------------------------------------------ */
-    v_rings = 0;
-    v_time = 0;
-    v_lifecount = 0;
+    /* d0 = 0; if starting from checkpoint, skip rings/time/lifecount clear */
+    if (RAM_BYTE(v_lastlamp) == 0) {
+        v_rings = 0;
+        v_time = 0;
+        v_lifecount = 0;
+    }
     f_timeover = 0;
-    v_shield = 0;
-    v_invinc = 0;
-    v_shoes = 0;
+    RAM_BYTE(v_shield) = 0;
+    RAM_BYTE(v_invinc) = 0;
+    RAM_BYTE(v_shoes) = 0;
+    RAM_BYTE(v_unused1) = 0;
     v_debuguse = 0;
     f_restart = 0;
     v_framecount = 0;
@@ -588,16 +606,41 @@ static void Level_Enter(void) {
     f_timecount  = 1;
 
     /* ------------------------------------------------------------------
-       Phase K: Fade in (sonic.asm:2957)
+       Phase K: Fade in (sonic.asm:2935-2966)
        ------------------------------------------------------------------ */
-    v_vblank_routine = id_VBlank_Levels;
+    /* Demo data setup (sonic.asm:2921-2944) — v_generictimer for demo end */
+    RAM_WORD(v_btnpushtime1) = 0;
+    RAM_WORD(v_generictimer) = 1800;           /* 30 seconds for regular play */
+    if ((int16_t)RAM_WORD(f_demo) < 0) {
+        RAM_WORD(v_generictimer) = 540;        /* 9 seconds for credits demos */
+        if (RAM_WORD(v_creditsnum) == 4) {
+            RAM_WORD(v_generictimer) = 510;    /* 0.5s less for demo 4 */
+        }
+    }
+
+    /* 4-frame VBlank delay for palette transfers (sonic.asm:2957-2963) */
+    for (int i = 0; i < 4; i++) {
+        v_vblank_routine = id_VBlank_Levels;
+        WaitForVBlank();
+    }
     Palette_FadeIn();
 
-    /* Level has faded in: make the title cards start moving (sonic.asm:2972-2975) */
-    obRoutine(&ram[v_titlecard])                     += 2;  /* name  -> wait */
-    obRoutine(&ram[v_titlecard + OBJECT_SIZE * 1])   += 4;  /* ZONE  -> wait */
-    obRoutine(&ram[v_titlecard + OBJECT_SIZE * 2])   += 4;  /* ACT   -> wait */
-    obRoutine(&ram[v_titlecard + OBJECT_SIZE * 3])   += 4;  /* oval  -> wait */
+    /* Level has faded in (sonic.asm:2970-2988) */
+    if ((int16_t)RAM_WORD(f_demo) >= 0) {
+        /* Normal: make title cards start moving */
+        obRoutine(&ram[v_titlecard])                     += 2;
+        obRoutine(&ram[v_titlecard + OBJECT_SIZE * 1])   += 4;
+        obRoutine(&ram[v_titlecard + OBJECT_SIZE * 2])   += 4;
+        obRoutine(&ram[v_titlecard + OBJECT_SIZE * 3])   += 4;
+    } else {
+        /* Credits demo: load explosion + animal graphics (Level_ClrCardArt) */
+        AddPLC(plcid_Explode);
+        int d0 = (uint8_t)v_zone + plcid_GHZAnimals;
+        AddPLC(d0);
+    }
+
+    /* bclr #7, v_gamemode — end pre-level sequence (sonic.asm:2991) */
+    v_gamemode = 0x0C;  /* GM_Level: clear bit 7 */
 }
 
 /* ===================================================================
@@ -701,6 +744,14 @@ void ColIndexLoad(void) {
    =================================================================== */
 void OscillateNumInit(void) {
     /* TODO: fill v_oscillate table with initial values */
+}
+
+/* ===================================================================
+   OscillateNumDo — stub (sonic.asm OscillateNumDo)
+   Advance oscillation values each frame.
+   =================================================================== */
+void OscillateNumDo(void) {
+    /* TODO: advance v_oscillate table values */
 }
 
 /* ===================================================================
@@ -1250,7 +1301,33 @@ void AnimateLevelAct(void) {
 }
 
 /* ===================================================================
+   PaletteCycle — stub (sonic.asm PaletteCycle)
+   Zone-specific palette cycling (waterfalls, lava, etc.)
+   =================================================================== */
+void PaletteCycle(void) {
+    /* TODO: zone-specific palette cycling */
+}
+
+/* ===================================================================
+   SignpostArtLoad — stub (sonic.asm SignpostArtLoad)
+   Load sign post art when approaching end of act.
+   =================================================================== */
+void SignpostArtLoad(void) {
+    /* TODO: sign post art loading at act end */
+}
+
+/* ===================================================================
+   MoveSonicInDemo — stub (sonic.asm MoveSonicInDemo)
+   Simulate controls during demo playback. Returns immediately
+   outside demo mode.
+   =================================================================== */
+void MoveSonicInDemo(void) {
+    /* TODO: demo playback control simulation */
+}
+
+/* ===================================================================
    Level_Process — called once per frame from MainGameLoop
+   Ported from sonic.asm Level_MainLoop (lines 2998-3046)
    =================================================================== */
 void Level_Process(void) {
     /* One-time init */
@@ -1260,31 +1337,36 @@ void Level_Process(void) {
         return;
     }
 
-    /* --- Per-frame gameplay (from GM_Level_main, sonic.asm:2960+) --- */
+    /* --- Per-frame gameplay (Level_MainLoop, sonic.asm:2998-3046) --- */
 
-    /* TODO: PauseGame — uncomment when ready */
+    PauseGame();                        /* handle pausing (sonic.asm:2999) */
 
-    /* VBlank: palette transfer + sprite DMA + hscroll */
     v_vblank_routine = id_VBlank_Levels;
-    WaitForVBlank();
+    WaitForVBlank();                    /* sonic.asm:3000-3001 */
+    v_framecount = v_framecount + 1;    /* sonic.asm:3002 */
 
-    v_framecount = v_framecount + 1;
+    MoveSonicInDemo();                  /* demo controls (stub for now) */
+    LZWaterFeatures();                  /* water features (stub for GHZ) */
+    ExecuteObjects();                   /* sonic.asm:3006 */
 
-    /* TODO: MoveSonicInDemo — demo playback (no-op in normal play) */
-
-    ExecuteObjects();       /* run all active objects */
-    DeformLayers();         /* deform BG layers */
-    BuildSprites();         /* build sprite table for VDP */
-    ObjPosLoad();           /* spawn new objects as camera scrolls */
-
-    /* TODO: PaletteCycle — zone palette cycling */
-    RunPLC();               /* process pending graphics decompression */
-    /* TODO: OscillateNumDo — update oscillation values */
-    AnimateLevelAct();      /* per-zone animated tiles */
-
-    /* Check for level restart (death, Act complete) */
+    /* f_restart check (FixBugs placement, sonic.asm:3008-3010) */
     if (f_restart) {
-        /* TODO: handle death/act complete */
         level_init_done = 0;
+        return;
     }
+
+    /* DeformLayers: skip if Sonic is dying (routine >= 6) or in debug */
+    if (v_debuguse == 0 && obRoutine(&ram[v_player]) >= 6) {
+        /* Sonic dying — skip plane scrolling */
+    } else {
+        DeformLayers();                 /* sonic.asm:3026 */
+    }
+
+    BuildSprites();                     /* sonic.asm:3029 */
+    ObjPosLoad();                       /* sonic.asm:3030 */
+    PaletteCycle();                     /* sonic.asm:3031 */
+    RunPLC();                           /* sonic.asm:3032 */
+    OscillateNumDo();                   /* sonic.asm:3033 */
+    SynchroAnimate();                   /* sonic.asm:3034 */
+    SignpostArtLoad();                  /* sonic.asm:3035 */
 }

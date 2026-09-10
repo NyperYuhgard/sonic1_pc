@@ -34,6 +34,15 @@ void LZWaterFeatures(void);
 void OscillateNumInit(void);
 void OscillateNumDo(void);
 
+/* Zone-specific palette cycling */
+void PaletteCycle(void);
+
+/* Sign post art loading at act end */
+void SignpostArtLoad(void);
+
+/* Demo playback control simulation (no-op outside demos) */
+void MoveSonicInDemo(void);
+
 /* Animate level-specific animated tiles */
 void AnimateLevelAct(void);
 
