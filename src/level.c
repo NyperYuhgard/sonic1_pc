@@ -132,7 +132,7 @@ void LevelSizeLoad(void) {
     uint8_t act  = (uint8_t)(v_zone_act & 0xFF);
     uint16_t d0, d1;
     const uint16_t *a0;
-    const uint16_t *a1;
+    const uint8_t *a1;
 
     v_unused7 = 0;
     v_unused8 = 0;
@@ -166,13 +166,13 @@ void LevelSizeLoad(void) {
     } else {
         uint16_t si = (uint16_t)((uint16_t)zone * 4 + (uint16_t)act);
         if (StartLocArray && si < 28) {
-            a1 = (const uint16_t *)StartLocArray + si * 2;
+            a1 = StartLocArray + si * 4;
         }
-        if ((int16_t)RAM_WORD(f_demo) >= 0) {
+        if ((int16_t)f_demo >= 0) {
             if (StartLocArray && si < 28) {
-                d1 = a1[0];
+                d1 = (uint16_t)((a1[0] << 8) | a1[1]);  /* move.w (a1)+,d1 big-endian */
                 obX(&ram[v_player]) = (int16_t)d1;
-                d0 = a1[1];
+                d0 = (uint16_t)((a1[2] << 8) | a1[3]);  /* move.w (a1)+,d0 big-endian */
                 obY(&ram[v_player]) = (int16_t)d0;
             } else {
                 d1 = 0x0050;
@@ -183,10 +183,10 @@ void LevelSizeLoad(void) {
         } else {
             uint16_t ci = (uint16_t)((uint16_t)v_creditsnum - 1);
             if (EndingStLocArray && ci < 8) {
-                a1 = (const uint16_t *)EndingStLocArray + ci * 2;
-                d1 = a1[0];
+                a1 = EndingStLocArray + ci * 4;
+                d1 = (uint16_t)((a1[0] << 8) | a1[1]);
                 obX(&ram[v_player]) = (int16_t)d1;
-                d0 = a1[1];
+                d0 = (uint16_t)((a1[2] << 8) | a1[3]);
                 obY(&ram[v_player]) = (int16_t)d0;
             } else {
                 d1 = 0x0050;
@@ -201,18 +201,18 @@ void LevelSizeLoad(void) {
         int16_t camX = (int16_t)d1 - (320 / 2);
         if (camX < 0) camX = 0;
         if (camX >= (int16_t)v_limitright2) camX = (int16_t)v_limitright2;
-        RAM_WORD(v_screenposx) = (uint16_t)camX;
+        RAM_WORD(0xF700) = (uint16_t)camX;        /* v_screenposx integer word */
 
         int16_t camY = (int16_t)d0 - ((224 / 2) - 16);
         if (camY < 0) camY = 0;
         if (camY >= (int16_t)v_limitbtm2) camY = (int16_t)v_limitbtm2;
-        RAM_WORD(v_screenposy) = (uint16_t)camY;
+        RAM_WORD(0xF704) = (uint16_t)camY;        /* v_screenposy integer word */
     }
 
     BgScrollSpeed(d0, d1);
 
     if (zone < sizeof(loop_chunk_nums) / 4) {
-        uint8_t *p = RAM_ADDR(v_256loop1);
+        uint8_t *p = RAM_ADDR(0xF7AC);           /* v_256loop1 */
         p[0] = loop_chunk_nums[zone * 4 + 0];
         p[1] = loop_chunk_nums[zone * 4 + 1];
         p[2] = loop_chunk_nums[zone * 4 + 2];
@@ -225,29 +225,29 @@ void LevelSizeLoad(void) {
    =================================================================== */
 static void BgScrollSpeed(int16_t y, int16_t x) {
     if (RAM_BYTE(v_lastlamp) == 0) {
-        RAM_WORD(v_bgscreenposy) = y;
-        RAM_WORD(v_bg2screenposy) = y;
-        RAM_WORD(v_bgscreenposx) = x;
-        RAM_WORD(v_bg2screenposx) = x;
-        RAM_WORD(v_bg3screenposx) = x;
+        RAM_WORD(0xF70C) = (uint16_t)y;          /* v_bgscreenposy */
+        RAM_WORD(0xF714) = (uint16_t)y;          /* v_bg2screenposy */
+        RAM_WORD(0xF708) = (uint16_t)x;          /* v_bgscreenposx */
+        RAM_WORD(0xF710) = (uint16_t)x;          /* v_bg2screenposx */
+        RAM_WORD(0xF718) = (uint16_t)x;          /* v_bg3screenposx */
     }
 
     switch (v_zone) {
     case 0:
-        RAM_LONG(v_bgscreenposx) = 0;
-        RAM_LONG(v_bgscreenposy) = 0;
-        RAM_LONG(v_bg2screenposy) = 0;
-        RAM_LONG(v_bg3screenposy) = 0;
+        RAM_LONG(0xF708) = 0;                    /* clr.l v_bgscreenposx */
+        RAM_LONG(0xF70C) = 0;                    /* clr.l v_bgscreenposy */
+        RAM_LONG(0xF714) = 0;                    /* clr.l v_bg2screenposy */
+        RAM_LONG(0xF71C) = 0;                    /* clr.l v_bg3screenposy */
         memset(RAM_ADDR(v_bgscroll_buffer), 0, 12);
         break;
     case 1:
-        RAM_WORD(v_bgscreenposy) = (int16_t)(y >> 1);
+        RAM_WORD(0xF70C) = (int16_t)(y >> 1);    /* v_bgscreenposy */
         break;
     case 2:
         break;
     case 3:
-        RAM_WORD(v_bgscreenposy) = (int16_t)((y >> 1) + 0xC0);
-        RAM_LONG(v_bgscreenposx) = 0;
+        RAM_WORD(0xF70C) = (int16_t)((y >> 1) + 0xC0);  /* v_bgscreenposy */
+        RAM_LONG(0xF708) = 0;                    /* clr.l v_bgscreenposx */
         break;
     case 4: {
         int32_t d0 = (int32_t)y << 4;
@@ -255,31 +255,31 @@ static void BgScrollSpeed(int16_t y, int16_t x) {
         d0 = (d0 << 1) + d2;
         d0 >>= 8;
         d0 += 1;
-        RAM_WORD(v_bgscreenposy) = (int16_t)d0;
-        RAM_LONG(v_bgscreenposx) = 0;
+        RAM_WORD(0xF70C) = (int16_t)d0;          /* v_bgscreenposy */
+        RAM_LONG(0xF708) = 0;                    /* clr.l v_bgscreenposx */
         break;
     }
     case 5: {
         int16_t d0 = (int16_t)((uint16_t)y & 0x7F8);
         d0 >>= 3;
         d0 += 1;
-        RAM_WORD(v_bgscreenposy) = d0;
+        RAM_WORD(0xF70C) = (int16_t)d0;          /* v_bgscreenposy */
         break;
     }
     case 6: {
-        int16_t d0 = RAM_WORD(v_screenposx);
+        int16_t d0 = (int16_t)RAM_WORD(0xF700);  /* v_screenposx */
         d0 >>= 1;
-        RAM_WORD(v_bgscreenposx) = d0;
-        RAM_WORD(v_bg2screenposx) = d0;
+        RAM_WORD(0xF708) = (uint16_t)d0;         /* v_bgscreenposx */
+        RAM_WORD(0xF710) = (uint16_t)d0;         /* v_bg2screenposx */
         int16_t d1 = d0;
         d0 >>= 2;
         d1 = d0;
         d0 += d0;
         d0 += d1;
-        RAM_WORD(v_bg3screenposx) = d0;
-        RAM_LONG(v_bgscreenposy) = 0;
-        RAM_LONG(v_bg2screenposy) = 0;
-        RAM_LONG(v_bg3screenposy) = 0;
+        RAM_WORD(0xF718) = (uint16_t)d0;         /* v_bg3screenposx */
+        RAM_LONG(0xF70C) = 0;                    /* clr.l v_bgscreenposy */
+        RAM_LONG(0xF714) = 0;                    /* clr.l v_bg2screenposy */
+        RAM_LONG(0xF71C) = 0;                    /* clr.l v_bg3screenposy */
         memset(RAM_ADDR(v_bgscroll_buffer), 0, 12);
         break;
     }
@@ -431,7 +431,7 @@ static void Level_Enter(void) {
     v_gamemode = 0x8C;  /* GM_Level | 0x80 */
 
     /* Fade out music (skipped for ending-sequence demos) */
-    if ((int16_t)RAM_WORD(f_demo) >= 0) {
+    if ((int16_t)f_demo >= 0) {
         Sound_Queue(bgm_Fade, false);
     }
 
@@ -501,7 +501,7 @@ static void Level_Enter(void) {
     /* Level_GetBgm: play the zone's music from MusicList. Skipped in
        credits demos (f_demo negative). SBZ3 (LZ act 4) and Final Zone
        pick their dedicated entries. */
-    if ((int16_t)RAM_WORD(f_demo) >= 0) {
+    if ((int16_t)f_demo >= 0) {
         static const uint8_t music_list[] = {
             bgm_GHZ,   /* 0: Green Hill */
             bgm_LZ,    /* 1: Labyrinth */
@@ -561,7 +561,7 @@ static void Level_Enter(void) {
     LevelSpawnPlayer();
 
     /* HUD: skipped in credits demos (sonic.asm:2873-2875) */
-    if ((int16_t)RAM_WORD(f_demo) >= 0) {
+    if ((int16_t)f_demo >= 0) {
         LevelSpawnHUD();
     }
 
@@ -593,10 +593,10 @@ static void Level_Enter(void) {
         v_lifecount = 0;
     }
     f_timeover = 0;
-    RAM_BYTE(v_shield) = 0;
-    RAM_BYTE(v_invinc) = 0;
-    RAM_BYTE(v_shoes) = 0;
-    RAM_BYTE(v_unused1) = 0;
+    v_shield = 0;
+    v_invinc = 0;
+    v_shoes = 0;
+    v_unused1 = 0;
     v_debuguse = 0;
     f_restart = 0;
     v_framecount = 0;
@@ -611,12 +611,12 @@ static void Level_Enter(void) {
        Phase K: Fade in (sonic.asm:2935-2966)
        ------------------------------------------------------------------ */
     /* Demo data setup (sonic.asm:2921-2944) — v_generictimer for demo end */
-    RAM_WORD(v_btnpushtime1) = 0;
-    RAM_WORD(v_generictimer) = 1800;           /* 30 seconds for regular play */
-    if ((int16_t)RAM_WORD(f_demo) < 0) {
-        RAM_WORD(v_generictimer) = 540;        /* 9 seconds for credits demos */
-        if (RAM_WORD(v_creditsnum) == 4) {
-            RAM_WORD(v_generictimer) = 510;    /* 0.5s less for demo 4 */
+    v_btnpushtime1 = 0;
+    v_generictimer = 1800;           /* 30 seconds for regular play */
+    if ((int16_t)f_demo < 0) {
+        v_generictimer = 540;        /* 9 seconds for credits demos */
+        if (v_creditsnum == 4) {
+            v_generictimer = 510;    /* 0.5s less for demo 4 */
         }
     }
 
@@ -628,7 +628,7 @@ static void Level_Enter(void) {
     Palette_FadeIn();
 
     /* Level has faded in (sonic.asm:2970-2988) */
-    if ((int16_t)RAM_WORD(f_demo) >= 0) {
+    if ((int16_t)f_demo >= 0) {
         /* Normal: make title cards start moving */
         obRoutine(&ram[v_titlecard])                     += 2;
         obRoutine(&ram[v_titlecard + OBJECT_SIZE * 1])   += 4;

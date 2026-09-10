@@ -656,9 +656,9 @@ static void GM_Title_Screen(void) {
                 d1 &= 3;
                 if (d1 != 0 && v_megadrive >= 0) {
                     d1 = 1;
-                    RAM_BYTE(f_levselcheat + 1 + d1) = 1;  /* f_debugcheat = 1 (non-Japanese: debug+slowmo) */
+                    RAM_BYTE(0xFFE0 + 1 + d1) = 1;  /* f_debugcheat = 1 (non-Japanese: debug+slowmo) */
                 }
-                RAM_BYTE(f_levselcheat + d1) = 1;          /* activate cheat based on C count */
+                RAM_BYTE(0xFFE0 + d1) = 1;          /* activate cheat based on C count */
                 Sound_Queue(sfx_Ring, false);
 
                 if (v_megadrive >= 0) {
