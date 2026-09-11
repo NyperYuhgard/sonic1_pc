@@ -1515,6 +1515,7 @@ static void Sonic_MoveLeft(void *obj) {
     int16_t d6 = v_sonspeedmax;
 
     if (d0 > 0) {
+        /* .changeddirection */
         d0 = d0 - v_sonspeeddec;
         if (d0 < 0) {
             d0 = -0x80;
@@ -1537,22 +1538,30 @@ static void Sonic_MoveLeft(void *obj) {
         goto nostopping;
     }
 
-    obStatus(o) |= (1 << 0);
-    if (d0 == 0) {
-        obStatus(o) &= ~(1 << 5);
-        obPrevAni(o) = id_Run;
+    /* .still: bset #0,obStatus → Z = valor ANTERIOR de bit 0.
+     *      bne .alreadyleft  ⇔  ya estaba flipeado antes. */
+    {
+        uint8_t wasFlipped = obStatus(o) & (1 << 0);
+        obStatus(o) |= (1 << 0);
+        if (!wasFlipped) {
+            obStatus(o) &= ~(1 << 5);
+            obPrevAni(o) = id_Run;
+        }
     }
+
     d0 = d0 - d5;
     {
         int16_t d1 = -d6;
-        if (d0 > d1) {
+        /* bgt.s .nocap: salta el cap si d0 > -max.
+         *          Es decir, cap sólo cuando d0 <= -max. */
+        if (d0 <= d1) {
             d0 = d1;
         }
     }
     obInertia(o) = d0;
     obAnim(o) = id_Walk;
 
-nostopping:
+    nostopping:
     return;
 }
 
@@ -1563,6 +1572,7 @@ static void Sonic_MoveRight(void *obj) {
     int16_t d6 = v_sonspeedmax;
 
     if (d0 < 0) {
+        /* .changedirection */
         d0 = d0 + v_sonspeeddec;
         if (d0 >= 0) {
             d0 = 0x80;
@@ -1585,11 +1595,17 @@ static void Sonic_MoveRight(void *obj) {
         goto nostopping;
     }
 
-    obStatus(o) &= ~(1 << 0);
-    if (obStatus(o) & (1 << 0)) {
-        obStatus(o) &= ~(1 << 5);
-        obPrevAni(o) = id_Run;
+    /* .alreadyright: bclr #0,obStatus → Z = valor ANTERIOR de bit 0.
+     *      beq .alreadyright ⇔ ya estaba a 0 (ya miraba a la derecha). */
+    {
+        uint8_t wasFlipped = obStatus(o) & (1 << 0);
+        obStatus(o) &= ~(1 << 0);
+        if (wasFlipped) {
+            obStatus(o) &= ~(1 << 5);
+            obPrevAni(o) = id_Run;
+        }
     }
+
     d0 = d0 + d5;
     if (d0 > d6) {
         d0 = d6;
@@ -1597,7 +1613,7 @@ static void Sonic_MoveRight(void *obj) {
     obInertia(o) = d0;
     obAnim(o) = id_Walk;
 
-nostopping:
+    nostopping:
     return;
 }
 
@@ -1609,17 +1625,18 @@ static void Sonic_RollSpeed(void *obj) {
         Sonic_AngledRollSpeed(o);
         return;
     }
-    if (locktime(o)) {
-        if (!(v_jpadhold2 & btnR)) {
-            return;
+
+    /* tst.w locktime; bne.s .notright → salta input L/R, NO el slowdown */
+    if (!locktime(o)) {
+        if (v_jpadhold2 & btnL) {
+            Sonic_RollLeft(o);
+        }
+        if (v_jpadhold2 & btnR) {
+            Sonic_RollRight(o);
         }
     }
-    if (v_jpadhold2 & btnL) {
-        Sonic_RollLeft(o);
-    }
-    if (v_jpadhold2 & btnR) {
-        Sonic_RollRight(o);
-    }
+
+    /* .notright */
     {
         int16_t d0 = obInertia(o);
         if (d0 == 0) {
@@ -1671,13 +1688,18 @@ static void Sonic_AngledRollSpeed(void *obj) {
 static void Sonic_RollLeft(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     int16_t d0 = obInertia(o);
+    int16_t d4 = v_sonspeeddec / 4;   /* asr.w #2 en Sonic_RollSpeed */
 
-    if (d0 == 0 || d0 < 0) {
+    /* beq.s .still ; bpl.s .changeddirection ; fall-through a .still */
+    if (d0 <= 0) {
+        /* .still */
         obStatus(o) |= (1 << 0);
         obAnim(o) = id_Roll;
         return;
     }
-    d0 = d0 - v_sonspeeddec;
+
+    /* .changeddirection */
+    d0 = d0 - d4;
     if (d0 < 0) {
         d0 = -0x80;
     }
@@ -1687,15 +1709,20 @@ static void Sonic_RollLeft(void *obj) {
 static void Sonic_RollRight(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     int16_t d0 = obInertia(o);
+    int16_t d4 = v_sonspeeddec / 4;
 
     if (d0 < 0) {
-        d0 = d0 + v_sonspeeddec;
+        /* .changedirection */
+        d0 = d0 + d4;
         if (d0 >= 0) {
             d0 = 0x80;
         }
         obInertia(o) = d0;
         return;
     }
+
+    /* bclr #0,obStatus ; anim = Roll
+     *      (aquí no se comprueba el bit anterior: el ASM no tiene un beq/bne) */
     obStatus(o) &= ~(1 << 0);
     obAnim(o) = id_Roll;
 }
@@ -1736,6 +1763,8 @@ static void Sonic_ChkRoll(void *obj) {
     obAnim(o) = id_Roll;
     obY(o) = (int16_t)(obY(o) + (sonic_height - sonic_roll_height));
     Sound_Queue(sfx_Roll, false);
+    printf("Roll: hold2=%02X btnLR=%02X btnDn=%02X\n",
+           v_jpadhold2, btnL|btnR, btnDn);
     if (obInertia(o) == 0) {
         obInertia(o) = 0x200;
     }
@@ -1942,7 +1971,8 @@ static void Sonic_SlopeResistWalk(void *obj) {
     {
         int16_t s0, s1;
         CalcSine(obAngle(o), &s0, &s1);
-        int16_t d0 = (int16_t)(((int32_t)s1 * 0x20) >> 8);
+        /* ASM: muls.w #$20,d0 sobre d0 = SENO (s0), no sobre el coseno. */
+        int16_t d0 = (int16_t)(((int32_t)s0 * 0x20) >> 8);
         if (obInertia(o) == 0) {
             return;
         }
@@ -1964,7 +1994,8 @@ static void Sonic_SlopeResistRoll(void *obj) {
     {
         int16_t s0, s1;
         CalcSine(obAngle(o), &s0, &s1);
-        int16_t d0 = (int16_t)(((int32_t)s1 * 0x50) >> 8);
+        /* ASM: muls.w #$50,d0 sobre d0 = SENO (s0). */
+        int16_t d0 = (int16_t)(((int32_t)s0 * 0x50) >> 8);
         if (obInertia(o) < 0) {
             if (d0 >= 0) {
                 d0 = d0 >> 2;
@@ -2413,63 +2444,109 @@ Sonic_FindCeiling(o, NULL, &d1, NULL);
 }
 
 static void Sonic_Loops(void *obj) {
-    uint8_t *o = (uint8_t *)obj;
 
-    if (v_zone != id_SLZ) {
-        if (v_zone != 0) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t d1;
+    uint8_t d2;
+    uint16_t d0;
+    uint8_t *a1;
+    /* cmpi.b #id_SLZ,(v_zone).w ; beq.s .isstarlight
+     *      tst.b  (v_zone).w        ; bne.w .return
+     *      Nota: tst.b mira sólo el byte bajo de v_zone. */
+    if ((uint8_t)v_zone != id_SLZ) {
+        if ((uint8_t)v_zone != 0) {
             return;
         }
     }
-    {
-        uint16_t d0 = obY(o) >> 1;
-        d0 = d0 & 0x380;
-        d0 = d0 + (obX(o) & 0x7F);
-        {
-            uint8_t *a1 = RAM_ADDR(v_lvllayout_fg);
-            uint8_t d1 = a1[d0];
-            if (d1 == v_256roll1 || d1 == v_256roll2) {
-                Sonic_ChkRoll(o);
-            } else if (d1 == v_256loop1) {
-                if (!(obStatus(o) & (1 << 1))) {
-                    if (obX(o) < 44) {
-                        obRender(o) &= ~sprite_looping;
-                    } else if (obX(o) < 224) {
-                        if (obAngle(o) == 0 || obAngle(o) > 0x80) {
-                            obRender(o) |= sprite_looping;
-                        } else {
-                            obRender(o) &= ~sprite_looping;
-                        }
-                    } else {
-                        obRender(o) |= sprite_looping;
-                    }
-                } else {
-                    obRender(o) &= ~sprite_looping;
-                }
-            } else if (d1 == v_256loop2) {
-                if (obStatus(o) & (1 << 1)) {
-                    obRender(o) &= ~sprite_looping;
-                } else if (obX(o) < 44) {
-                    obRender(o) &= ~sprite_looping;
-                } else if (obX(o) < 224) {
-                    if (!(obRender(o) & sprite_looping)) {
-                        if (obAngle(o) == 0 || obAngle(o) > 0x80) {
-                            obRender(o) |= sprite_looping;
-                        } else {
-                            obRender(o) &= ~sprite_looping;
-                        }
-                    } else {
-                        if (obAngle(o) > 0x80) {
-                            obRender(o) &= ~sprite_looping;
-                        }
-                    }
-                } else {
-                    obRender(o) &= ~sprite_looping;
-                }
-            } else {
-                obRender(o) &= ~sprite_looping;
-            }
-        }
+
+    /* .isstarlight: */
+    /* move.w obY(a0),d0 ; lsr.w #1,d0 ; andi.w #$380,d0 */
+    d0 = ((uint16_t)obY(o) >> 1) & 0x380;
+
+    /* move.b obX(a0),d1 ; andi.w #$7F,d1 ; add.w d1,d0
+     *      OJO: move.b sólo carga el BYTE BAJO de obX. */
+    d1  = (uint8_t)obX(o);
+    d1 &= 0x7F;
+    d0  = (uint16_t)(d0 + d1);
+
+    /* lea (v_lvllayout_fg).w,a1 ; move.b (a1,d0.w),d1 */
+    a1 = RAM_ADDR(v_lvllayout_fg);
+    d1 = a1[d0];
+
+    /* cmp.b (v_256roll1).w,d1 ; beq.w Sonic_ChkRoll */
+    if (d1 == (uint8_t)v_256roll1) {
+      //  Sonic_ChkRoll(o);
+        return;
     }
+    /* cmp.b (v_256roll2).w,d1 ; beq.w Sonic_ChkRoll */
+    if (d1 == (uint8_t)v_256roll2) {
+      //  Sonic_ChkRoll(o);
+        return;
+    }
+    /* cmp.b (v_256loop1).w,d1 ; beq.s .chkifleft */
+    if (d1 == (uint8_t)v_256loop1) {
+        goto chkifleft;
+    }
+    /* cmp.b (v_256loop2).w,d1 ; beq.s .chkifinair */
+    if (d1 == (uint8_t)v_256loop2) {
+        goto chkifinair;
+    }
+
+    /* bclr #sprite_looping_bit,obRender(a0) ; rts */
+    obRender(o) &= ~sprite_looping;
+    return;
+
+    chkifinair:
+    /* btst #1,obStatus(a0) ; beq.s .chkifleft */
+    if (!(obStatus(o) & (1 << 1))) {
+        goto chkifleft;
+    }
+    obRender(o) &= ~sprite_looping;
+    return;
+
+    chkifleft:
+    /* move.w obX(a0),d2 ; cmpi.b #44,d2 ; bhs.s .chkifright
+     *      cmpi.b compara SÓLO el byte bajo. */
+    d2 = (uint8_t)obX(o);
+    if (d2 >= 44) {                    /* bhs = unsigned >= */
+        goto chkifright;
+    }
+    obRender(o) &= ~sprite_looping;
+    return;
+
+    chkifright:
+    /* cmpi.b #224,d2 ; blo.s .chkangle1 */
+    if (d2 < 224) {                    /* blo = unsigned < */
+        goto chkangle1;
+    }
+    obRender(o) |= sprite_looping;
+    return;
+
+    chkangle1:
+    /* btst #sprite_looping_bit,obRender(a0) ; bne.s .chkangle2 */
+    if (obRender(o) & sprite_looping) {
+        goto chkangle2;
+    }
+    /* move.b obAngle(a0),d1 ; beq.s .return */
+    d1 = obAngle(o);
+    if (d1 == 0) {
+        return;                        /* ASM: sale SIN tocar el flag */
+    }
+    /* cmpi.b #$80,d1 ; bhi.s .return */
+    if (d1 > 0x80) {                   /* bhi = unsigned > */
+        return;                        /* ASM: sale SIN tocar el flag */
+    }
+    obRender(o) |= sprite_looping;
+    return;
+
+    chkangle2:
+    /* move.b obAngle(a0),d1 ; cmpi.b #$80,d1 ; bls.s .return */
+    d1 = obAngle(o);
+    if (d1 <= 0x80) {                  /* bls = unsigned <= */
+        return;
+    }
+    obRender(o) &= ~sprite_looping;
+    return;
 }
 
 static void Sonic_Animate(void *obj) {
