@@ -1106,7 +1106,10 @@ static const char *strip_label(const char *line) {
     while (*ins && isspace((unsigned char)*ins)) ins++;
     return ins;
 }
-
+static const char *skip_line_indent(const char *line) {
+    while (*line == ' ' || *line == '\t') line++;
+    return line;
+}
 /* Extract the target label and optional signed delta from a table entry
    expression such as ".titlesonic-Ani_TSon" or ".psb+1". */
 static void parse_table_expr(const char *s, char *label_out, size_t label_sz, int *delta_out) {
@@ -1258,6 +1261,7 @@ static char *expand_asm_macros(const char *text) {
         if (*p == '\n') p++;
 
         const char *ins = strip_label(line);
+        if (ins == line) ins = skip_line_indent(ins);
         if (ins == line || !is_directive(ins, "macro")) continue;
         if (macro_count >= 32) break;
 
@@ -1314,7 +1318,26 @@ static char *expand_asm_macros(const char *text) {
         if (has_nl) p++;
 
         const char *ins = strip_label(line);
+        if (ins == line) ins = skip_line_indent(ins);
         int m_idx = -1;
+
+        /* Si esta línea es una DEFINICIÓN de macro (label: macro ...),
+           saltarla junto con todo su cuerpo (hasta 'endm' inclusive).
+           Si no, la definición literal se colaría en el output y el parser
+           la procesaría como si fuera código real. */
+        if (ins != line && is_directive(ins, "macro")) {
+            while (*p) {
+                const char *bl = p;
+                while (*p && *p != '\n') p++;
+                int bnl = (*p == '\n');
+                if (bnl) p++;
+                const char *bins = strip_label(bl);
+                if (bins == bl) bins = skip_line_indent(bins);
+                if (is_directive(bins, "endm")) break;
+            }
+            continue;
+        }
+
         if (ins != line) {
             for (int i = 0; i < macro_count; i++) {
                 if (is_directive(ins, macros[i].name)) { m_idx = i; break; }
@@ -1421,7 +1444,19 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
         if (*p == '\n') p++;
 
         const char *ins = strip_label(lp);
+        if (ins == lp) ins = skip_line_indent(ins);
         if (*ins == '\0') continue;
+
+        /* --- DEBUG TEMPORAL --- */
+        static int dbg_line = 0;
+        if (dbg_line < 40) {
+            fprintf(stdout, "L%02d: ins='%.55s' lp='%.55s' dcw=%d dcb=%d\n",
+                    dbg_line, ins, lp,
+                    is_directive(ins, "dc.w") || is_directive(ins, "mappingsTableEntry.w"),
+                    is_directive(ins, "dc.b"));
+            dbg_line++;
+        }
+        /* --- FIN DEBUG --- */
 
         if (is_directive(ins, "dc.w") || is_directive(ins, "mappingsTableEntry.w")) {
             const char *dp = ins;
@@ -1510,6 +1545,17 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
         }
     }
 
+    fprintf(stdout, "=== TABLE: count=%d  SEGS: count=%d  cursor=%zu ===\n",
+            table_count, seg_count, cursor);
+    for (int j = 0; j < table_count; j++) {
+        fprintf(stdout, "  tbl[%02d]='%s' delta=%d\n",
+                j, table_name[j], table_delta[j]);
+    }
+    for (int j = 0; j < seg_count; j++) {
+        fprintf(stdout, "  seg[%02d]='%s' len=%zu\n",
+                j, segs[j].name, segs[j].len);
+    }
+
     *out_len = cursor;
     if (cursor == 0) { free(resolved); free(expanded); return NULL; }
 
@@ -1556,6 +1602,7 @@ static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len
         if (*p == '\n') p++;
 
         const char *ins = strip_label(lp);
+        if (ins == lp) ins = skip_line_indent(ins);
         if (*ins == '\0') continue;
 
         if (is_directive(ins, "mappingsTableEntry.w")) {
@@ -1727,6 +1774,7 @@ static uint8_t *parse_plc_asm(const char *text, size_t text_len, size_t *out_len
         if (*p == '\n') p++;
 
         const char *ins = strip_label(lp);
+        if (ins == lp) ins = skip_line_indent(ins);
         if (*ins == '\0') continue;
 
         if (is_directive(ins, "mappingsTableEntry.w")) {
