@@ -439,28 +439,38 @@ static void draw_chunks_block(const uint8_t *layout, int cam_x, int cam_y,
 
     /* Get the chunk ID from the level layout */
     uint8_t chunk_id = layout[row_off + col_off];
-    if (chunk_id == 0) return;                  /* empty chunk, skip */
 
-    /* Chunk RAM address: (chunk_id-1) * $200 */
-    uint32_t chunk_off = (uint32_t)((chunk_id - 1) & 0x7F) * chunk_size;
+    uint16_t block_id;
+    int flip_x, flip_y;
+    if (chunk_id == 0) {
+        /* Empty chunk: GetBlockData (REV00:594) early-returns leaving a1 at
+           the v_16x16 base, so DrawBlock still draws 16x16 block $00 — the
+           blank block — overwriting anything previously there. */
+        block_id = 0;
+        flip_x = 0;
+        flip_y = 0;
+    } else {
+        /* Chunk RAM address: (chunk_id-1) * $200 */
+        uint32_t chunk_off = (uint32_t)((chunk_id - 1) & 0x7F) * chunk_size;
 
-    /* Block cell within the chunk: 2 bytes per 16x16 block */
-    int cell_y = (ly * 2) & 0x1E0;
-    int cell_x = ((lx >> 3) & 0x1E);
-    const uint8_t *cell = RAM_ADDR(v_256x256) + chunk_off + cell_y + cell_x;
+        /* Block cell within the chunk: 2 bytes per 16x16 block */
+        int cell_y = (ly * 2) & 0x1E0;
+        int cell_x = ((lx >> 3) & 0x1E);
+        const uint8_t *cell = RAM_ADDR(v_256x256) + chunk_off + cell_y + cell_x;
 
-    /* Cell word: block ID (low byte + low 2 bits of flag byte) */
-    uint16_t cell_word = data_be16(cell);
-    uint16_t block_id  = cell_word & 0x3FF;
+        /* Cell word: block ID (low byte + low 2 bits of flag byte) */
+        uint16_t cell_word = data_be16(cell);
+        block_id = cell_word & 0x3FF;
+
+        /* Flipping */
+        flip_x = (cell[0] >> 3) & 1;
+        flip_y = (cell[0] >> 4) & 1;
+    }
 
     /* Block data: 4 words (TL, TR, BL, BR) in RAM, native order from EniDec */
     const uint16_t *blk = (const uint16_t *)RAM_ADDR(v_16x16) + block_id * 4;
     uint16_t t[4];
     for (int i = 0; i < 4; i++) t[i] = blk[i];
-
-    /* Flipping */
-    int flip_x = (cell[0] >> 3) & 1;
-    int flip_y = (cell[0] >> 4) & 1;
 
     uint16_t r0a, r0b, r1a, r1b;
     if (flip_y) { r0a = t[2]; r0b = t[3]; r1a = t[0]; r1b = t[1]; }
