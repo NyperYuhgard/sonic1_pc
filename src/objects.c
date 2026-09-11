@@ -213,14 +213,21 @@ void SpeedToPos(void *obj) {
 
 /* ===========================================================================
    ObjFloorDist — _incObj/sub ObjFloorDist.asm.
-   y = obY + obHeight; angle snaps to 0. Without a real 16x16 collision
-   index (v_collindex is not yet populated), d1 (distance) is 0 — a flat
-   floor at the object's feet.
+   Input: obj = object
+   Output: *dist = distance to floor, *angle = floor angle (snapped if bit 0 set)
    =========================================================================== */
 void ObjFloorDist(void *obj, int16_t *dist, int16_t *angle) {
-    (void)obj;
-    if (dist)  *dist  = 0;
-    if (angle) *angle = 0;
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d1;
+    uint8_t d3;
+    int16_t y = (int16_t)(obY(o) + (int8_t)obHeight(o));
+    int16_t x = obX(o);
+    FindFloor(y, x, 0x0D, 0, 0x10, &v_anglebuffer, obj, &d1);
+    d3 = v_anglebuffer;
+    if (d3 & 0x01)
+        d3 = 0;
+    if (dist)  *dist  = d1;
+    if (angle) *angle = (int16_t)d3;
 }
 
 /* ===========================================================================
@@ -548,7 +555,7 @@ static void Sonic_ChkRoll(void *obj);
 
 static void Sonic_JumpDirection(void *obj);
 static void Sonic_JumpHeight(void *obj);
-static void Sonic_Jump(void *obj);
+static int Sonic_Jump(void *obj);
 
 static void Sonic_LevelBound(void *obj);
 void KillSonic(void *obj);
@@ -1387,6 +1394,7 @@ static void Sonic_Move(void *obj) {
             return;
         }
         obStatus(o) &= ~(1 << 5);
+        obAnim(o) = id_Wait;
         if (!(obStatus(o) & (1 << 3))) {
             goto chkbalance;
         }
@@ -1397,7 +1405,7 @@ static void Sonic_Move(void *obj) {
                 if (obStatus(a1) < 0x80) {
                     int16_t d1 = obActWid(a1);
                     int16_t d2 = d1 + d1 - 4;
-                    int16_t d1x = obX(o) - obX(a1);
+                    int16_t d1x = obX(o) + d1 - obX(a1);
                     if (d1x < 4) {
                         goto leftbalance;
                     }
@@ -1449,7 +1457,9 @@ balance:
 
 static void Sonic_MdNormal(void *obj) {
     uint8_t *o = (uint8_t *)obj;
-    Sonic_Jump(o);
+    if (Sonic_Jump(o)) {
+        return; /* addq.l #4,sp — a successful jump skips the rest of this mode */
+    }
     Sonic_SlopeResistWalk(o);
     Sonic_Move(o);
     Sonic_Roll(o);
@@ -1474,7 +1484,9 @@ static void Sonic_MdJump(void *obj) {
 
 static void Sonic_MdRoll(void *obj) {
     uint8_t *o = (uint8_t *)obj;
-    Sonic_Jump(o);
+    if (Sonic_Jump(o)) {
+        return; /* addq.l #4,sp — a successful jump skips the rest of this mode */
+    }
     Sonic_SlopeResistRoll(o);
     Sonic_RollSpeed(o);
     Sonic_LevelBound(o);
@@ -1729,46 +1741,53 @@ static void Sonic_ChkRoll(void *obj) {
     }
 }
 
-static void Sonic_Jump(void *obj) {
+static int Sonic_Jump(void *obj) {
     uint8_t *o = (uint8_t *)obj;
 
     if (!(v_jpadpress2 & btnABC)) {
-        return;
+        return 0;
     }
     {
         uint8_t d0 = obAngle(o);
         d0 += 0x80;
-        {
-            int16_t headroom = Sonic_CalcHeadroom(d0);
-            if (headroom < 6) {
-                return;
-            }
+        int16_t headroom = Sonic_CalcHeadroom(o, d0);
+        if (headroom < 6) {
+            return 0;
         }
     }
     {
+        int16_t d2 = son_jumpspeed;
         if (obStatus(o) & (1 << 6)) {
-            {
-                uint8_t d0 = obAngle(o);
-                d0 -= 0x40;
-                {
-                    int16_t s0, s1;
-                    CalcSine(d0, &s0, &s1);
-                    obVelX(o) = (int16_t)(obVelX(o) + ((int16_t)((uint16_t)s1 << 8) >> 8));
-                    obVelY(o) = (int16_t)(obVelY(o) + ((int16_t)((uint16_t)s0 << 8) >> 8));
-                }
-            }
+            d2 = son_jumpspeed - 0x300;
         }
-        obStatus(o) |= (1 << 1);
-        obStatus(o) &= ~(1 << 5);
-        jumping(o) = 1;
-        sticktoconvex(o) = 0;
-        Sound_Queue(sfx_Jump, false);
+        uint8_t d0 = obAngle(o);
+        d0 -= 0x40;
+        {
+            int16_t s0, s1;
+            CalcSine(d0, &s0, &s1);
+            obVelX(o) = (int16_t)(obVelX(o) + ((int16_t)(((int32_t)d2 * s1) >> 8)));
+            obVelY(o) = (int16_t)(obVelY(o) + ((int16_t)(((int32_t)d2 * s0) >> 8)));
+        }
+    }
+    obStatus(o) |= (1 << 1);
+    obStatus(o) &= ~(1 << 5);
+    jumping(o) = 1;
+    sticktoconvex(o) = 0;
+    Sound_Queue(sfx_Jump, false);
+    /* FixBugs=0: Sonic's hitbox is set to standing size when roll-jumping.
+       Leftover from the victory animation in prototypes. */
+    obHeight(o) = sonic_height;
+    obWidth(o) = sonic_width;
+    if (!(obStatus(o) & (1 << 2))) {
         obHeight(o) = sonic_roll_height;
         obWidth(o) = sonic_roll_width;
         obAnim(o) = id_Roll;
         obStatus(o) |= (1 << 2);
         obY(o) = (int16_t)(obY(o) + (sonic_height - sonic_roll_height));
+    } else {
+        obStatus(o) |= (1 << 4);   /* roll-jump: set Roll-Jump flag */
     }
+    return 1;
 }
 
 static void Sonic_JumpHeight(void *obj) {
@@ -1779,7 +1798,7 @@ static void Sonic_JumpHeight(void *obj) {
         if (obStatus(o) & (1 << 6)) {
             d1 = -0x200;
         }
-        if (obVelY(o) <= d1) {
+        if (obVelY(o) >= d1) {
             return;
         }
         if (!(v_jpadhold2 & btnABC)) {
@@ -2106,7 +2125,7 @@ static void Sonic_FloorUp(void *obj) {
         obX(o) = (int16_t)(obX(o) + d1);
         obVelX(o) = 0;
     }
-    Sonic_FindCeiling(o, NULL, &d1);
+    Sonic_FindCeiling(o, NULL, &d1, NULL);
     if (d1 < 0) {
         obY(o) = (int16_t)(obY(o) + d1);
         if (obVelY(o) < 0) {
@@ -2129,7 +2148,7 @@ static void Sonic_FloorRight(void *obj) {
     if (obVelY(o) >= 0) {
         return;
     }
-    Sonic_FindCeiling(o, NULL, &d1);
+    Sonic_FindCeiling(o, NULL, &d1, NULL);
     if (d1 < 0) {
         obY(o) = (int16_t)(obY(o) + d1);
         if (obVelY(o) < 0) {
@@ -2352,7 +2371,7 @@ static void Sonic_WallSpeedAdjust(void *obj) {
         }
         d0 = d0 + d1;
         {
-            int16_t dist = Sonic_CalcRoomAhead(d0);
+            int16_t dist = Sonic_CalcRoomAhead(o, d0);
             if (dist >= 0) {
                 return;
             }
@@ -2382,7 +2401,7 @@ static void Sonic_SquashUnused(void *obj) {
     }
     {
         int16_t d1;
-        Sonic_FindCeiling(o, NULL, &d1);
+Sonic_FindCeiling(o, NULL, &d1, NULL);
         if (d1 >= 0) {
             return;
         }

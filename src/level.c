@@ -1011,7 +1011,7 @@ void ConvertCollisionArray(void) {
    exceed 32 bits, so the current zone's index lives in this static
    (same fix the opl_* pointers use).  Empty zones pick a NULL pointer.
    =================================================================== */
-static const uint8_t *col_index_ptr = NULL;
+const uint8_t *col_index_ptr = NULL;
 
 const uint8_t *GetColIndex(void) {
     return col_index_ptr;

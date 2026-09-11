@@ -32,14 +32,14 @@ static inline uint16_t block_be16(const uint8_t *p);
      a1 = address in 256x256 layout
      d1 = 16x16 block word (x/yflip + solidness + block ID)
    =========================================================================== */
-void FindNearestTile(int16_t y, int16_t x, uint8_t **out_a1, uint16_t *out_d1);
+void FindNearestTile(int16_t y, int16_t x, const void *obj, uint8_t **out_a1, uint16_t *out_d1);
 
 /* ===========================================================================
    FindFloor2 (helper for blank-tile continuation)
    Inputs: a1 = layout address, d2 = y, d3 = x
    Output: d1 = distance to floor
    =========================================================================== */
-void FindFloor2(int16_t y, int16_t x, uint8_t *a1, int16_t *out_d1);
+void FindFloor2(int16_t y, int16_t x, uint8_t d5, int16_t d6, int16_t a3, uint8_t *a4, const void *obj, int16_t *out_d1);
 
 /* ===========================================================================
    FindFloor
@@ -56,7 +56,7 @@ void FindFloor2(int16_t y, int16_t x, uint8_t *a1, int16_t *out_d1);
      (a1).w = 16x16 block word
      (a4).b = floor angle
    =========================================================================== */
-void FindFloor(int16_t y, int16_t x, uint8_t d5, int16_t d6, int16_t a3, uint8_t *a4, int16_t *out_d1);
+void FindFloor(int16_t y, int16_t x, uint8_t d5, int16_t d6, int16_t a3, uint8_t *a4, const void *obj, int16_t *out_d1);
 
 /* ===========================================================================
    FindWall
@@ -72,12 +72,12 @@ void FindFloor(int16_t y, int16_t x, uint8_t d5, int16_t d6, int16_t a3, uint8_t
      a1 = address within 256x256 mappings
      (a4).b = wall angle
    =========================================================================== */
-void FindWall(int16_t y, int16_t x, uint8_t d5, int16_t d6, int16_t a3, uint8_t *a4, int16_t *out_d1);
+void FindWall(int16_t y, int16_t x, uint8_t d5, int16_t d6, int16_t a3, uint8_t *a4, const void *obj, int16_t *out_d1);
 
 /* ===========================================================================
    FindWall2 (recursive helper for max-height / neg-floor cases)
    =========================================================================== */
-void FindWall2(int16_t y, int16_t x, uint8_t d5, int16_t d6, int16_t a3, uint8_t *a4, int16_t *out_d1);
+void FindWall2(int16_t y, int16_t x, uint8_t d5, int16_t d6, int16_t a3, uint8_t *a4, const void *obj, int16_t *out_d1);
 
 /* ===========================================================================
    CalcAngle — arctangent of (d1, d2)
@@ -91,14 +91,14 @@ uint8_t CalcAngle(int16_t dx, int16_t dy);
    Input: d0 = Sonic's floor angle rotated 90 degrees
    Output: d1 = distance to wall
    =========================================================================== */
-int16_t Sonic_CalcRoomAhead(uint8_t angle_ahead);
+int16_t Sonic_CalcRoomAhead(void *obj, uint8_t angle_ahead);
 
 /* ===========================================================================
    Sonic_CalcHeadroom — calculate distance to ceiling
    Input: d0 = Sonic's floor angle inverted
    Output: d1 = distance to ceiling
    =========================================================================== */
-int16_t Sonic_CalcHeadroom(uint8_t angle_inverted);
+int16_t Sonic_CalcHeadroom(void *obj, uint8_t angle_inverted);
 
 /* ===========================================================================
    Sonic_FindFloor — find distance to floor (with width/height checks)
@@ -116,7 +116,7 @@ int16_t Sonic_FindFloor_Quick(void *obj);
 /* ===========================================================================
    Sonic_FindCeiling — find distance to ceiling
    =========================================================================== */
-void Sonic_FindCeiling(void *obj, int16_t *out_d0, int16_t *out_d1);
+void Sonic_FindCeiling(void *obj, int16_t *out_d0, int16_t *out_d1, uint8_t *out_d3);
 
 /* ===========================================================================
    Sonic_FindCeiling_Quick
@@ -126,7 +126,7 @@ int16_t Sonic_FindCeiling_Quick(void *obj);
 /* ===========================================================================
    Sonic_FindWallRight — find distance to right wall
    =========================================================================== */
-void Sonic_FindWallRight(void *obj, int16_t *out_d0, int16_t *out_d1);
+void Sonic_FindWallRight(void *obj, int16_t *out_d0, int16_t *out_d1, uint8_t *out_d3);
 
 /* ===========================================================================
    Sonic_FindWallRight_Quick
@@ -136,7 +136,7 @@ int16_t Sonic_FindWallRight_Quick(void *obj);
 /* ===========================================================================
    Sonic_FindWallLeft — find distance to left wall
    =========================================================================== */
-void Sonic_FindWallLeft(void *obj, int16_t *out_d0, int16_t *out_d1);
+void Sonic_FindWallLeft(void *obj, int16_t *out_d0, int16_t *out_d1, uint8_t *out_d3);
 
 /* ===========================================================================
    Sonic_FindWallLeft_Quick
@@ -146,12 +146,12 @@ int16_t Sonic_FindWallLeft_Quick(void *obj);
 /* ===========================================================================
    Sonic_FindSmaller — make d1 the smaller of d0/d1, pick angle from buffer
    =========================================================================== */
-void Sonic_FindSmaller(int16_t d0, int16_t d1, int16_t *out_d1, uint8_t *out_d3);
+void Sonic_FindSmaller(int16_t d0, int16_t d1, int16_t d2, int16_t *out_d0, int16_t *out_d1, uint8_t *out_d3);
 
 /* ===========================================================================
    Sonic_SnapAngle — snap angle if bit 0 is set
    =========================================================================== */
-void Sonic_SnapAngle(uint8_t *out_d3);
+void Sonic_SnapAngle(int16_t d2, int16_t d1, int16_t *out_d1, uint8_t *out_d3);
 
 /* ===========================================================================
    Sonic_Angle — update angle based on left/right floor distances
