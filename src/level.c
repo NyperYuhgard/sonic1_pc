@@ -31,35 +31,69 @@ static int level_init_done = 0;
 /* ===================================================================
    Level Headers (from _inc/LevelHeaders.asm)
    16 bytes per entry, one per zone, selected by v_zone (ASM indexes
-   by v_zone*$10). Byte offsets match the ASM layout; the gfx/map16/
-   map256 pointer fields are unused here (asset pointers come from
-   data.c), so only plc1/plc2/pal are looked up.
+   by v_zone*$10). Byte offsets match the ASM lhead layout:
+     dc.l (plc1<<24)+lvlgfx ; dc.l (plc2<<24)+sixteen ; dc.l twofivesix
+     dc.b 0, music, pal, pal
+   The 24-bit pointers are mapped onto C pointers; they are filled at
+   runtime by LevelHeaders_Init() once data.c has loaded the assets
+   (NULL = asset not staged yet, skipped safely by the loaders).
    =================================================================== */
 typedef struct {
-    uint8_t  plc1;      /* +0:   first level PLC id */
-    uint8_t  gfx[3];    /* +1..3: level gfx pointer (unused) */
-    uint8_t  plc2;      /* +4:   second level PLC id */
-    uint8_t  map16[3];  /* +5..7: 16x16 block data pointer (unused) */
-    uint8_t  map256[4]; /* +8..B: 256x256 chunk data pointer (unused) */
-    uint8_t  reserved;  /* +C:   0 */
-    uint8_t  music;     /* +D:   music (unused; MusicList used instead) */
-    uint8_t  pal;       /* +E:   palette id */
-    uint8_t  pal2;      /* +F:   palette id (duplicate) */
+    uint8_t          plc1;     /* +0:   first level PLC id */
+    const uint8_t   *gfx;      /* +1..3: level gfx pointer */
+    uint8_t          plc2;     /* +4:   second level PLC id */
+    const uint8_t   *map16;    /* +5..7: 16x16 block data pointer */
+    const uint8_t   *map256;   /* +8..B: 256x256 chunk data pointer */
+    uint8_t          reserved; /* +C:   0 */
+    uint8_t          music;    /* +D:   music (unused; MusicList used instead) */
+    uint8_t          pal;      /* +E:   palette id */
+    uint8_t          pal2;     /* +F:   palette id (duplicate) */
 } level_header;
 
-#define LHEAD(plc1, plc2, music, pal) \
-    { plc1, {0,0,0}, plc2, {0,0,0}, {0,0,0,0}, 0, music, pal, pal }
+#define LHEAD(plc1, gfx, plc2, map16, map256, music, pal) \
+    { plc1, gfx, plc2, map16, map256, 0, music, pal, pal }
 
-static const level_header level_headers[] = {
-    /*                                         music     palette      */
-    LHEAD(plcid_GHZ,  plcid_GHZ2, bgm_GHZ, palid_GHZ),    /* 0: Green Hill */
-    LHEAD(plcid_LZ,   plcid_LZ2,   bgm_LZ,  palid_LZ),    /* 1: Labyrinth */
-    LHEAD(plcid_MZ,   plcid_MZ2,   bgm_MZ,  palid_MZ),    /* 2: Marble */
-    LHEAD(plcid_SLZ,  plcid_SLZ2,  bgm_SLZ, palid_SLZ),   /* 3: Star Light */
-    LHEAD(plcid_SYZ,  plcid_SYZ2,  bgm_SYZ, palid_SYZ),   /* 4: Spring Yard */
-    LHEAD(plcid_SBZ,  plcid_SBZ2,  bgm_SBZ, palid_SBZ1),  /* 5: Scrap Brain */
-    LHEAD(0,          0,           bgm_SBZ, palid_Ending),/* 6: Ending */
+static level_header level_headers[] = {
+    /*                     gfx         plc2    map16     map256   music     palette     */
+    LHEAD(plcid_GHZ, NULL, plcid_GHZ2,  NULL,    NULL,    bgm_GHZ, palid_GHZ),  /* 0: Green Hill */
+    LHEAD(plcid_LZ,  NULL, plcid_LZ2,   NULL,    NULL,    bgm_LZ,  palid_LZ),   /* 1: Labyrinth */
+    LHEAD(plcid_MZ,  NULL, plcid_MZ2,   NULL,    NULL,    bgm_MZ,  palid_MZ),   /* 2: Marble */
+    LHEAD(plcid_SLZ, NULL, plcid_SLZ2,  NULL,    NULL,    bgm_SLZ, palid_SLZ),  /* 3: Star Light */
+    LHEAD(plcid_SYZ, NULL, plcid_SYZ2,  NULL,    NULL,    bgm_SYZ, palid_SYZ),  /* 4: Spring Yard */
+    LHEAD(plcid_SBZ, NULL, plcid_SBZ2,  NULL,    NULL,    bgm_SBZ, palid_SBZ1), /* 5: Scrap Brain */
+    LHEAD(0,         NULL, 0,           NULL,    NULL,    bgm_SBZ, palid_Ending),/* 6: Ending */
 };
+
+/* Level_Index entry (sonic.asm:4906): "foreground, background, leftover".
+   FG = d1 offset 0, BG = d1 offset 2, third slot never read. */
+typedef struct {
+    const uint8_t *fg;    /* d1 = 0 */
+    const uint8_t *bg;    /* d1 = 2 */
+    const uint8_t *left;  /* leftover/unused */
+} level_index_entry;
+
+/* Level_Index rows (defined below LevelLayoutLoad); filled at runtime. */
+static level_index_entry level_index[28];
+
+/* Point the zones at their staged assets (called at the end of Data_Init).
+   The Ending reuses the GHZ data, matching the LevelHeaders.asm entry. */
+void LevelHeaders_Init(void) {
+    level_headers[0].gfx    = Nem_GHZ_2nd;
+    level_headers[0].map16  = Blk16_GHZ;
+    level_headers[0].map256 = Blk256_GHZ;
+
+    level_headers[6].gfx    = Nem_GHZ_2nd;
+    level_headers[6].map16  = Blk16_GHZ;
+    level_headers[6].map256 = Blk256_GHZ;
+
+    /* Layout pointers (level_index); rows for other zones stay NULL. */
+    level_index[0].fg = Level_GHZ1;   level_index[0].bg = Level_GHZbg;
+    level_index[1].fg = Level_GHZ1;   level_index[1].bg = Level_GHZbg;
+    level_index[2].fg = Level_GHZ1;   level_index[2].bg = Level_GHZbg;
+    level_index[3].fg = Level_GHZbg;  level_index[3].bg = Level_GHZbg;
+    level_index[24].bg = Level_GHZbg; /* Ending rows 1-2 */
+    level_index[25].bg = Level_GHZbg;
+}
 
 /* ===================================================================
    Level size loading (from _inc/LevelSizeLoad & BgScrollSpeed.asm)
@@ -304,6 +338,51 @@ static void level_layout_load2(const uint8_t *src, uint8_t *dst) {
     }
 }
 
+/* ------------------------------------------------------------------
+   Level_Index (sonic.asm:4906-4945)
+   One row per (zone*4 + act); LevelLayoutLoad2 selects FG (d1 offset 0)
+   or BG (d1 offset 2); the third slot is never read. Rows with NULL
+   layouts (assets not staged yet) are skipped. GHZ acts 2/3 share the
+   staged GHZ1 layout until their blobs land.
+   ------------------------------------------------------------------ */
+static level_index_entry level_index[] = {
+    /* GHZ */
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    /* LZ */
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    /* MZ */
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    /* SLZ */
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    /* SYZ */
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    /* SBZ */
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    /* Ending (FG = Level_End, unstaged) */
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+    { NULL, NULL, NULL },
+};
+
 void LevelLayoutLoad(void) {
     uint8_t zone = (uint8_t)(v_zone_act >> 8);
     uint8_t act  = (uint8_t)(v_zone_act & 0xFF);
@@ -311,20 +390,20 @@ void LevelLayoutLoad(void) {
     /* Clear the entire layout buffer (FixBugs) */
     memset(RAM_ADDR(v_lvllayout), 0, v_lvllayout_end - v_lvllayout);
 
-    if (zone != 0) return;   /* only GHZ loaded so far */
-
-    /* Level_Index (sonic.asm): all GHZ acts share the GHZ1 FG; GHZ4 (unused)
-       falls back to the background blob. */
-    const uint8_t *fg;
-    const uint8_t *bg;
-    switch (act) {
-    case 3:  fg = Level_GHZbg;  bg = Level_GHZbg;  break;
-    default: fg = Level_GHZ1;   bg = Level_GHZbg;  break;
+    /* LevelLayoutLoad2: d0 = zone*$18 + act*6 bytes == row zone*4+act,
+       then d1 (0 = FG, 2 = BG) selects the layout word. */
+    unsigned row = zone * 4 + act;
+    if (row >= sizeof(level_index) / sizeof(level_index[0])) {
+        return;
     }
-    if (!fg || !bg) return;
 
-    level_layout_load2(fg, RAM_ADDR(v_lvllayout_fg));
-    level_layout_load2(bg, RAM_ADDR(v_lvllayout_bg));
+    const level_index_entry *lr = &level_index[row];
+    if (lr->fg) {
+        level_layout_load2(lr->fg, RAM_ADDR(v_lvllayout_fg));
+    }
+    if (lr->bg) {
+        level_layout_load2(lr->bg, RAM_ADDR(v_lvllayout_bg));
+    }
 }
 
 /* ===================================================================
@@ -668,29 +747,48 @@ void LoadTilesFromStart(void) {
    mappings, FG/BG layout, and the zone palette into the fade buffer.
    =================================================================== */
 void LevelDataLoad(void) {
-    /* --- 16x16 Block Mappings --- */
-    if (Blk16_GHZ) {
+    uint8_t zone = (uint8_t)(v_zone_act >> 8);
+
+    /* --- Level Header ---
+       ASM: lea LevelHeaders.l, a2; lea (a2,d0.w), a2 with d0 = v_zone*$10
+       (skip the 1st PLC and level gfx entry — handled in GM_Level). */
+    if (zone >= sizeof(level_headers) / sizeof(level_headers[0])) {
+        return;
+    }
+    const level_header *lp = &level_headers[zone];
+
+    /* --- 16x16 Block Mappings: +(a2) = second dc.l (plc2<<24)|sixteen --- */
+    if (lp->map16) {
         uint16_t *buf = (uint16_t *)RAM_ADDR(v_16x16);
-        EniDec(Blk16_GHZ, buf, ArtTile_Level);
+        EniDec(lp->map16, buf, ArtTile_Level);
     }
 
-    /* --- 256x256 Chunk Mappings --- */
-    if (Blk256_GHZ) {
+    /* --- 256x256 Chunk Mappings: +(a2) = third dc.l (twofivesix) --- */
+    if (lp->map256) {
         uint8_t *buf = RAM_ADDR(v_256x256);
-        KosDec(Blk256_GHZ, buf);
+        KosDec(lp->map256, buf);
     }
 
     /* --- Level Layout (FG/BG) --- */
     LevelLayoutLoad();
 
-    /* --- Palette (from the current zone's LevelHeaders entry) ---
-       Non-GHZ palettes no-op until their palette assets are wired in
-       Palette_Init (PalLoad guards on a NULL source). */
+    /* --- Music (unused) --- */
+
+    /* --- Palette: low byte of the header (palid duplicated in headers) --- */
     {
-        uint8_t zone = (uint8_t)(v_zone_act >> 8);
-        if (zone < (uint8_t)(sizeof(level_headers) / sizeof(level_headers[0]))) {
-            PalLoad_Fade(level_headers[zone].pal);
+        uint16_t pal = lp->pal & 0xFF;
+
+        if (v_zone_act == id_LZ_act4) {          /* SBZ3 (LZ4)? */
+            pal = palid_SBZ3;
+        } else if (v_zone_act == id_SBZ_act2 || v_zone_act == id_FZ) {
+            pal = palid_SBZ2;                    /* SBZ2 / FZ */
         }
+        PalLoad_Fade(pal);
+    }
+
+    /* --- 2nd PLC: first byte of the second dc.l (0 = ending, skip) --- */
+    if (lp->plc2 != 0) {
+        AddPLC(lp->plc2);
     }
 }
 

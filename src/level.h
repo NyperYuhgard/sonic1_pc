@@ -13,6 +13,7 @@ void LevelLayoutLoad(void);
 void DrawChunks(void);
 void LoadTilesFromStart(void);
 void LevelDataLoad(void);
+void LevelHeaders_Init(void);
 
 /* Collision */
 void ColIndexLoad(void);

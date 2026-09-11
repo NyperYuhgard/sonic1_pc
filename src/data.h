@@ -31,6 +31,8 @@ extern size_t   Eni_SegaLogo_len;
 #define palid_SLZ       7
 #define palid_SYZ       8
 #define palid_SBZ1      9
+#define palid_SBZ3      12
+#define palid_SBZ2      14
 #define palid_Ending    19
 
 /* Title Screen assets */

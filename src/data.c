@@ -2,6 +2,7 @@
 #include "assets.h"
 #include "palette.h"
 #include "constants.h"
+#include "level.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -842,6 +843,7 @@ int Data_Init(void) {
     }
 
     Palette_Init();
+    LevelHeaders_Init();
     return 0;
 }
 
