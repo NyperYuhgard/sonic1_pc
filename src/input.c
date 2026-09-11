@@ -22,11 +22,12 @@ void Input_Init(void) {
 }
 
 void Input_Read(void) {
+    extern int running;
+
     /* Process SDL events */
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
-            extern int running;
             running = 0;
         }
         /* Closing debug viewer windows via the WM */
@@ -36,6 +37,8 @@ void Input_Read(void) {
                 VDP_ToggleVRAMViewer();
             else if ((int)event.window.windowID == ObjView_WindowID())
                 ObjView_Toggle();
+            else
+                running = 0;   /* main game window closed via the WM */
         }
     }
 

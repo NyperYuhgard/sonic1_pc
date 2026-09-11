@@ -9,6 +9,7 @@
    Sound command bytes (bgm_Fade/Speedup/Slowdown/Stop) are handled here. */
 
 void Sound_Init(void);
+void Sound_Quit(void);     /* Free mixer resources and stop the audio thread */
 void Sound_Update(void);   /* Called once per frame (no-op with SDL_mixer) */
 void Sound_Queue(int id, bool loop);  /* Queue a music/sfx id or sound command; loop only matters for music and looping sfx */
 

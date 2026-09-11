@@ -158,6 +158,12 @@ static void ProcessSDLEvents(void) {
             fprintf(stderr, "[Main] SDL_QUIT received, exiting\n");
             running = 0;
         }
+        /* WM close button on the main game window */
+        if (ev.type == SDL_WINDOWEVENT &&
+            ev.window.event == SDL_WINDOWEVENT_CLOSE &&
+            (int)ev.window.windowID == SDL_GetWindowID(window)) {
+            running = 0;
+        }
     }
 }
 
@@ -276,6 +282,7 @@ static void GM_Sega_Screen(void) {
     do {
         v_vblank_routine = id_VBlank_Sega; /* set every frame (matches ASM) */
         WaitForVBlank();
+        if (!running) return;
     } while (PalCycle_Sega());
 
     /* --- Wait for "SEGA" sound ---
@@ -284,12 +291,14 @@ static void GM_Sega_Screen(void) {
        Sound_Queue(sfx_Sega, false);
     v_vblank_routine = id_VBlank_SegaPCM;
     WaitForVBlank();
+    if (!running) return;
 
     /* --- Post-chant wait (30 frames or until Start pressed) --- */
     v_generictimer = 120;
     do {
         v_vblank_routine = id_VBlank_Sega; /* set every frame (matches ASM loop) */
         WaitForVBlank();
+        if (!running) return;
         if (v_generictimer == 0)
             break;
     } while (!(v_jpadpress1 & 0x80)); /* btnStart */
@@ -607,6 +616,7 @@ static void GM_Title_Screen(void) {
             for (;;) {
                 v_vblank_routine = id_VBlank_Title;
                 WaitForVBlank();
+                if (!running) return;
                 LevSelControls();
                 RunPLC();
 
@@ -942,6 +952,7 @@ static int InitSDL(void) {
 
 static void CleanupSDL(void) {
     Data_Quit();
+    Sound_Quit();
     if (vdp.framebuffer) {
         SDL_DestroyTexture(vdp.framebuffer);
         vdp.framebuffer = NULL;

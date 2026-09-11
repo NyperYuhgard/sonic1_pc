@@ -261,6 +261,29 @@ void Sound_Init(void) {
     snd_inited = 1;
 }
 
+void Sound_Quit(void) {
+    if (!snd_inited) return;
+
+    Mix_HaltMusic();
+    Mix_HaltChannel(-1);
+
+    if (snd_music) {
+        Mix_FreeMusic(snd_music);
+        snd_music = NULL;
+    }
+    for (int i = 0; i < SND_SFX_TABLE_MAX; i++) {
+        if (snd_chunk[i]) {
+            Mix_FreeChunk(snd_chunk[i]);
+            snd_chunk[i] = NULL;
+        }
+    }
+
+    /* Must stop the mixer thread before SDL_Quit() tears down audio. */
+    Mix_CloseAudio();
+    Mix_Quit();
+    snd_inited = 0;
+}
+
 void Sound_Update(void) {
     /* SDL_mixer runs on its own thread; nothing to do per frame. */
 }
