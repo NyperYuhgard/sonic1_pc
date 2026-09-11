@@ -322,5 +322,5 @@ int Data_Init(void);
 
 /* Free all loaded assets */
 void Data_Quit(void);
-
+size_t Map_LookupLength(const uint8_t *ptr);
 #endif /* SONIC1_DATA_H */

@@ -2550,6 +2550,25 @@ static void Sonic_Loops(void *obj) {
     return;
 }
 
+static uint8_t anim_next_frame(uint8_t *o, const uint8_t *a1) {
+    uint8_t frame_idx = obAniFrame(o);
+    uint8_t frame_id = a1[1 + frame_idx];
+
+    if ((int8_t)frame_id < 0) {
+        if (frame_id == 0xFF) {           /* afEnd: vuelve al primer frame */
+            obAniFrame(o) = 0;
+            frame_id = a1[1];
+            obAniFrame(o) = 1;
+        } else {
+            /* afBack/afChange/... no se usan en walk/run/roll/push */
+            return 0;
+        }
+    } else {
+        obAniFrame(o) = frame_idx + 1;
+    }
+    return frame_id;
+}
+
 static void Sonic_Animate(void *obj) {
     uint8_t *o = (uint8_t *)obj;
         fprintf(stdout, "SAN: anim=%d prev=%d aniframe=%d time=%d\n",
@@ -2582,10 +2601,9 @@ static void Sonic_Animate(void *obj) {
         uint8_t frame_id = anim_data[1 + frame_idx];
 
         if ((int8_t)frame_id >= 0) {
-            /* Normal frame */
-            uint8_t frame = frame_id & 0x1F;
-            obFrame(o) = frame;
-            obAniFrame(o) = frame_idx + 1;
+        /* Normal frame */
+        obFrame(o) = frame_id;
+        obAniFrame(o) = frame_idx + 1;
         } else {
             /* Special animation flags — cascade like ASM */
             switch (frame_id) {
@@ -2593,8 +2611,7 @@ static void Sonic_Animate(void *obj) {
                     obAniFrame(o) = 0;
                     frame_id = anim_data[1];
                     {
-                        uint8_t frame = frame_id & 0x1F;
-                        obFrame(o) = frame;
+                        obFrame(o) = frame_id;
                         status = obStatus(o);
                         render = obRender(o);
                         render = (render & ~(sprite_xflip | sprite_yflip)) | (status & sprite_xflip);
@@ -2609,8 +2626,7 @@ static void Sonic_Animate(void *obj) {
                         obAniFrame(o) -= back;
                         frame_idx = obAniFrame(o);
                         frame_id = anim_data[1 + frame_idx];
-                        uint8_t frame = frame_id & 0x1F;
-                        obFrame(o) = frame;
+                        obFrame(o) = frame_id;
                         status = obStatus(o);
                         render = obRender(o);
                         render = (render & ~(sprite_xflip | sprite_yflip)) | (status & sprite_xflip);
@@ -2690,11 +2706,7 @@ static void Sonic_Animate(void *obj) {
                 speed = speed >> 8;
                 obTimeFrame(o) = (uint8_t)speed;
 
-                uint8_t frame_idx = obAniFrame(o);
-                uint8_t frame_id = a1[1 + frame_idx];
-                obFrame(o) = frame_id & 0x1F;
-                obAniFrame(o) = frame_idx + 1;
-                obFrame(o) = obFrame(o) + d3;
+                obFrame(o) = anim_next_frame(o, a1) + d3;
             }
             break;
 
@@ -2716,10 +2728,7 @@ static void Sonic_Animate(void *obj) {
                 uint8_t flip = obStatus(o) & sprite_xflip;
                 obRender(o) = (obRender(o) & ~(sprite_xflip | sprite_yflip)) | flip;
 
-                uint8_t frame_idx = obAniFrame(o);
-                uint8_t frame_id = a1[1 + frame_idx];
-                obFrame(o) = frame_id & 0x1F;
-                obAniFrame(o) = frame_idx + 1;
+                obFrame(o) = anim_next_frame(o, a1);
             }
             break;
 
@@ -2737,10 +2746,7 @@ static void Sonic_Animate(void *obj) {
 
                 const uint8_t *a1 = Ani_Sonic + ((const uint16_t *)Ani_Sonic)[id_Push];
 
-                uint8_t frame_idx = obAniFrame(o);
-                uint8_t frame_id = a1[1 + frame_idx];
-                obFrame(o) = frame_id & 0x1F;
-                obAniFrame(o) = frame_idx + 1;
+                obFrame(o) = anim_next_frame(o, a1);
             }
             break;
     }
@@ -2917,8 +2923,7 @@ void AnimateSprite(void *obj, const uint8_t *anim_script) {
 
     if ((int8_t)frame_id >= 0) {
         /* Anim_SetFrameAndFlipFlags */
-        uint8_t frame = frame_id & 0x1F;
-        obFrame(o) = frame;
+        obFrame(o) = frame_id;
 
         uint8_t status = obStatus(o);
         uint8_t render = obRender(o);
@@ -2934,8 +2939,7 @@ void AnimateSprite(void *obj, const uint8_t *anim_script) {
                 obAniFrame(o) = 0;
                 frame_id = anim_data[1];
                 {
-                    uint8_t frame = frame_id & 0x1F;
-                    obFrame(o) = frame;
+                    obFrame(o) = frame_id;
                     uint8_t status = obStatus(o);
                     uint8_t render = obRender(o);
                     uint8_t flip_bits = (frame_id << 3) & (sprite_xflip | sprite_yflip);
@@ -2951,8 +2955,7 @@ void AnimateSprite(void *obj, const uint8_t *anim_script) {
                     obAniFrame(o) -= back;
                     frame_idx = obAniFrame(o);
                     frame_id = anim_data[1 + frame_idx];
-                    uint8_t frame = frame_id & 0x1F;
-                    obFrame(o) = frame;
+                    obFrame(o) = frame_id;
                     uint8_t status = obStatus(o);
                     uint8_t render = obRender(o);
                     uint8_t flip_bits = (frame_id << 3) & (sprite_xflip | sprite_yflip);

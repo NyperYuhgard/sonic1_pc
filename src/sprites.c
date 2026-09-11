@@ -2,6 +2,7 @@
 #include "ram.h"
 #include "constants.h"
 #include "objects.h"
+#include "data.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -12,7 +13,7 @@
 static void build_sprite_piece(uint8_t *sprite_table, int *sprite_index,
                                int base_y, int base_x, const uint8_t **data,
                                uint16_t gfx, int xflip, int yflip) {
-    if (*sprite_index >= sprites_max) return;
+    //if (*sprite_index >= sprites_max) return;
 
     const uint8_t *p = *data;
     int y_off = (int8_t)p[0];
@@ -142,16 +143,25 @@ void BuildSprites(void) {
         const uint8_t *map = (const uint8_t *)(uintptr_t)obMap(obj);
         if (!map || !obj) continue;
 
-        /* Get frame data (ASM BuildSprites: move.b obFrame(a0),d1)
-           frame_offset = mappings table[obFrame] */
+        size_t map_len = Map_LookupLength(map);
+        if (map_len == 0) continue;
+
         int frame_idx = obFrame(obj);
-        if (frame_idx < 0 || frame_idx > 255) continue;
+        /* La tabla de offsets ocupa map_len bytes al principio; cada frame
+           es [count byte][count * 5 bytes de piezas]. */
+        if ((size_t)(frame_idx * 2 + 1) >= map_len) continue;
         uint16_t frame_offset = ((const uint16_t *)map)[frame_idx];
-        if (frame_offset == 0 || frame_offset > 64000) continue;
+
+        /* frame_offset debe estar dentro del buffer y dejar sitio al menos
+           para el byte de count. */
+        if (frame_offset >= map_len) continue;
         const uint8_t *frame_data = map + frame_offset;
 
         int num_pieces = frame_data[0];
         if (num_pieces <= 0 || num_pieces > 32) continue;
+
+        /* Comprobación crítica: count + count*5 bytes deben caber en el buffer. */
+        if ((size_t)frame_offset + 1 + (size_t)num_pieces * 5 > map_len) continue;
 
         const uint8_t *piece_data = frame_data + 1;
         uint16_t gfx = obGfx(obj);

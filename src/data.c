@@ -1587,10 +1587,10 @@ typedef struct {
 static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len) {
     (void)text_len;
     const char *p = text;
-    MapFrame frames[32] = {0};
+    MapFrame frames[256] = {0};
     int frame_count = 0;
-    char table_name[32][64];
-    int table_delta[32];
+    char table_name[256][64];
+    int table_delta[256];
     int table_count = 0;
 
     while (*p) {
@@ -1608,7 +1608,7 @@ static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len
         if (is_directive(ins, "mappingsTableEntry.w")) {
             const char *dp = ins + 20;
             while (*dp && isspace((unsigned char)*dp)) dp++;
-            if (table_count < 32) {
+            if (table_count < 256) {
                 parse_table_expr(dp, table_name[table_count], 64, &table_delta[table_count]);
                 table_count++;
             }
@@ -1616,7 +1616,7 @@ static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len
         }
 
         if (is_directive(ins, "spriteHeader")) {
-            if (frame_count < 32) {
+            if (frame_count < 256) {
                 frames[frame_count].name[0] = '\0';
                 if (strip_label(lp) != lp) {
                     const char *q = lp;
@@ -1690,8 +1690,8 @@ static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len
 
     /* Layout: table of word offsets first, then per-frame [count][pieces]. */
     size_t total = 2 * (size_t)table_count;
-    size_t frame_pos[32];
-    int ref_idx[32];
+    size_t frame_pos[256];
+    int ref_idx[256];
     size_t cursor = total;
 
     for (int j = 0; j < frame_count; j++) frame_pos[j] = (size_t)-1;
@@ -1878,6 +1878,30 @@ static uint8_t *parse_plc_asm(const char *text, size_t text_len, size_t *out_len
     return out;
 }
 
+typedef struct {
+    const uint8_t *ptr;
+    size_t len;
+} MapEntry;
+
+#define MAP_REGISTRY_MAX 128
+static MapEntry g_map_registry[MAP_REGISTRY_MAX];
+static int g_map_registry_count = 0;
+
+static void register_map(const uint8_t *ptr, size_t len) {
+    if (g_map_registry_count < MAP_REGISTRY_MAX) {
+        g_map_registry[g_map_registry_count].ptr = ptr;
+        g_map_registry[g_map_registry_count].len = len;
+        g_map_registry_count++;
+    }
+}
+
+size_t Map_LookupLength(const uint8_t *ptr) {
+    for (int i = 0; i < g_map_registry_count; i++) {
+        if (g_map_registry[i].ptr == ptr) return g_map_registry[i].len;
+    }
+    return 0;
+}
+
 static int load_asm_asset(const char *name, const uint8_t **out_ptr, size_t *out_len, int is_map) {
     char path[PATH_MAX + 512];
     snprintf(path, sizeof(path), "%s/%s", assets_base_path(), name);
@@ -1913,8 +1937,8 @@ static int load_asm_asset(const char *name, const uint8_t **out_ptr, size_t *out
         return -1;
     }
     memcpy(low, data, data_len);
-    free(data);
-
+    free((void *)data);
+    register_map(low, data_len);
     *out_ptr = low;
     *out_len = data_len;
     return 0;
