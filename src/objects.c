@@ -8,6 +8,7 @@
 #include "debugmode.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* Object dispatch table - maps object ID to routine.
    Index = object ID, value = function to execute. */
@@ -2551,6 +2552,8 @@ static void Sonic_Loops(void *obj) {
 
 static void Sonic_Animate(void *obj) {
     uint8_t *o = (uint8_t *)obj;
+        fprintf(stdout, "SAN: anim=%d prev=%d aniframe=%d time=%d\n",
+            obAnim(o), obPrevAni(o), obAniFrame(o), obTimeFrame(o));
     uint8_t anim_id = obAnim(o);
 
     if (anim_id != obPrevAni(o)) {
@@ -2745,6 +2748,7 @@ static void Sonic_Animate(void *obj) {
 
 static void Sonic_LoadGfx(void *obj) {
     uint8_t *o = (uint8_t *)obj;
+    fprintf(stdout, "SLG: frame=%d prev=%d\n", obFrame(o), (int)v_sonframenum);
     uint8_t d0 = obFrame(o);
 
     if (d0 == v_sonframenum) {
@@ -2752,8 +2756,9 @@ static void Sonic_LoadGfx(void *obj) {
     }
     v_sonframenum = d0;
 
-    // 1. Leer offset Big-Endian de la tabla
-    uint16_t offset = (SonicDynPLC[d0 * 2] << 8) | SonicDynPLC[d0 * 2 + 1];
+
+    /* La tabla de offsets DPLC se almacena little-endian (ver parse_plc_asm). */
+    uint16_t offset = SonicDynPLC[d0 * 2] | (SonicDynPLC[d0 * 2 + 1] << 8);
     const uint8_t *a2 = SonicDynPLC + offset;
 
     uint8_t d1 = *a2++; // Número de entradas DPLC
@@ -2768,18 +2773,12 @@ static void Sonic_LoadGfx(void *obj) {
         uint8_t byte1 = *a2++;
         uint8_t byte2 = *a2++;
 
-        // d0 = Cantidad de tiles - 1 (se extrae del nybble alto)
         uint8_t tile_count = (byte1 >> 4) + 1;
-
-        // d2 = Offset de tile (nybble bajo de byte1 + byte2)
         uint16_t tile_offset = ((byte1 & 0x0F) << 8) | byte2;
 
-        // Cada tile son $20 (32) bytes en el arte sin comprimir
         const uint8_t *a1 = Art_Sonic + (tile_offset * 32);
 
-        // Copiar 'tile_count' tiles completos (32 bytes cada uno)
         for (int i = 0; i < tile_count; i++) {
-            // Un tile completo son 32 bytes (equivalente a los 8 movem.l del 68k)
             for (int b = 0; b < 32; b++) {
                 *a3++ = *a1++;
             }

@@ -422,7 +422,8 @@ int Data_Init(void) {
     Nem_TitleCard_len = 0;
     Map_Card = NULL;
     Map_Card_len = 0;
-
+    Ani_Sonic = NULL;
+    Ani_Sonic_len = 0;
     Nem_Hud = NULL;
     Nem_Hud_len = 0;
     Nem_Lives = NULL;
@@ -433,6 +434,11 @@ int Data_Init(void) {
     Art_LivesNums_len = 0;
     Map_HUD = NULL;
     Map_HUD_len = 0;
+    SonicDynPLC = NULL;
+    SonicDynPLC_len = 0;
+    Art_Sonic = NULL;
+    Art_Sonic_len = 0;
+
 
     if (load_asset("palette/sega_bg.bin", &Pal_SegaBG, &Pal_SegaBG_len) != 0) {
         Pal_SegaBG = NULL;
@@ -627,7 +633,30 @@ int Data_Init(void) {
     if (load_asm_asset("anim/Sonic.asm", &Ani_Sonic, &Ani_Sonic_len, 0) != 0) {
         Ani_Sonic = NULL;
         Ani_Sonic_len = 0;
+        
     }
+
+        /* ===== DEBUG TEMPORAL — quitar después ===== */
+    fprintf(stdout, "ASSETS: Ani=%p/%zu DynPLC=%p/%zu Map=%p/%zu Art=%p/%zu\n",
+            (void*)Ani_Sonic, Ani_Sonic_len,
+            (void*)SonicDynPLC, SonicDynPLC_len,
+            (void*)Map_Sonic, Map_Sonic_len,
+            (void*)Art_Sonic, Art_Sonic_len);
+
+    if (Ani_Sonic && Ani_Sonic_len >= 32) {
+        for (int i = 0; i < 16; i++) {
+            uint16_t off = Ani_Sonic[i*2] | (Ani_Sonic[i*2+1] << 8);
+            fprintf(stdout, "  anim[%02d]=%04X\n", i, off);
+        }
+    }
+    if (SonicDynPLC && SonicDynPLC_len >= 32) {
+        for (int i = 0; i < 16; i++) {
+            uint16_t off = SonicDynPLC[i*2] | (SonicDynPLC[i*2+1] << 8);
+            fprintf(stdout, "  dplc[%02d]=%04X\n", i, off);
+        }
+    }
+    /* ===== FIN DEBUG ===== */
+
 
     if (load_asset("tilemaps/title.eni", &Eni_Title, &Eni_Title_len) != 0) {
         Eni_Title = NULL;
@@ -1124,6 +1153,95 @@ typedef struct {
     size_t body_len;
 } AsmMacroDef;
 
+typedef struct {
+    char name[64];
+    long value;
+} EquSymbol;
+
+/* Recorre el texto buscando definiciones "nombre: equ valor" y sustituye
+ *  cada uso de esos símbolos por su valor numérico. Imprescindible para que
+ *  los scripts de animación (fr_Stand, fr_Walk13, ...) se parseen bien.
+ *  Devuelve NULL si no hay definiciones equ (el llamador usa el texto original). */
+static char *resolve_equ_symbols(const char *text) {
+    EquSymbol syms[256];
+    int sym_count = 0;
+
+    /* Primera pasada: recolectar definiciones */
+    const char *p = text;
+    while (*p) {
+        const char *lp = p;
+        while (*p && *p != '\n') p++;
+        if (*p == '\n') p++;
+
+        const char *q = lp;
+        while (*q && *q != '\n' && isspace((unsigned char)*q)) q++;
+        if (*q == ';' || *q == '\0') continue;
+
+        const char *name_start = q;
+        while (*q && (isalnum((unsigned char)*q) || *q == '_')) q++;
+        if (*q != ':') continue;
+        size_t name_len = (size_t)(q - name_start);
+        if (name_len == 0 || name_len >= 64) continue;
+        q++;
+
+        while (*q && *q != '\n' && isspace((unsigned char)*q)) q++;
+        if (strncmp(q, "equ", 3) != 0) continue;
+        if (q[3] && !isspace((unsigned char)q[3])) continue;
+        q += 3;
+        while (*q && *q != '\n' && isspace((unsigned char)*q)) q++;
+
+        const char *e = NULL;
+        long val = parse_asm_number(q, &e);
+        if (e == q) continue;
+
+        if (sym_count < 256) {
+            memcpy(syms[sym_count].name, name_start, name_len);
+            syms[sym_count].name[name_len] = '\0';
+            syms[sym_count].value = val;
+            sym_count++;
+        }
+    }
+
+    if (sym_count == 0) return NULL;
+
+    /* Segunda pasada: sustituir apariciones */
+    char *out = NULL;
+    size_t out_len = 0, out_cap = 0;
+    p = text;
+    while (*p) {
+        if (isalpha((unsigned char)*p) || *p == '_') {
+            const char *sym_start = p;
+            while (*p && (isalnum((unsigned char)*p) || *p == '_')) p++;
+            size_t sym_len = (size_t)(p - sym_start);
+
+            long found = 0;
+            int ok = 0;
+            for (int i = 0; i < sym_count; i++) {
+                if (strlen(syms[i].name) == sym_len &&
+                    strncmp(syms[i].name, sym_start, sym_len) == 0) {
+                    found = syms[i].value;
+                ok = 1;
+                break;
+                    }
+            }
+
+            if (ok) {
+                char numbuf[32];
+                int n = snprintf(numbuf, sizeof(numbuf), "%ld", found);
+                buf_grow(&out, &out_len, &out_cap, numbuf, (size_t)n);
+            } else {
+                buf_grow(&out, &out_len, &out_cap, sym_start, sym_len);
+            }
+        } else {
+            buf_grow(&out, &out_len, &out_cap, p, 1);
+            p++;
+        }
+    }
+
+    if (out) out[out_len] = '\0';
+    return out;
+}
+
 /* Expand resource macros (e.g. the "sonani" animation macro that emits
    "dc.w anim-Ani_Sonic" table entries) into literal text before parsing.
    Returns a malloc'd buffer the caller must free, or NULL when the text
@@ -1192,7 +1310,8 @@ static char *expand_asm_macros(const char *text) {
         const char *line = p;
         while (*p && *p != '\n') p++;
         size_t ll = (size_t)(p - line);
-        if (*p == '\n') p++;
+        int has_nl = (*p == '\n');
+        if (has_nl) p++;
 
         const char *ins = strip_label(line);
         int m_idx = -1;
@@ -1204,6 +1323,7 @@ static char *expand_asm_macros(const char *text) {
 
         if (m_idx < 0) {
             buf_grow(&out, &out_len, &out_cap, line, ll);
+            if (has_nl) buf_grow(&out, &out_len, &out_cap, "\n", 1);
             continue;
         }
 
@@ -1282,7 +1402,10 @@ static char *expand_asm_macros(const char *text) {
 static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_len) {
     (void)text_len;
     char *expanded = expand_asm_macros(text);
-    const char *p = expanded ? expanded : text;
+    const char *src = expanded ? expanded : text;
+    char *resolved = resolve_equ_symbols(src);
+    const char *p = resolved ? resolved : src;
+
     AnimSeg segs[128] = {0};
     int seg_count = 0;
     char table_name[128][64];
@@ -1388,10 +1511,10 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
     }
 
     *out_len = cursor;
-    if (cursor == 0) { free(expanded); return NULL; }
+    if (cursor == 0) { free(resolved); free(expanded); return NULL; }
 
     uint8_t *out = (uint8_t *)calloc(1, cursor);
-    if (!out) { *out_len = 0; free(expanded); return NULL; }
+    if (!out) { *out_len = 0; free(resolved); free(expanded); return NULL; }
 
     for (int k = 0; k < table_count; k++) {
         size_t off = (ref_idx[k] >= 0) ? seg_pos[ref_idx[k]] + (size_t)table_delta[k] : 0;
@@ -1404,6 +1527,8 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len, size_t *out_le
             memcpy(out + seg_pos[j], segs[j].bytes, segs[j].len);
 
     for (int j = 0; j < 128; j++) free(segs[j].bytes);
+    free(resolved);
+    free(expanded);
     return out;
 }
 
