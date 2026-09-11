@@ -1,7 +1,9 @@
 #include "vdp.h"
 #include "ram.h"
 #include "palette.h"
+#include "collision.h"
 #include <SDL2/SDL.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -282,6 +284,122 @@ static void render_vram_viewer(void) {
     SDL_RenderPresent(g_vram_ren);
 }
 
+/* ============================================================================
+   Debug collision overlay. Activar con SONIC_DEBUG_COLLISION=1.
+   ============================================================================ */
+static int _dbg_col_init = -1;
+static int _dbg_col_on = 0;
+static int _dbg_col_fill = 0;   /* SONIC_DEBUG_COLLISION=fill → relleno, no borde */
+
+static void debug_collision_overlay(uint32_t *pix) {
+    if (_dbg_col_init < 0) {
+        _dbg_col_init = 1;
+        const char *v = getenv("SONIC_DEBUG_COLLISION");
+        if (v) {
+            _dbg_col_on = 1;
+            if (v[0] == 'f' || v[0] == 'F') _dbg_col_fill = 1;
+        }
+    }
+    if (!_dbg_col_on) return;
+    if (!col_index_ptr) return;
+
+    int cam_x = (int16_t)v_screenposx;
+    int cam_y = (int16_t)v_screenposy;
+    uint8_t *player = RAM_ADDR(v_player);
+
+    /* Recorremos celdas de 16x16 desde un poco antes de la cámara hasta un poco
+       después, redondeando a múltiplos de 16. */
+    int cell_x0 = (cam_x - 16) & ~0xF;
+    int cell_y0 = (cam_y - 16) & ~0xF;
+    int cells_w = (320 + 64) / 16;
+    int cells_h = (224 + 64) / 16;
+
+    for (int cy = 0; cy < cells_h; cy++) {
+        for (int cx = 0; cx < cells_w; cx++) {
+            int world_x = cell_x0 + cx * 16 + 8;   /* centro de la celda */
+            int world_y = cell_y0 + cy * 16 + 8;
+            int screen_x = world_x - cam_x - 8;    /* esquina superior izq */
+            int screen_y = world_y - cam_y - 8;
+
+            if (screen_x + 16 <= 0 || screen_x >= SCREEN_WIDTH) continue;
+            if (screen_y + 16 <= 0 || screen_y >= SCREEN_HEIGHT) continue;
+
+            uint8_t *a1;
+            uint16_t word;
+            FindNearestTile((int16_t)world_y, (int16_t)world_x,
+                            player, &a1, &word);
+
+            uint16_t block = word & 0x7FF;
+            if (block == 0) continue;   /* chunk vacío */
+
+            int s_top = (word >> 13) & 1;   /* bit 13: sólido por arriba */
+            int s_lr  = (word >> 14) & 1;   /* bit 14: sólido por lados */
+            int s_bot = (word >> 15) & 1;   /* bit 15: sólido por abajo */
+
+            /* Color por combinación de bits de solidez */
+            uint32_t color;
+            if      (s_top && s_lr && s_bot) color = 0xFFFF00FF; /* magenta: full solid */
+            else if (s_top && s_lr)          color = 0xFFFFFF00; /* amarillo: top+lr */
+            else if (s_top && s_bot)         color = 0xFF00FFFF; /* cyan: top+bot */
+            else if (s_lr  && s_bot)         color = 0xFF8080FF; /* azul claro: lr+bot */
+            else if (s_top)                  color = 0xFF00FF00; /* verde: solo top */
+            else if (s_lr)                   color = 0xFF0000FF; /* azul: solo lado */
+            else if (s_bot)                  color = 0xFF00A0FF; /* naranja: solo bottom */
+            else                             color = 0xFFFF0000; /* rojo: no sólido */
+
+            /* Dibujar */
+            for (int j = 0; j < 16; j++) {
+                int y = screen_y + j;
+                if (y < 0 || y >= SCREEN_HEIGHT) continue;
+                for (int i = 0; i < 16; i++) {
+                    int x = screen_x + i;
+                    if (x < 0 || x >= SCREEN_WIDTH) continue;
+                    int is_border = (i == 0 || i == 15 || j == 0 || j == 15);
+                    if (_dbg_col_fill || is_border)
+                        pix[y * SCREEN_WIDTH + x] = color;
+                }
+            }
+        }
+    }
+
+    /* --- Hitbox de Sonic --- */
+    int sw = (int8_t)obWidth(player);
+    int sh = (int8_t)obHeight(player);
+    int son_x = (int16_t)obX(player) - cam_x;
+    int son_y = (int16_t)obY(player) - cam_y;
+
+    int hb_left   = son_x - sw;
+    int hb_right  = son_x + sw - 1;
+    int hb_top    = son_y - sh;
+    int hb_bottom = son_y + sh - 1;
+
+    for (int i = hb_left; i <= hb_right; i++) {
+        if (i < 0 || i >= SCREEN_WIDTH) continue;
+        if (hb_top >= 0 && hb_top < SCREEN_HEIGHT)
+            pix[hb_top * SCREEN_WIDTH + i] = 0xFFFF0000;
+        if (hb_bottom >= 0 && hb_bottom < SCREEN_HEIGHT)
+            pix[hb_bottom * SCREEN_WIDTH + i] = 0xFFFF0000;
+    }
+    for (int j = hb_top; j <= hb_bottom; j++) {
+        if (j < 0 || j >= SCREEN_HEIGHT) continue;
+        if (hb_left >= 0 && hb_left < SCREEN_WIDTH)
+            pix[j * SCREEN_WIDTH + hb_left] = 0xFFFF0000;
+        if (hb_right >= 0 && hb_right < SCREEN_WIDTH)
+            pix[j * SCREEN_WIDTH + hb_right] = 0xFFFF0000;
+    }
+
+    /* --- Cross en los pies (origen de FindFloor) --- */
+    int feet_y = son_y + sh;
+    for (int i = -5; i <= 5; i++) {
+        int px = son_x + i;
+        if (px >= 0 && px < SCREEN_WIDTH && feet_y >= 0 && feet_y < SCREEN_HEIGHT)
+            pix[feet_y * SCREEN_WIDTH + px] = 0xFFFFFF00;
+        int py = feet_y + i;
+        if (son_x >= 0 && son_x < SCREEN_WIDTH && py >= 0 && py < SCREEN_HEIGHT)
+            pix[py * SCREEN_WIDTH + son_x] = 0xFFFFFF00;
+    }
+}
+
 void VDP_RenderFrame(SDL_Renderer *renderer) {
     /* Create or update texture */
     if (!vdp.framebuffer) {
@@ -489,6 +607,7 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
     /* Persist frame for VDP_SaveScreenshot */
     memcpy(last_frame, pix, SCREEN_WIDTH * SCREEN_HEIGHT * 4);
 
+    debug_collision_overlay(pix);
     SDL_UnlockTexture(vdp.framebuffer);
 
     /* Present */

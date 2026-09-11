@@ -2128,14 +2128,23 @@ static void Sonic_FloorLeft(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     int16_t d1;
 
-    /* Pared izquierda: restar, no sumar */
     d1 = Sonic_FindWallLeft_Quick(o);
     if (d1 < 0) {
-        obX(o) = (int16_t)(obX(o) - d1);
+        obX(o) = (int16_t)(obX(o) - d1);   /* SUB, per fix anterior */
         obVelX(o) = 0;
         obInertia(o) = obVelY(o);
         return;
     }
+
+    Sonic_FindCeiling(o, NULL, &d1, NULL);
+    if (d1 < 0) {
+        obY(o) = (int16_t)(obY(o) - d1);   /* SUB */
+        if (obVelY(o) < 0) {
+            obVelY(o) = 0;
+        }
+        return;
+    }
+
     if (obVelY(o) >= 0) {
         return;
     }
@@ -2144,7 +2153,6 @@ static void Sonic_FloorLeft(void *obj) {
         return;
     }
     obY(o) = (int16_t)(obY(o) + d1);
-    obAngle(o) = 0;
     Sonic_ResetOnFloor(o);
     obAnim(o) = id_Walk;
     obVelY(o) = 0;
@@ -2168,7 +2176,7 @@ static void Sonic_FloorUp(void *obj) {
     }
     Sonic_FindCeiling(o, NULL, &d1, NULL);
     if (d1 < 0) {
-        obY(o) = (int16_t)(obY(o) + d1);
+        obY(o) = (int16_t)(obY(o) - d1);   /* SUB, no sum */
         if (obVelY(o) < 0) {
             obVelY(o) = 0;
         }
@@ -2186,16 +2194,28 @@ static void Sonic_FloorRight(void *obj) {
         obInertia(o) = obVelY(o);
         return;
     }
-    if (obVelY(o) >= 0) {
-        return;
-    }
+
     Sonic_FindCeiling(o, NULL, &d1, NULL);
     if (d1 < 0) {
-        obY(o) = (int16_t)(obY(o) + d1);
+        obY(o) = (int16_t)(obY(o) - d1);   /* SUB */
         if (obVelY(o) < 0) {
             obVelY(o) = 0;
         }
+        return;
     }
+
+    if (obVelY(o) >= 0) {
+        return;
+    }
+    Sonic_FindFloor(o, NULL, &d1, NULL);
+    if (d1 >= 0) {
+        return;
+    }
+    obY(o) = (int16_t)(obY(o) + d1);
+    Sonic_ResetOnFloor(o);
+    obAnim(o) = id_Walk;
+    obVelY(o) = 0;
+    obInertia(o) = obVelX(o);
 }
 
 void Sonic_ResetOnFloor(void *obj) {
@@ -2317,6 +2337,7 @@ static void Sonic_AngleSpeed(void *obj) {
     CalcSine(obAngle(o), &s0, &s1);
     obVelX(o) = (int16_t)(((int32_t)s1 * obInertia(o)) >> 8);
     obVelY(o) = (int16_t)(((int32_t)s0 * obInertia(o)) >> 8);
+    Sonic_WallSpeedAdjust(o);   /* ASM cae aquí */
 }
 
 static void Sonic_ResetScr(void *obj) {
@@ -2408,9 +2429,9 @@ static void Sonic_WallSpeedAdjust(void *obj) {
     {
         uint8_t d0 = obAngle(o);
         int16_t d1 = 0x40;
-        if (obInertia(o) < 0) {
-            d1 = -0x40;
-        }
+    if (obInertia(o) >= 0) {
+       d1 = -0x40;
+    }
         d0 = d0 + d1;
         {
             int16_t dist = Sonic_CalcRoomAhead(o, d0);

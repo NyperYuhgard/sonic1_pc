@@ -174,14 +174,10 @@ void WaitForVBlank(void) {
     /* Process SDL events */
     ProcessSDLEvents();
 
-    /* Frame timing: wait for ~16.67ms (60 FPS) */
-    static uint32_t last_frame_time = 0;
-    uint32_t now = SDL_GetTicks();
-    uint32_t elapsed = now - last_frame_time;
-    if (elapsed < 16) {
-        SDL_Delay(16 - elapsed);
-    }
-    last_frame_time = SDL_GetTicks();
+    /* NOTA: NO añadir SDL_Delay aquí. El renderer usa SDL_RENDERER_PRESENTVSYNC,
+       que ya bloquea en SDL_RenderPresent hasta el siguiente refresco del
+       monitor (~16.67 ms a 60 Hz). Añadir un SDL_Delay extra doblaría el
+       tiempo de frame y la física correría a la mitad de velocidad. */
 
     /* Dispatch VBlank handler based on v_vblank_routine */
     uint8_t routine = v_vblank_routine;
@@ -194,11 +190,6 @@ void WaitForVBlank(void) {
     case id_VBlank_Title:        VBlank_StandardTransfers(); break;
     case id_VBlank_Levels:
         VBlank_StandardTransfers();
-
-        /* sonic.asm:840-843: copy screen positions + scroll flags to the _dup
-           backup RAM used by LoadTilesAsYouMove. movem.l d0-d7 covers the 4
-           x/y longs ($F700-$F71F -> $FF10-$FF2F), movem.l d0-d1 the 4 scroll
-           flag words ($F754-$F75B -> $FF30-$FF37). */
         v_screenposx_dup   = v_screenposx;
         v_screenposy_dup   = v_screenposy;
         v_bgscreenposx_dup = v_bgscreenposx;
@@ -211,10 +202,9 @@ void WaitForVBlank(void) {
         v_bg1_scroll_flags_dup = v_bg1_scroll_flags;
         v_bg2_scroll_flags_dup = v_bg2_scroll_flags;
         v_bg3_scroll_flags_dup = v_bg3_scroll_flags;
-
-        LoadTilesAsYouMove();  /* ASM VBlank_UpdateScreen: strip redraw first */
-        AnimateLevelAct();     /* ASM VBlank_UpdateScreen: AnimateLevelGfx before HUD_Update */
-        HUD_Update();          /* ASM VBlank_Levels -> VBlank_UpdateScreen -> HUD_Update */
+        LoadTilesAsYouMove();
+        AnimateLevelAct();
+        HUD_Update();
         break;
     default:                     VBlank_StandardTransfers(); break;
     }
@@ -222,7 +212,8 @@ void WaitForVBlank(void) {
     /* Update sound */
     Sound_Update();
 
-    /* Render VDP frame */
+    /* Render VDP frame (SDL_RenderPresent dentro de VDP_RenderFrame
+       es lo que aplica el Vsync y da el timing de 60 Hz) */
     VDP_RenderFrame(renderer);
 
     /* Increment frame counters */

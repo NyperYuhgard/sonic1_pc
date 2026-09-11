@@ -831,7 +831,7 @@ static void Level_Enter(void) {
     LoadTilesFromStart();          /* draw FG + BG once before fade-in */
 
     ConvertCollisionArray();       /* no-op stub */
-    ColIndexLoad();                /* stub — sets v_collindex */
+    ColIndexLoad();                /* sets v_collindex */
     LZWaterFeatures();             /* stub — no-op for GHZ */
 
     /* Spawn player and HUD */

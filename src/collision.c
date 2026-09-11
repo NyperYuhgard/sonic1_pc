@@ -495,23 +495,26 @@ int16_t Sonic_CalcHeadroom(void *obj, uint8_t angle_inverted) {
     v_anglebuffer2 = angle_inverted;
 
     uint8_t d0 = (uint8_t)(angle_inverted + 0x20) & 0xC0;
-    if (d0 == 0x40) {                       /* left-facing wall: ceiling is left */
+    if (d0 == 0x40) {
         int16_t d1;
         Sonic_FindWallLeft(obj, NULL, &d1, NULL);
         return d1;
     }
-    if (d0 == 0x80) {                       /* on the ground: ceiling above */
+    if (d0 == 0x80) {
         int16_t d1;
         Sonic_FindCeiling(obj, NULL, &d1, NULL);
         return d1;
     }
-    if (d0 == 0xC0) {                       /* right-facing wall: ceiling is right */
+    if (d0 == 0xC0) {
         int16_t d1;
         Sonic_FindWallRight(obj, NULL, &d1, NULL);
         return d1;
     }
-    /* Angle 0: the asm falls through without touching d1. */
-    return 0;
+
+    /* El ASM cae aquí sin tocar d1 (queda undefined). En la práctica
+       significa "sin techo detectado". Devolvemos un valor grande para
+       que `if (headroom < 6)` no bloquee el salto. */
+    return 0x7FFF;
 }
 
 /* ===========================================================================
@@ -809,13 +812,11 @@ void ObjectFall(void *obj) {
     int32_t y = ((int32_t)obY(o) << 16) | (uint16_t)obSubpixelY(o);
 
     int32_t vel_x = (int32_t)obVelX(o) << 8;
-    int32_t vel_y = (int32_t)obVelY(o) << 8;
+    int32_t vel_y = (int32_t)obVelY(o) << 8;   /* velocidad VIEJA */
+
+    obVelY(o) = (int16_t)(obVelY(o) + gravity); /* gravedad se aplica DESPUÉS */
 
     x += vel_x;
-
-    obVelY(o) = (int16_t)(obVelY(o) + gravity);
-    vel_y = (int32_t)obVelY(o) << 8;
-
     y += vel_y;
 
     obX(o) = (int16_t)(x >> 16);
