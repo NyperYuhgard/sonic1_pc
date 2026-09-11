@@ -12,6 +12,7 @@ void LevelSizeLoad(void);
 void LevelLayoutLoad(void);
 void DrawChunks(void);
 void LoadTilesFromStart(void);
+void LoadTilesAsYouMove(void);
 void LevelDataLoad(void);
 void LevelHeaders_Init(void);
 

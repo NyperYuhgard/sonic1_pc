@@ -188,8 +188,27 @@ void WaitForVBlank(void) {
     case id_VBlank_Title:        VBlank_StandardTransfers(); break;
     case id_VBlank_Levels:
         VBlank_StandardTransfers();
-        AnimateLevelAct();   /* ASM VBlank_UpdateScreen: AnimateLevelGfx before HUD_Update */
-        HUD_Update();        /* ASM VBlank_Levels -> VBlank_UpdateScreen -> HUD_Update */
+
+        /* sonic.asm:840-843: copy screen positions + scroll flags to the _dup
+           backup RAM used by LoadTilesAsYouMove. movem.l d0-d7 covers the 4
+           x/y longs ($F700-$F71F -> $FF10-$FF2F), movem.l d0-d1 the 4 scroll
+           flag words ($F754-$F75B -> $FF30-$FF37). */
+        v_screenposx_dup   = v_screenposx;
+        v_screenposy_dup   = v_screenposy;
+        v_bgscreenposx_dup = v_bgscreenposx;
+        v_bgscreenposy_dup = v_bgscreenposy;
+        v_bg2screenposx_dup = v_bg2screenposx;
+        v_bg2screenposy_dup = v_bg2screenposy;
+        v_bg3screenposx_dup = v_bg3screenposx;
+        v_bg3screenposy_dup = v_bg3screenposy;
+        v_fg_scroll_flags_dup  = v_fg_scroll_flags;
+        v_bg1_scroll_flags_dup = v_bg1_scroll_flags;
+        v_bg2_scroll_flags_dup = v_bg2_scroll_flags;
+        v_bg3_scroll_flags_dup = v_bg3_scroll_flags;
+
+        LoadTilesAsYouMove();  /* ASM VBlank_UpdateScreen: strip redraw first */
+        AnimateLevelAct();     /* ASM VBlank_UpdateScreen: AnimateLevelGfx before HUD_Update */
+        HUD_Update();          /* ASM VBlank_Levels -> VBlank_UpdateScreen -> HUD_Update */
         break;
     default:                     VBlank_StandardTransfers(); break;
     }

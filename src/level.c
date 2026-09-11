@@ -252,6 +252,16 @@ void LevelSizeLoad(void) {
         p[2] = loop_chunk_nums[zone * 4 + 2];
         p[3] = loop_chunk_nums[zone * 4 + 3];
     }
+
+    /* LevSz_LoadScrollBlockSize (REV00): load scroll block sizes for BG
+       deformation from the table (LevelSizeLoad & BgScrollSpeed.asm:246-254). */
+    if (zone < 7) {
+        const uint16_t *src = &bg_scroll_block_sizes[zone * 4];
+        v_scroll_block_1_size = src[0];
+        v_scroll_block_2_size = src[1];
+        v_scroll_block_3_size = src[2];
+        v_scroll_block_4_size = src[3];
+    }
 }
 
 /* ===================================================================
@@ -496,6 +506,184 @@ void DrawChunks(void) {
                       (int16_t)RAM_WORD(0xF708),   /* v_bgscreenposx */
                       (int16_t)RAM_WORD(0xF70C),   /* v_bgscreenposy */
                       RAM_ADDR(v_lvllayout_bg));
+}
+
+/* ===================================================================
+   Strip drawing — incremental redraw (Level Drawing (REV00).asm)
+   DrawBlocks_LR_2 / DrawBlocks_TB_2 / DrawBG_Top / DrawBG_Bottom /
+   LoadTilesAsYouMove
+   =================================================================== */
+
+/* Draw a horizontal row of blocks (DrawBlocks_LR_2 equivalent).
+   d6 = number of blocks to draw minus 1 (inclusive count). */
+static void draw_strip_lr(const uint8_t *layout, int cam_x, int cam_y,
+                           uint32_t plane_base, int screen_y, int screen_x,
+                           int count) {
+    for (int i = 0; i <= count; i++) {
+        int sx = screen_x + i * 16;
+        int sy = screen_y;
+        int block_row = ((cam_y + sy) & 0xF0) >> 4;
+        int col = ((cam_x + sx) & 0x1F0) >> 4;
+        uint32_t vram = plane_base + block_row * 0x100 + col * 4;
+        draw_chunks_block(layout, cam_x, cam_y, sx, sy, vram);
+    }
+}
+
+/* Draw a vertical column of blocks (DrawBlocks_TB_2 equivalent).
+   d6 = number of blocks to draw minus 1 (inclusive count). */
+static void draw_strip_tb(const uint8_t *layout, int cam_x, int cam_y,
+                           uint32_t plane_base, int screen_y, int screen_x,
+                           int count) {
+    for (int i = 0; i <= count; i++) {
+        int sy = screen_y + i * 16;
+        int sx = screen_x;
+        int block_row = ((cam_y + sy) & 0xF0) >> 4;
+        int col = ((cam_x + sx) & 0x1F0) >> 4;
+        uint32_t vram = plane_base + block_row * 0x100 + col * 4;
+        draw_chunks_block(layout, cam_x, cam_y, sx, sy, vram);
+    }
+}
+
+/* Draw BG top section strips (DrawBG_Top at REV00:130-221).
+   Reads and clears flag bits from *flags. cam_x/cam_y come from the
+   _dup screen position. */
+static void draw_bg_top(uint16_t *flags, int cam_x, int cam_y,
+                         uint32_t plane_base, const uint8_t *layout) {
+    if (!(*flags & 0xFF)) return;
+
+    /* bit 0 — draw new tiles at the top (entire plane width) */
+    if (*flags & 0x01) {
+        *flags &= ~0x01;
+        draw_strip_lr(layout, cam_x, cam_y, plane_base,
+                      -16, -16, (512 / 16) - 1);
+    }
+
+    /* bit 1 — draw new tiles at the bottom (entire plane width) */
+    if (*flags & 0x02) {
+        *flags &= ~0x02;
+        draw_strip_lr(layout, cam_x, cam_y, plane_base,
+                      224, -16, (512 / 16) - 1);
+    }
+
+    /* bit 2 — left column, top scroll section */
+    if (*flags & 0x04) {
+        *flags &= ~0x04;
+        int d6 = (int)(int16_t)v_scroll_block_1_size - (cam_y & 0xFFF0);
+        if (d6 >= 0) {
+            d6 >>= 4;
+            if (d6 > ((224 + 16 + 16) / 16) - 1)
+                d6 = (224 + 16 + 16) / 16 - 1;
+            draw_strip_tb(layout, cam_x, cam_y, plane_base,
+                          -16, -16, d6);
+        }
+    }
+
+    /* bit 3 — right column, top scroll section */
+    if (*flags & 0x08) {
+        *flags &= ~0x08;
+        int d6 = (int)(int16_t)v_scroll_block_1_size - (cam_y & 0xFFF0);
+        if (d6 >= 0) {
+            d6 >>= 4;
+            if (d6 > ((224 + 16 + 16) / 16) - 1)
+                d6 = (224 + 16 + 16) / 16 - 1;
+            draw_strip_tb(layout, cam_x, cam_y, plane_base,
+                          -16, 320, d6);
+        }
+    }
+}
+
+/* Draw BG bottom section strips (DrawBG_Bottom at REV00:230-293).
+   The bottom section draws below the scroll-block-A boundary. */
+static void draw_bg_bottom(uint16_t *flags, int cam_x, int cam_y,
+                            uint32_t plane_base, const uint8_t *layout) {
+    if (!(*flags & 0xFF)) return;
+
+    int scroll_a = (int)(int16_t)v_scroll_block_1_size;
+
+    /* bit 2 — left column, bottom section */
+    if (*flags & 0x04) {
+        *flags &= ~0x04;
+        if ((uint16_t)cam_x >= 16) {    /* cmpi.w #16,(a3) ; blo */
+            int d4 = scroll_a - (cam_y & 0xFFF0);
+            if (d4 >= 0) {
+                int d6 = (d4 >> 4) - ((224 + 16) / 16 - 1);
+                if (d6 < 0) {
+                    d6 = -d6;
+                    draw_strip_tb(layout, cam_x, cam_y, plane_base,
+                                  d4, -16, d6);
+                }
+            }
+        }
+    }
+
+    /* bit 3 — right column, bottom section */
+    if (*flags & 0x08) {
+        *flags &= ~0x08;
+        int d4 = scroll_a - (cam_y & 0xFFF0);
+        if (d4 >= 0) {
+            int d6 = (d4 >> 4) - ((224 + 16) / 16 - 1);
+            if (d6 < 0) {
+                d6 = -d6;
+                draw_strip_tb(layout, cam_x, cam_y, plane_base,
+                              d4, 320, d6);
+            }
+        }
+    }
+}
+
+/* Strip drawing: incremental redraw of FG + BG while screen is moving
+   (LoadTilesAsYouMove at REV00:31-121).
+   Called from VBlank after the _dup position/flag copies. */
+void LoadTilesAsYouMove(void) {
+    /* --- BG top section (scroll block A) --- */
+    int bg1x = (int16_t)(uint16_t)v_bgscreenposx_dup;
+    int bg1y = (int16_t)(uint16_t)v_bgscreenposy_dup;
+    draw_bg_top(&v_bg1_scroll_flags_dup, bg1x, bg1y,
+                vram_bg, RAM_ADDR(v_lvllayout_bg));
+
+    /* --- BG bottom section (scroll blocks B/C) --- */
+    int bg2x = (int16_t)(uint16_t)v_bg2screenposx_dup;
+    int bg2y = (int16_t)(uint16_t)v_bg2screenposy_dup;
+    draw_bg_bottom(&v_bg2_scroll_flags_dup, bg2x, bg2y,
+                   vram_bg, RAM_ADDR(v_lvllayout_bg));
+
+    /* --- Foreground --- */
+    uint16_t fgf = v_fg_scroll_flags_dup;
+    if (!(fgf & 0xFF)) return;
+
+    int fgx = (int16_t)(uint16_t)v_screenposx_dup;
+    int fgy = (int16_t)(uint16_t)v_screenposy_dup;
+    const uint8_t *fg_layout = RAM_ADDR(v_lvllayout_fg);
+
+    /* bit 0 — top row */
+    if (fgf & 0x01) {
+        fgf &= ~0x01;
+        draw_strip_lr(fg_layout, fgx, fgy, vram_fg,
+                      -16, -16, ((320 + 16 + 16) / 16) - 1);
+    }
+
+    /* bit 1 — bottom row */
+    if (fgf & 0x02) {
+        fgf &= ~0x02;
+        draw_strip_lr(fg_layout, fgx, fgy, vram_fg,
+                      224, -16, ((320 + 16 + 16) / 16) - 1);
+    }
+
+    /* bit 2 — left column */
+    if (fgf & 0x04) {
+        fgf &= ~0x04;
+        draw_strip_tb(fg_layout, fgx, fgy, vram_fg,
+                      -16, -16, ((224 + 16 + 16) / 16) - 1);
+    }
+
+    /* bit 3 — right column */
+    if (fgf & 0x08) {
+        fgf &= ~0x08;
+        draw_strip_tb(fg_layout, fgx, fgy, vram_fg,
+                      -16, 320, ((224 + 16 + 16) / 16) - 1);
+    }
+
+    v_fg_scroll_flags_dup = fgf;
 }
 
 /* ===================================================================
