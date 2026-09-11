@@ -11,11 +11,22 @@
 #include <limits.h>
 
 /* Object mapping pointers are stored in 32-bit fields (obMap), so mapping
-   data must live below 4 GB. MAP_32BIT asks the kernel for such an address. */
+   data must live below 4 GB. MAP_32BIT asks the kernel for such an address.
+   A size_t header is kept before the data so the mapping can be munmap'd
+   later (the buffer is not a malloc chunk and cannot be free()'d). */
 static const uint8_t *alloc_32bit(size_t n) {
-    void *p = mmap(NULL, n, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
-    return (p == MAP_FAILED) ? NULL : (const uint8_t *)p;
+    size_t hdr = sizeof(size_t);
+    void *base = mmap(NULL, n + hdr, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
+    if (base == MAP_FAILED) return NULL;
+    ((size_t *)base)[0] = n;
+    return (const uint8_t *)base + hdr;
+}
+
+static void free_32bit(const uint8_t *p) {
+    if (!p) return;
+    size_t n = ((const size_t *)p)[-1];
+    munmap((void *)(p - sizeof(size_t)), n + sizeof(size_t));
 }
 
 /* ============================================================================
@@ -849,6 +860,7 @@ int Data_Init(void) {
 
 void Data_Quit(void) {
 #define FREE_ASSET(p) do { Assets_Free(p); p = NULL; } while(0)
+#define MUNMAP_ASSET(p) do { free_32bit(p); p = NULL; } while(0)
     FREE_ASSET(Pal_SegaBG);
     FREE_ASSET(Pal_Sega1);
     FREE_ASSET(Pal_Sega2);
@@ -885,19 +897,19 @@ void Data_Quit(void) {
     FREE_ASSET(Nem_Shield);
     FREE_ASSET(Nem_Stars);
     FREE_ASSET(Nem_TitleCard);
-    FREE_ASSET(Map_Card);
-    FREE_ASSET(Map_Sonic);
+    MUNMAP_ASSET(Map_Card);
+    MUNMAP_ASSET(Map_Sonic);
     FREE_ASSET(Art_Sonic);
-    FREE_ASSET(SonicDynPLC);
-    FREE_ASSET(Ani_Sonic);
+    MUNMAP_ASSET(SonicDynPLC);
+    MUNMAP_ASSET(Ani_Sonic);
     FREE_ASSET(Nem_Hud);
     FREE_ASSET(Nem_Lives);
     FREE_ASSET(Art_Hud);
     FREE_ASSET(Art_LivesNums);
-    FREE_ASSET(Map_HUD);
+    MUNMAP_ASSET(Map_HUD);
     FREE_ASSET(Nem_Ring);
-    FREE_ASSET(Map_Ring);
-    FREE_ASSET(Ani_Ring);
+    MUNMAP_ASSET(Map_Ring);
+    MUNMAP_ASSET(Ani_Ring);
     FREE_ASSET(ObjPos_GHZ1);
     FREE_ASSET(Col_GHZ);
     FREE_ASSET(Art_GhzWater);
