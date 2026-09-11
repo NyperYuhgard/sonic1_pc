@@ -2089,8 +2089,9 @@ static void Sonic_Floor(void *obj) {
 static void Sonic_FloorDown(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     int16_t d0, d1;
+    uint8_t d3;
 
-    /* Pared izquierda: ASM hace `sub.w d1, obX(a0)`, no `add` */
+    /* Pared izquierda: restar, no sumar */
     d1 = Sonic_FindWallLeft_Quick(o);
     if (d1 < 0) {
         obX(o) = (int16_t)(obX(o) - d1);
@@ -2102,8 +2103,8 @@ static void Sonic_FloorDown(void *obj) {
         obVelX(o) = 0;
     }
 
-    /* Sonic_FindFloor devuelve d0 (mayor) y d1 (menor) */
-    Sonic_FindFloor(o, &d0, &d1, NULL);
+    /* Ahora sí capturamos d3 (ángulo de la superficie) */
+    Sonic_FindFloor(o, &d0, &d1, &d3);
     if (d1 >= 0) {
         return;
     }
@@ -2111,26 +2112,61 @@ static void Sonic_FloorDown(void *obj) {
         uint8_t d2 = (uint8_t)obVelY(o);
         d2 = d2 + 8;
         d2 = (uint8_t)(-d2);
-        /* ASM: cmp.b d2,d1 ; bge.s .landed ; cmp.b d2,d0 ; blt.s .return */
         if ((int8_t)d1 < (int8_t)d2) {
             if ((int8_t)d0 < (int8_t)d2) {
                 return;
             }
         }
     }
+
     obY(o) = (int16_t)(obY(o) + d1);
-    obAngle(o) = 0;
+    obSubpixelY(o) = 0;                       /* clr.w obSubpixelY(a0) */
+    obAngle(o) = d3;                          /* ángulo real de la superficie */
     Sonic_ResetOnFloor(o);
     obAnim(o) = id_Walk;
+
+    /* Clasificación de la superficie (FixBugs=0). Con FixBugs=1 sería
+       más elaborado, pero replicamos el original. */
+    {
+        uint8_t tmp = d3;
+        tmp = (uint8_t)(tmp + 0x20);
+        if (tmp & 0x40) {
+            /* Pendiente empinada */
+            obVelX(o) = 0;
+            if ((int16_t)obVelY(o) > 0xFC0) {
+                obVelY(o) = 0xFC0;
+            }
+            obInertia(o) = obVelY(o);
+            if ((int8_t)d3 < 0) {
+                obInertia(o) = (int16_t)(-obInertia(o));
+            }
+            return;
+        }
+        tmp = d3;
+        tmp = (uint8_t)(tmp + 0x10);
+        if (!(tmp & 0x20)) {
+            /* Superficie plana: AHORA SÍ limpia velY */
+            obVelY(o) = 0;
+            obInertia(o) = obVelX(o);
+            return;
+        }
+        /* Pendiente suave: mitades */
+        obVelY(o) = (int16_t)(obVelY(o) >> 1);
+        obInertia(o) = obVelY(o);
+        if ((int8_t)d3 < 0) {
+            obInertia(o) = (int16_t)(-obInertia(o));
+        }
+    }
 }
 
 static void Sonic_FloorLeft(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     int16_t d1;
+    uint8_t d3;
 
     d1 = Sonic_FindWallLeft_Quick(o);
     if (d1 < 0) {
-        obX(o) = (int16_t)(obX(o) - d1);   /* SUB, per fix anterior */
+        obX(o) = (int16_t)(obX(o) - d1);
         obVelX(o) = 0;
         obInertia(o) = obVelY(o);
         return;
@@ -2138,7 +2174,8 @@ static void Sonic_FloorLeft(void *obj) {
 
     Sonic_FindCeiling(o, NULL, &d1, NULL);
     if (d1 < 0) {
-        obY(o) = (int16_t)(obY(o) - d1);   /* SUB */
+        obY(o) = (int16_t)(obY(o) - d1);
+        obSubpixelY(o) = 0;
         if (obVelY(o) < 0) {
             obVelY(o) = 0;
         }
@@ -2148,11 +2185,13 @@ static void Sonic_FloorLeft(void *obj) {
     if (obVelY(o) >= 0) {
         return;
     }
-    Sonic_FindFloor(o, NULL, &d1, NULL);
+    Sonic_FindFloor(o, NULL, &d1, &d3);      /* capturar d3 */
     if (d1 >= 0) {
         return;
     }
     obY(o) = (int16_t)(obY(o) + d1);
+    obSubpixelY(o) = 0;
+    obAngle(o) = d3;
     Sonic_ResetOnFloor(o);
     obAnim(o) = id_Walk;
     obVelY(o) = 0;
@@ -2186,6 +2225,7 @@ static void Sonic_FloorUp(void *obj) {
 static void Sonic_FloorRight(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     int16_t d1;
+    uint8_t d3;
 
     d1 = Sonic_FindWallRight_Quick(o);
     if (d1 < 0) {
@@ -2197,7 +2237,8 @@ static void Sonic_FloorRight(void *obj) {
 
     Sonic_FindCeiling(o, NULL, &d1, NULL);
     if (d1 < 0) {
-        obY(o) = (int16_t)(obY(o) - d1);   /* SUB */
+        obY(o) = (int16_t)(obY(o) - d1);
+        obSubpixelY(o) = 0;
         if (obVelY(o) < 0) {
             obVelY(o) = 0;
         }
@@ -2207,11 +2248,13 @@ static void Sonic_FloorRight(void *obj) {
     if (obVelY(o) >= 0) {
         return;
     }
-    Sonic_FindFloor(o, NULL, &d1, NULL);
+    Sonic_FindFloor(o, NULL, &d1, &d3);
     if (d1 >= 0) {
         return;
     }
     obY(o) = (int16_t)(obY(o) + d1);
+    obSubpixelY(o) = 0;
+    obAngle(o) = d3;
     Sonic_ResetOnFloor(o);
     obAnim(o) = id_Walk;
     obVelY(o) = 0;

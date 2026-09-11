@@ -36,6 +36,7 @@
 #define id_VBlank_Title        0x04
 #define id_VBlank_Levels       0x08
 #define id_VBlank_SpecialStage 0x0A
+#define id_VBlank_Paused       0x10
 #define id_VBlank_PaletteFade  0x12
 #define id_VBlank_SegaPCM      0x14
 
@@ -188,6 +189,7 @@ void WaitForVBlank(void) {
     case id_VBlank_PaletteFade:  VBlank_PaletteFade();  break;
     case id_VBlank_SegaPCM:      VBlank_SegaPCM();      break;
     case id_VBlank_Title:        VBlank_StandardTransfers(); break;
+    case id_VBlank_Paused:
     case id_VBlank_Levels:
         VBlank_StandardTransfers();
         v_screenposx_dup   = v_screenposx;

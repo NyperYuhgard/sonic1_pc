@@ -2,6 +2,7 @@
 #include "ram.h"
 #include "palette.h"
 #include "collision.h"
+#include "data.h"
 #include <SDL2/SDL.h>
 #include <stdlib.h>
 #include <string.h>
@@ -302,61 +303,128 @@ static void debug_collision_overlay(uint32_t *pix) {
     }
     if (!_dbg_col_on) return;
     if (!col_index_ptr) return;
+    if (!Col_AngleMap || !Col_CollArray1 || !Col_CollArray2) return;
 
     int cam_x = (int16_t)v_screenposx;
     int cam_y = (int16_t)v_screenposy;
     uint8_t *player = RAM_ADDR(v_player);
 
-    /* Recorremos celdas de 16x16 desde un poco antes de la cámara hasta un poco
-       después, redondeando a múltiplos de 16. */
     int cell_x0 = (cam_x - 16) & ~0xF;
     int cell_y0 = (cam_y - 16) & ~0xF;
-    int cells_w = (320 + 64) / 16;
-    int cells_h = (224 + 64) / 16;
+    int cells_w = (320 + 64) / 16 + 2;
+    int cells_h = (224 + 64) / 16 + 2;
 
     for (int cy = 0; cy < cells_h; cy++) {
         for (int cx = 0; cx < cells_w; cx++) {
-            int world_x = cell_x0 + cx * 16 + 8;   /* centro de la celda */
-            int world_y = cell_y0 + cy * 16 + 8;
-            int screen_x = world_x - cam_x - 8;    /* esquina superior izq */
-            int screen_y = world_y - cam_y - 8;
+            int world_x = cell_x0 + cx * 16;
+            int world_y = cell_y0 + cy * 16;
+            int screen_x0 = world_x - cam_x;
+            int screen_y0 = world_y - cam_y;
 
-            if (screen_x + 16 <= 0 || screen_x >= SCREEN_WIDTH) continue;
-            if (screen_y + 16 <= 0 || screen_y >= SCREEN_HEIGHT) continue;
+            if (screen_x0 + 16 < 0 || screen_x0 >= SCREEN_WIDTH) continue;
+            if (screen_y0 + 16 < 0 || screen_y0 >= SCREEN_HEIGHT) continue;
 
             uint8_t *a1;
             uint16_t word;
-            FindNearestTile((int16_t)world_y, (int16_t)world_x,
+            FindNearestTile((int16_t)(world_y + 8), (int16_t)(world_x + 8),
                             player, &a1, &word);
 
-            uint16_t block = word & 0x7FF;
-            if (block == 0) continue;   /* chunk vacío */
+            uint16_t block_id = word & 0x7FF;
+            if (block_id == 0) continue;
 
-            int s_top = (word >> 13) & 1;   /* bit 13: sólido por arriba */
-            int s_lr  = (word >> 14) & 1;   /* bit 14: sólido por lados */
-            int s_bot = (word >> 15) & 1;   /* bit 15: sólido por abajo */
+            int s_top = (word >> 13) & 1;
+            int s_lr  = (word >> 14) & 1;
+            int s_bot = (word >> 15) & 1;
+            int xflip = (word >> 11) & 1;
+            int yflip = (word >> 12) & 1;
 
-            /* Color por combinación de bits de solidez */
-            uint32_t color;
-            if      (s_top && s_lr && s_bot) color = 0xFFFF00FF; /* magenta: full solid */
-            else if (s_top && s_lr)          color = 0xFFFFFF00; /* amarillo: top+lr */
-            else if (s_top && s_bot)         color = 0xFF00FFFF; /* cyan: top+bot */
-            else if (s_lr  && s_bot)         color = 0xFF8080FF; /* azul claro: lr+bot */
-            else if (s_top)                  color = 0xFF00FF00; /* verde: solo top */
-            else if (s_lr)                   color = 0xFF0000FF; /* azul: solo lado */
-            else if (s_bot)                  color = 0xFF00A0FF; /* naranja: solo bottom */
-            else                             color = 0xFFFF0000; /* rojo: no sólido */
+            /* --- Borde de la celda 16x16 (referencia de la rejilla) --- */
+            uint32_t border_color;
+            if (s_top && s_lr && s_bot) border_color = 0xFF505050;
+            else if (s_top)             border_color = 0xFF008000;
+            else if (s_lr)              border_color = 0xFF000080;
+            else if (s_bot)             border_color = 0xFF808000;
+            else                        border_color = 0xFF400000;
 
-            /* Dibujar */
-            for (int j = 0; j < 16; j++) {
-                int y = screen_y + j;
-                if (y < 0 || y >= SCREEN_HEIGHT) continue;
+            if (_dbg_col_fill) {
+                for (int j = 0; j < 16; j++) {
+                    int y = screen_y0 + j;
+                    if (y < 0 || y >= SCREEN_HEIGHT) continue;
+                    for (int i = 0; i < 16; i++) {
+                        int x = screen_x0 + i;
+                        if (x < 0 || x >= SCREEN_WIDTH) continue;
+                        if (i == 0 || i == 15 || j == 0 || j == 15)
+                            pix[y * SCREEN_WIDTH + x] = border_color;
+                    }
+                }
+            } else {
                 for (int i = 0; i < 16; i++) {
-                    int x = screen_x + i;
-                    if (x < 0 || x >= SCREEN_WIDTH) continue;
-                    int is_border = (i == 0 || i == 15 || j == 0 || j == 15);
-                    if (_dbg_col_fill || is_border)
-                        pix[y * SCREEN_WIDTH + x] = color;
+                    int x1 = screen_x0 + i, y1 = screen_y0;
+                    int x2 = screen_x0, y2 = screen_y0 + i;
+                    if (x1 >= 0 && x1 < SCREEN_WIDTH && y1 >= 0 && y1 < SCREEN_HEIGHT)
+                        pix[y1 * SCREEN_WIDTH + x1] = border_color;
+                    if (x2 >= 0 && x2 < SCREEN_WIDTH && y2 >= 0 && y2 < SCREEN_HEIGHT)
+                        pix[y2 * SCREEN_WIDTH + x2] = border_color;
+                }
+            }
+
+            /* --- Perfil REAL de la colisión --- */
+            uint8_t hmap_id = col_index_ptr[block_id];
+            if (hmap_id == 0) continue;
+
+            /* Ángulo (afectado por xflip/yflip) */
+            uint8_t angle = Col_AngleMap[hmap_id];
+            if (xflip) angle = (uint8_t)(0 - angle);
+            if (yflip) {
+                angle = (uint8_t)(angle + 0x40);
+                angle = (uint8_t)(0 - angle);
+                angle = (uint8_t)(angle - 0x40);
+            }
+
+            /* Color según ángulo:
+               amarillo = plano, rojo = boca abajo, cian = inclinado */
+            uint32_t line_color;
+            if (angle == 0)          line_color = 0xFFFFFF00;  /* plano */
+            else if (angle == 0x80)  line_color = 0xFFFF4040;  /* boca abajo */
+            else                     line_color = 0xFF00FFFF;  /* inclinado */
+
+            /* --- Perfil de SUELO (CollArray1) --- */
+            if (s_top) {
+                const uint8_t *hmap = &Col_CollArray1[hmap_id * 16];
+                for (int col = 0; col < 16; col++) {
+                    int c = xflip ? (15 - col) : col;
+                    int8_t h = (int8_t)hmap[c];
+                    int py;
+                    if (h == 0x10) {
+                        py = screen_y0;               /* max floor = tope de la celda */
+                    } else if (h > 0) {
+                        py = screen_y0 + (0xF - h);   /* superficie exacta */
+                    } else {
+                        continue;                      /* 0 = vacío, <0 = techo */
+                    }
+                    int px = screen_x0 + col;
+                    if (px >= 0 && px < SCREEN_WIDTH && py >= 0 && py < SCREEN_HEIGHT)
+                        pix[py * SCREEN_WIDTH + px] = line_color;
+                }
+            }
+
+            /* --- Perfil de PARED (CollArray2) --- */
+            if (s_lr) {
+                const uint8_t *hmap = &Col_CollArray2[hmap_id * 16];
+                for (int row = 0; row < 16; row++) {
+                    int r = yflip ? (15 - row) : row;
+                    int8_t h = (int8_t)hmap[r];
+                    int px;
+                    if (h == 0x10) {
+                        px = screen_x0;               /* max = borde izquierdo */
+                    } else if (h > 0) {
+                        px = screen_x0 + (0xF - h);   /* superficie exacta */
+                    } else {
+                        continue;
+                    }
+                    int py = screen_y0 + row;
+                    if (px >= 0 && px < SCREEN_WIDTH && py >= 0 && py < SCREEN_HEIGHT)
+                        pix[py * SCREEN_WIDTH + px] = line_color;
                 }
             }
         }
@@ -376,28 +444,33 @@ static void debug_collision_overlay(uint32_t *pix) {
     for (int i = hb_left; i <= hb_right; i++) {
         if (i < 0 || i >= SCREEN_WIDTH) continue;
         if (hb_top >= 0 && hb_top < SCREEN_HEIGHT)
-            pix[hb_top * SCREEN_WIDTH + i] = 0xFFFF0000;
+            pix[hb_top * SCREEN_WIDTH + i] = 0xFFFF2020;
         if (hb_bottom >= 0 && hb_bottom < SCREEN_HEIGHT)
-            pix[hb_bottom * SCREEN_WIDTH + i] = 0xFFFF0000;
+            pix[hb_bottom * SCREEN_WIDTH + i] = 0xFFFF2020;
     }
     for (int j = hb_top; j <= hb_bottom; j++) {
         if (j < 0 || j >= SCREEN_HEIGHT) continue;
         if (hb_left >= 0 && hb_left < SCREEN_WIDTH)
-            pix[j * SCREEN_WIDTH + hb_left] = 0xFFFF0000;
+            pix[j * SCREEN_WIDTH + hb_left] = 0xFFFF2020;
         if (hb_right >= 0 && hb_right < SCREEN_WIDTH)
-            pix[j * SCREEN_WIDTH + hb_right] = 0xFFFF0000;
+            pix[j * SCREEN_WIDTH + hb_right] = 0xFFFF2020;
     }
 
-    /* --- Cross en los pies (origen de FindFloor) --- */
+    /* --- Origen de FindFloor: (obX, obY + obHeight) --- */
+    int feet_x = son_x;
     int feet_y = son_y + sh;
-    for (int i = -5; i <= 5; i++) {
-        int px = son_x + i;
-        if (px >= 0 && px < SCREEN_WIDTH && feet_y >= 0 && feet_y < SCREEN_HEIGHT)
-            pix[feet_y * SCREEN_WIDTH + px] = 0xFFFFFF00;
-        int py = feet_y + i;
-        if (son_x >= 0 && son_x < SCREEN_WIDTH && py >= 0 && py < SCREEN_HEIGHT)
-            pix[py * SCREEN_WIDTH + son_x] = 0xFFFFFF00;
+    for (int i = -4; i <= 4; i++) {
+        int px1 = feet_x + i, py1 = feet_y;
+        int px2 = feet_x, py2 = feet_y + i;
+        if (px1 >= 0 && px1 < SCREEN_WIDTH && py1 >= 0 && py1 < SCREEN_HEIGHT)
+            pix[py1 * SCREEN_WIDTH + px1] = 0xFFFFFFFF;
+        if (px2 >= 0 && px2 < SCREEN_WIDTH && py2 >= 0 && py2 < SCREEN_HEIGHT)
+            pix[py2 * SCREEN_WIDTH + px2] = 0xFFFFFFFF;
     }
+
+    /* --- Origen de Sonic (obX, obY) como referencia --- */
+    if (son_x >= 0 && son_x < SCREEN_WIDTH && son_y >= 0 && son_y < SCREEN_HEIGHT)
+        pix[son_y * SCREEN_WIDTH + son_x] = 0xFF00FF00;
 }
 
 void VDP_RenderFrame(SDL_Renderer *renderer) {

@@ -24,6 +24,7 @@ extern void WaitForVBlank(void);
 #define id_VBlank_Lag          0x00
 #define id_VBlank_TitleCards   0x0C
 #define id_VBlank_Levels       0x08
+#define id_VBlank_Paused       0x10
 
 /* Has Level_Process done its one-time init? */
 static int level_init_done = 0;
@@ -1056,18 +1057,77 @@ void OscillateNumDo(void) {
    PauseGame — basic pause toggle
    =================================================================== */
 void PauseGame(void) {
-    if (joypad_hold[0] & btnStart) {
-        f_pause = 1;
-        Sound_Queue(bgm_Fade, false);
-        while (f_pause) {
-            Input_Read();
-            WaitForVBlank();
-            /* Unpause when Start is pressed again */
-            if (joypad_press[0] & btnStart) {
-                f_pause = 0;
-            }
-        }
+    /* nop */
+
+    /* tst.b v_lives ; beq .unpauseGame */
+    if (v_lives == 0) {
+        goto unpauseGame;
     }
+
+    /* tst.w f_pause ; bne .startPause */
+    if (f_pause != 0) {
+        goto startPause;
+    }
+
+    /* btst #bitStart,(v_jpadpress1) ; beq .return */
+    if (!(v_jpadpress1 & btnStart)) {
+        return;
+    }
+
+startPause:
+    f_pause = 1;
+    /* move.b #1,(v_snddriver_ram.f_pausemusic).w
+       TODO: cuando portees el driver, escribir 1 aquí.
+       Placeholder por ahora: */
+    //Sound_PauseMusic(true);
+
+pauseLoop:
+    /* move.b #id_VBlank_Paused,(v_vblank_routine).w ; bsr WaitForVBlank */
+    v_vblank_routine = id_VBlank_Paused;
+    WaitForVBlank();
+
+    /* tst.b f_slomocheat ; beq .checkUnpausing */
+    if (!f_slomocheat) {
+        goto checkUnpausing;
+    }
+
+    /* btst #bitA,(v_jpadpress1) ; beq .checkSlowMotion */
+    if (v_jpadpress1 & btnA) {
+        v_gamemode = 0x04;   /* id_Title */
+        goto unpauseMusic;
+    }
+
+    /* checkSlowMotion: */
+    /* btst #bitB,(v_jpadhold1) ; bne .slowMotion */
+    if (v_jpadhold1 & btnB) {
+        goto slowMotion;
+    }
+    /* btst #bitC,(v_jpadpress1) ; bne .slowMotion */
+    if (v_jpadpress1 & btnC) {
+        goto slowMotion;
+    }
+
+checkUnpausing:
+    /* btst #bitStart,(v_jpadpress1) ; beq .pauseLoop */
+    if (!(v_jpadpress1 & btnStart)) {
+        goto pauseLoop;
+    }
+
+unpauseMusic:
+    /* move.b #$80,(v_snddriver_ram.f_pausemusic).w
+       TODO: cuando portees el driver, escribir $80 aquí. */
+    //Sound_PauseMusic(false);
+
+unpauseGame:
+    f_pause = 0;
+    /* .return: */
+    return;
+
+slowMotion:
+    f_pause = 1;
+    /* move.b #$80,(v_snddriver_ram.f_pausemusic).w */
+    //Sound_PauseMusic(false);
+    return;
 }
 
 /* ===================================================================
