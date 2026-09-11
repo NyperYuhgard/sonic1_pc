@@ -706,7 +706,8 @@ static void Sonic_Display(void *obj) {
     int16_t flash = flashtime(o);
     if (flash) {
         flashtime(o) = flash - 1;
-        if (!((flash >> 3) & 1)) {
+        /* ASM: lsr.w #3,d0 / bcc — el bit que va al carry es el bit 2 */
+        if (!((flash >> 2) & 1)) {
             goto chk_invincible;
         }
     }
@@ -2087,11 +2088,12 @@ static void Sonic_Floor(void *obj) {
 
 static void Sonic_FloorDown(void *obj) {
     uint8_t *o = (uint8_t *)obj;
-    int16_t d1;
+    int16_t d0, d1;
 
+    /* Pared izquierda: ASM hace `sub.w d1, obX(a0)`, no `add` */
     d1 = Sonic_FindWallLeft_Quick(o);
     if (d1 < 0) {
-        obX(o) = (int16_t)(obX(o) + d1);
+        obX(o) = (int16_t)(obX(o) - d1);
         obVelX(o) = 0;
     }
     d1 = Sonic_FindWallRight_Quick(o);
@@ -2099,7 +2101,9 @@ static void Sonic_FloorDown(void *obj) {
         obX(o) = (int16_t)(obX(o) + d1);
         obVelX(o) = 0;
     }
-    Sonic_FindFloor(o, NULL, &d1, NULL);
+
+    /* Sonic_FindFloor devuelve d0 (mayor) y d1 (menor) */
+    Sonic_FindFloor(o, &d0, &d1, NULL);
     if (d1 >= 0) {
         return;
     }
@@ -2107,8 +2111,11 @@ static void Sonic_FloorDown(void *obj) {
         uint8_t d2 = (uint8_t)obVelY(o);
         d2 = d2 + 8;
         d2 = (uint8_t)(-d2);
-        if ((int8_t)d2 < (int8_t)d1) {
-            return;
+        /* ASM: cmp.b d2,d1 ; bge.s .landed ; cmp.b d2,d0 ; blt.s .return */
+        if ((int8_t)d1 < (int8_t)d2) {
+            if ((int8_t)d0 < (int8_t)d2) {
+                return;
+            }
         }
     }
     obY(o) = (int16_t)(obY(o) + d1);
@@ -2121,9 +2128,10 @@ static void Sonic_FloorLeft(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     int16_t d1;
 
+    /* Pared izquierda: restar, no sumar */
     d1 = Sonic_FindWallLeft_Quick(o);
     if (d1 < 0) {
-        obX(o) = (int16_t)(obX(o) + d1);
+        obX(o) = (int16_t)(obX(o) - d1);
         obVelX(o) = 0;
         obInertia(o) = obVelY(o);
         return;
@@ -2147,9 +2155,10 @@ static void Sonic_FloorUp(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     int16_t d1;
 
+    /* Pared izquierda: restar, no sumar */
     d1 = Sonic_FindWallLeft_Quick(o);
     if (d1 < 0) {
-        obX(o) = (int16_t)(obX(o) + d1);
+        obX(o) = (int16_t)(obX(o) - d1);
         obVelX(o) = 0;
     }
     d1 = Sonic_FindWallRight_Quick(o);
@@ -2317,11 +2326,12 @@ static void Sonic_ResetScr(void *obj) {
         Sonic_CheckDpadLetGo(o);
         return;
     }
+    /* ASM: el +4 y el -2 no son excluyentes; si v_lookshift < $60,
+       primero suma 4 y luego resta 2 (neto +2). */
     if (v_lookshift < 0x60) {
         v_lookshift = v_lookshift + 4;
-    } else {
-        v_lookshift = v_lookshift - 2;
     }
+    v_lookshift = v_lookshift - 2;
     Sonic_CheckDpadLetGo(o);
 }
 
@@ -2571,8 +2581,6 @@ static uint8_t anim_next_frame(uint8_t *o, const uint8_t *a1) {
 
 static void Sonic_Animate(void *obj) {
     uint8_t *o = (uint8_t *)obj;
-        fprintf(stdout, "SAN: anim=%d prev=%d aniframe=%d time=%d\n",
-            obAnim(o), obPrevAni(o), obAniFrame(o), obTimeFrame(o));
     uint8_t anim_id = obAnim(o);
 
     if (anim_id != obPrevAni(o)) {
@@ -2585,7 +2593,7 @@ static void Sonic_Animate(void *obj) {
     uint8_t frame_interval = anim_data[0];
 
     if ((int8_t)frame_interval >= 0) {
-        /* Normal animation — inline SAnim_Do logic (faithful to ASM) */
+        /* Normal animation — inline SAnim_Do logic */
         uint8_t status = obStatus(o);
         uint8_t render = obRender(o);
         render = (render & ~(sprite_xflip | sprite_yflip)) | (status & sprite_xflip);
@@ -2601,13 +2609,11 @@ static void Sonic_Animate(void *obj) {
         uint8_t frame_id = anim_data[1 + frame_idx];
 
         if ((int8_t)frame_id >= 0) {
-        /* Normal frame */
-        obFrame(o) = frame_id;
-        obAniFrame(o) = frame_idx + 1;
+            obFrame(o) = frame_id;
+            obAniFrame(o) = frame_idx + 1;
         } else {
-            /* Special animation flags — cascade like ASM */
             switch (frame_id) {
-                case 0xFF: /* afEnd — loop to beginning */
+                case 0xFF:
                     obAniFrame(o) = 0;
                     frame_id = anim_data[1];
                     {
@@ -2620,7 +2626,7 @@ static void Sonic_Animate(void *obj) {
                     }
                     break;
 
-                case 0xFE: /* afBack — go back N frames */
+                case 0xFE:
                     {
                         uint8_t back = anim_data[2 + frame_idx];
                         obAniFrame(o) -= back;
@@ -2635,20 +2641,20 @@ static void Sonic_Animate(void *obj) {
                     }
                     break;
 
-                case 0xFD: /* afChange — change to different animation */
+                case 0xFD:
                     obAnim(o) = anim_data[2 + frame_idx];
                     break;
 
-                case 0xFC: /* afRoutine — increment routine counter */
+                case 0xFC:
                     obRoutine(o) += 2;
                     break;
 
-                case 0xFB: /* afReset — reset animation and 2nd routine */
+                case 0xFB:
                     obAniFrame(o) = 0;
                     ob2ndRout(o) = 0;
                     break;
 
-                case 0xFA: /* af2ndRoutine — increment 2nd routine counter */
+                case 0xFA:
                     ob2ndRout(o) += 2;
                     break;
             }
@@ -2672,12 +2678,14 @@ static void Sonic_Animate(void *obj) {
                     angle = ~angle;
                 }
                 angle = angle + 0x10;
+
+                /* ASM: d1 = flip flags a inyectar; eor con el flip actual */
+                uint8_t d1 = (angle >= 0x80)
+                             ? (sprite_xflip | sprite_yflip)
+                             : 0;
                 uint8_t render = obRender(o);
-                if (angle >= 0x80) {
-                    render = (render & ~(sprite_xflip | sprite_yflip)) | (sprite_xflip | sprite_yflip);
-                } else {
-                    render = (render & ~(sprite_xflip | sprite_yflip)) | flip;
-                }
+                render = (render & ~(sprite_xflip | sprite_yflip))
+                       | (flip ^ d1);
                 obRender(o) = render;
 
                 if (status & (1 << 5)) {
@@ -2698,7 +2706,7 @@ static void Sonic_Animate(void *obj) {
                 } else {
                     a1 = Ani_Sonic + ((const uint16_t *)Ani_Sonic)[id_Walk];
                     d3 = angle + (angle >> 1);
-                d3 += d3; /* angle * 3 */
+                    d3 += d3;
                 }
 
                 speed = -speed + 0x800;
