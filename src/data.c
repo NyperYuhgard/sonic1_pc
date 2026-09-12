@@ -135,6 +135,13 @@ size_t   Nem_Shield_len = 0;
 const uint8_t *Nem_Stars = NULL;
 size_t   Nem_Stars_len = 0;
 
+const uint8_t *Nem_SignPost = NULL;
+size_t   Nem_SignPost_len = 0;
+const uint8_t *Nem_Bonus = NULL;
+size_t   Nem_Bonus_len = 0;
+const uint8_t *Nem_BigFlash = NULL;
+size_t   Nem_BigFlash_len = 0;
+
 const uint8_t *Nem_Hud = NULL;
 size_t   Nem_Hud_len = 0;
 
@@ -171,6 +178,12 @@ size_t   Map_Ring_len = 0;
 
 const uint8_t *Ani_Ring = NULL;
 size_t   Ani_Ring_len = 0;
+
+const uint8_t *Map_Sign = NULL;
+size_t   Map_Sign_len = 0;
+
+const uint8_t *Ani_Sign = NULL;
+size_t   Ani_Sign_len = 0;
 
 /* Object mappings referenced by the DebugMode item lists.
    Most are unstaged (NULL) until their maps/*.asm assets are ported. */
@@ -302,6 +315,8 @@ size_t   EndingStLocArray_len = 0;
 static int load_asset(const char *name, const uint8_t **out_ptr, size_t *out_len);
 
 static int load_asm_asset(const char *name, const uint8_t **out_ptr, size_t *out_len, int is_map);
+static int load_asm_asset_named(const char *name, const char *tblname,
+                                const uint8_t **out_ptr, size_t *out_len);
 
 static const char *assets_base_path(void) {
     static char base[PATH_MAX];
@@ -427,6 +442,8 @@ int Data_Init(void) {
     Nem_TitleCard_len = 0;
     Map_Card = NULL;
     Map_Card_len = 0;
+    Map_Got = NULL;
+    Map_Got_len = 0;
     Ani_Sonic = NULL;
     Ani_Sonic_len = 0;
     Nem_Hud = NULL;
@@ -590,6 +607,21 @@ int Data_Init(void) {
         Nem_Stars_len = 0;
     }
 
+    if (load_asset("artnem/signpost.nem", &Nem_SignPost, &Nem_SignPost_len) != 0) {
+        Nem_SignPost = NULL;
+        Nem_SignPost_len = 0;
+    }
+
+    if (load_asset("artnem/hidden_bonus.nem", &Nem_Bonus, &Nem_Bonus_len) != 0) {
+        Nem_Bonus = NULL;
+        Nem_Bonus_len = 0;
+    }
+
+    if (load_asset("artnem/bigflash.nem", &Nem_BigFlash, &Nem_BigFlash_len) != 0) {
+        Nem_BigFlash = NULL;
+        Nem_BigFlash_len = 0;
+    }
+
     if (load_asm_asset("anim/titlesonic.asm", &Ani_TSon, &Ani_TSon_len, 0) != 0) {
         Ani_TSon = NULL;
         Ani_TSon_len = 0;
@@ -624,6 +656,16 @@ int Data_Init(void) {
         Map_Card = NULL;
         Map_Card_len = 0;
     }
+
+    /* Map_Got ("SONIC HAS PASSED" card) lives in the same file, as its own
+       mappingsTable block — extract it as a standalone table (frame IDs
+       match the order of Map_Got's mappingsTableEntry.w lines). */
+    if (load_asm_asset_named("maps/titlecard.asm", "Map_Got",
+                             &Map_Got, &Map_Got_len) != 0) {
+        Map_Got = NULL;
+        Map_Got_len = 0;
+    }
+    fprintf(stderr, "Map_Got staged: %p len=%zu\n", (const void *)Map_Got, Map_Got_len);
 
     if (load_asm_asset("maps/sonic.asm", &Map_Sonic, &Map_Sonic_len, 1) != 0) {
         Map_Sonic = NULL;
@@ -731,6 +773,16 @@ int Data_Init(void) {
     if (load_asm_asset("anim/rings.asm", &Ani_Ring, &Ani_Ring_len, 0) != 0) {
         Ani_Ring = NULL;
         Ani_Ring_len = 0;
+    }
+
+    if (load_asm_asset("maps/signpost.asm", &Map_Sign, &Map_Sign_len, 1) != 0) {
+        Map_Sign = NULL;
+        Map_Sign_len = 0;
+    }
+
+    if (load_asm_asset("anim/signpost.asm", &Ani_Sign, &Ani_Sign_len, 0) != 0) {
+        Ani_Sign = NULL;
+        Ani_Sign_len = 0;
     }
 
     if (load_asset("objpos/ghz1.bin", &ObjPos_GHZ1, &ObjPos_GHZ1_len) != 0) {
@@ -936,8 +988,12 @@ void Data_Quit(void) {
     FREE_ASSET(Nem_Monitors);
     FREE_ASSET(Nem_Shield);
     FREE_ASSET(Nem_Stars);
+    FREE_ASSET(Nem_SignPost);
+    FREE_ASSET(Nem_Bonus);
+    FREE_ASSET(Nem_BigFlash);
     FREE_ASSET(Nem_TitleCard);
     MUNMAP_ASSET(Map_Card);
+    MUNMAP_ASSET(Map_Got);
     MUNMAP_ASSET(Map_Sonic);
     FREE_ASSET(Art_Sonic);
     MUNMAP_ASSET(SonicDynPLC);
@@ -950,6 +1006,8 @@ void Data_Quit(void) {
     FREE_ASSET(Nem_Ring);
     MUNMAP_ASSET(Map_Ring);
     MUNMAP_ASSET(Ani_Ring);
+    MUNMAP_ASSET(Map_Sign);
+    MUNMAP_ASSET(Ani_Sign);
     FREE_ASSET(ObjPos_GHZ1);
     FREE_ASSET(Col_GHZ);
     FREE_ASSET(Art_GhzWater);
@@ -1027,6 +1085,8 @@ size_t   Nem_TitleCard_len = 0;
 /* Zone title card sprite mappings */
 const uint8_t *Map_Card = NULL;
 size_t   Map_Card_len = 0;
+const uint8_t *Map_Got = NULL;
+size_t   Map_Got_len = 0;
 
 /* ===========================================================================
    ASM parser for original Sonic 1 anim/map assets
@@ -1752,6 +1812,206 @@ static uint8_t *parse_map_asm(const char *text, size_t text_len, size_t *out_len
     return out;
 }
 
+/* Parse only the mapping table named `tblname` from an ASM mapping file that
+   defines several mappingsTable blocks (e.g. "_maps/Title Cards.asm" holds
+   Map_Card, Map_Got and Map_SSR).  Returns a standalone buffer whose word
+   offsets are relative to its own start, so the runtime frame IDs match the
+   order of the named table's mappingsTableEntry.w lines.  Cross-referenced
+   frames owned by other tables (e.g. Map_Got reusing M_Card_Oval) are
+   duplicated into this buffer. */
+static uint8_t *parse_map_asm_named(const char *text, const char *tblname,
+                                    size_t *out_len) {
+    MapFrame frames[256] = {0};
+    int frame_count = 0;
+    char ent_owner[256][64];
+    char ent_ref[256][64];
+    int ent_delta[256];
+    int ent_count = 0;
+    char cur_table[64] = "";
+
+    const char *p = text;
+    while (*p) {
+        p = skip_comments_and_spaces(p);
+        if (*p == '\0') break;
+
+        const char *lp = p;
+        while (*p && *p != '\n') p++;
+        if (*p == '\n') p++;
+
+        const char *ins = strip_label(lp);
+        int has_label = (ins != lp);
+        if (ins == lp) ins = skip_line_indent(ins);
+        if (*ins == '\0') continue;
+
+        char lab[64] = "";
+        if (has_label) {
+            const char *q = lp;
+            size_t nn = 0;
+            while (*q && (isalnum((unsigned char)*q) || *q == '_' || *q == '.') && nn + 1 < 64)
+                lab[nn++] = *q++;
+            lab[nn] = '\0';
+        }
+
+        if (is_directive(ins, "mappingsTableEntry.w")) {
+            if (ent_count < 256) {
+                strncpy(ent_owner[ent_count], cur_table, 63);
+                ent_owner[ent_count][63] = '\0';
+                parse_table_expr(ins + 20, ent_ref[ent_count], 64,
+                                 &ent_delta[ent_count]);
+                ent_count++;
+            }
+            continue;
+        }
+        if (is_directive(ins, "mappingsTable")) {
+            if (has_label && lab[0]) {
+                strncpy(cur_table, lab, 63);
+                cur_table[63] = '\0';
+            }
+            continue;
+        }
+        if (is_directive(ins, "spriteHeader")) {
+            if (frame_count < 256) {
+                frames[frame_count].name[0] = '\0';
+                if (has_label) {
+                    const char *q = lp;
+                    size_t nn = 0;
+                    while (*q && (isalnum((unsigned char)*q) || *q == '_' || *q == '.') && nn + 1 < 64)
+                        frames[frame_count].name[nn++] = *q++;
+                    frames[frame_count].name[nn] = '\0';
+                }
+                frames[frame_count].pieces = NULL;
+                frames[frame_count].count = 0;
+                frame_count++;
+            }
+            continue;
+        }
+        if (is_directive(ins, "spritePiece")) {
+            if (frame_count == 0) continue;
+            MapFrame *fr = &frames[frame_count - 1];
+            const char *dp = ins + 11;
+            const char *args[9];
+            int arg_idx = 0;
+            while (*dp && arg_idx < 9) {
+                dp = skip_comments_and_spaces(dp);
+                if (*dp == '\0' || *dp == ';') break;
+                const char *val_end2 = NULL;
+                parse_asm_number(dp, &val_end2);
+                if (val_end2 == dp) break;
+                args[arg_idx++] = dp;
+                if (arg_idx >= 9) break;
+                dp = val_end2;
+                while (*dp && isspace((unsigned char)*dp)) dp++;
+                if (*dp == ',') dp++;
+            }
+            if (arg_idx < 5) continue;
+
+            long x = parse_asm_number(args[0], NULL);
+            long y = parse_asm_number(args[1], NULL);
+            long w = parse_asm_number(args[2], NULL);
+            long h = parse_asm_number(args[3], NULL);
+            long tile = parse_asm_number(args[4], NULL);
+            long xflip = (arg_idx > 5) ? parse_asm_number(args[5], NULL) : 0;
+            long yflip = (arg_idx > 6) ? parse_asm_number(args[6], NULL) : 0;
+            long pal   = (arg_idx > 7) ? parse_asm_number(args[7], NULL) : 0;
+            long pri   = (arg_idx > 8) ? parse_asm_number(args[8], NULL) : 0;
+
+            if (w < 1) w = 1;
+            if (h < 1) h = 1;
+            if (w > 4) w = 4;
+            if (h > 4) h = 4;
+
+            uint8_t piece[5];
+            piece[0] = (uint8_t)(y & 0xFF);
+            piece[1] = (uint8_t)((((w - 1) & 3) << 2) | ((h - 1) & 3));
+            piece[2] = (uint8_t)(((pri & 1) << 7) | ((pal & 3) << 5) |
+                                 ((yflip & 1) << 4) | ((xflip & 1) << 3) |
+                                 ((tile >> 8) & 7));
+            piece[3] = (uint8_t)(tile & 0xFF);
+            piece[4] = (uint8_t)(x & 0xFF);
+
+            const uint8_t *np = (const uint8_t *)realloc(fr->pieces, (fr->count + 1) * 5);
+            if (!np) continue;
+            fr->pieces = np;
+            memcpy(fr->pieces + fr->count * 5, piece, 5);
+            fr->count++;
+        }
+    }
+
+    /* Keep only the entries owned by the requested table */
+    int sel[256];
+    int feat_count = 0;
+    for (int k = 0; k < ent_count; k++) {
+        if (strncmp(ent_owner[k], tblname, 64) == 0 && feat_count < 256) {
+            sel[feat_count++] = k;
+        }
+    }
+    if (feat_count == 0) {
+        for (int j = 0; j < frame_count; j++) free(frames[j].pieces);
+        return NULL;
+    }
+
+    /* Layout: table of word offsets first, then each referenced frame as
+       [count][pieces] (deduplicated by frame name). */
+    size_t total = 2 * (size_t)feat_count;
+    size_t frame_pos[256];
+    int ref_idx[256];
+    size_t cursor = total;
+
+    for (int j = 0; j < frame_count; j++) frame_pos[j] = (size_t)-1;
+    for (int k = 0; k < feat_count; k++) {
+        int idx = -1;
+        for (int j = 0; j < frame_count; j++) {
+            if (strcmp(frames[j].name, ent_ref[sel[k]]) == 0) {
+                idx = j;
+                break;
+            }
+        }
+        if (idx < 0 && k < frame_count) idx = k;
+        ref_idx[k] = idx;
+        if (idx >= 0 && frame_pos[idx] == (size_t)-1) {
+            frame_pos[idx] = cursor;
+            cursor += 1 + frames[idx].count * 5;
+        }
+    }
+    for (int j = 0; j < frame_count; j++) {
+        if (frame_pos[j] == (size_t)-1) {
+            frame_pos[j] = cursor;
+            cursor += 1 + frames[j].count * 5;
+        }
+    }
+
+    *out_len = cursor;
+    if (cursor == 0) {
+        for (int j = 0; j < frame_count; j++) free(frames[j].pieces);
+        return NULL;
+    }
+
+    uint8_t *out = (uint8_t *)calloc(1, cursor);
+    if (!out) {
+        *out_len = 0;
+        for (int j = 0; j < frame_count; j++) free(frames[j].pieces);
+        return NULL;
+    }
+
+    for (int k = 0; k < feat_count; k++) {
+        size_t off = (ref_idx[k] >= 0)
+                         ? frame_pos[ref_idx[k]] + (size_t)ent_delta[sel[k]]
+                         : 0;
+        out[2 * k]     = (uint8_t)(off & 0xFF);
+        out[2 * k + 1] = (uint8_t)((off >> 8) & 0xFF);
+    }
+
+    for (int j = 0; j < frame_count; j++) {
+        MapFrame *fr = &frames[j];
+        out[frame_pos[j]] = (uint8_t)fr->count;
+        if (fr->pieces)
+            memcpy(out + frame_pos[j] + 1, fr->pieces, fr->count * 5);
+    }
+
+    for (int j = 0; j < frame_count; j++) free(frames[j].pieces);
+    return out;
+}
+
 typedef struct {
     char name[64];
     uint8_t *bytes;
@@ -1945,6 +2205,43 @@ static int load_asm_asset(const char *name, const uint8_t **out_ptr, size_t *out
     if (!low) {
         fprintf(stderr, "[Data] mmap MAP_32BIT failed for: %s\n", path);
         free(data);
+        return -1;
+    }
+    memcpy(low, data, data_len);
+    free((void *)data);
+    register_map(low, data_len);
+    *out_ptr = low;
+    *out_len = data_len;
+    return 0;
+}
+
+/* Like load_asm_asset(), but extracts only the mapping table named `tblname`
+   (e.g. "Map_Got") from a file that defines several of them. */
+static int load_asm_asset_named(const char *name, const char *tblname,
+                                const uint8_t **out_ptr, size_t *out_len) {
+    char path[PATH_MAX + 512];
+    snprintf(path, sizeof(path), "%s/%s", assets_base_path(), name);
+    size_t text_len = 0;
+    char *text = (char *)Assets_Load(path, &text_len);
+    if (!text) {
+        fprintf(stderr, "[Data] Failed to load ASM asset: %s\n", path);
+        return -1;
+    }
+
+    const uint8_t *data = parse_map_asm_named(text, tblname, &text_len);
+    free(text);
+
+    if (!data || text_len == 0) {
+        fprintf(stderr, "[Data] Failed to parse ASM asset (table '%s'): %s\n",
+                tblname, path);
+        return -1;
+    }
+
+    size_t data_len = text_len;
+    const uint8_t *low = alloc_32bit(data_len);
+    if (!low) {
+        fprintf(stderr, "[Data] mmap MAP_32BIT failed for: %s\n", path);
+        free((void *)data);
         return -1;
     }
     memcpy(low, data, data_len);

@@ -317,6 +317,7 @@ static void GotoDemo(void) {
 /* Stub: Start level from title screen */
 static void PlayLevel(void) {
     v_gamemode = GM_Level;
+    v_scorelife = 5000;   /* Revision<>0: extra life awarded at 50000 points */
 }
 
 /* Clear screen alias — used by level.c too */
@@ -641,6 +642,7 @@ static void GM_Title_Screen(void) {
                                 v_rings = 0;
                                 v_time = 0;
                                 v_score = 0;
+                                v_scorelife = 5000;   /* Revision<>0 */
                                 init_done = 0;
                                 return;
                             }

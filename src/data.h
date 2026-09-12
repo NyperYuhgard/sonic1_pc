@@ -126,6 +126,13 @@ extern size_t   Nem_Shield_len;
 extern const uint8_t *Nem_Stars;
 extern size_t   Nem_Stars_len;
 
+extern const uint8_t *Nem_SignPost;
+extern size_t   Nem_SignPost_len;
+extern const uint8_t *Nem_Bonus;
+extern size_t   Nem_Bonus_len;
+extern const uint8_t *Nem_BigFlash;
+extern size_t   Nem_BigFlash_len;
+
 /* Cheat codes */
 extern const uint8_t LevSelCode_US[];
 extern const uint32_t LevSelCode_US_len;
@@ -159,6 +166,10 @@ extern size_t   Nem_TitleCard_len;
 /* Zone title card sprite mappings */
 extern const uint8_t *Map_Card;
 extern size_t   Map_Card_len;
+
+/* "SONIC HAS PASSED" card sprite mappings (same file, own table) */
+extern const uint8_t *Map_Got;
+extern size_t   Map_Got_len;
 
 /* Sonic sprite mappings */
 extern const uint8_t *Map_Sonic;
@@ -194,6 +205,12 @@ extern const uint8_t *Map_Ring;
 extern size_t   Map_Ring_len;
 extern const uint8_t *Ani_Ring;
 extern size_t   Ani_Ring_len;
+
+/* Signpost graphics, mappings and animation scripts */
+extern const uint8_t *Map_Sign;
+extern size_t   Map_Sign_len;
+extern const uint8_t *Ani_Sign;
+extern size_t   Ani_Sign_len;
 
 /* Object mappings referenced by the DebugMode item lists (DebugMode.asm).
    Most are unstaged (NULL) until their maps/*.asm assets are ported; the

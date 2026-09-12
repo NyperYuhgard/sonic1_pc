@@ -48,6 +48,10 @@ static inline int Object_GetIndex(void *obj) {
    The output regs map to salsa columns: d0 = *s0, d1 = *s1 (both words). */
 void CalcSine(int angle, int16_t *s0, int16_t *s1);
 
+/* Add points to the score counter (ported from _incObj/sub AddPoints.asm,
+   REV01). d0 = points / 10; every 50000 points awards a life (Japan only). */
+void AddPoints(int32_t d0);
+
 /* Advance the synchronised animation timers (rings, bouncing rings). Only
    Sync2 (rings) and Sync4 (bouncing rings) are needed by Ring/RingLoss;
    Sync1/Sync3 are unported (see Important Details). Ported from the
@@ -72,6 +76,8 @@ int OutOfRange(void *obj, int16_t ring_origX);
 
 /* Kill Sonic: set death status, animation, velocity, graphics, and queue
    death sound. Used by Sonic_HandleDeath (normal death) and TimeOver. */
-void KillSonic(void *obj);
+void KillSonic(void *obj, void *damager);
+void HurtSonic(void *obj, void *damager);
+void ReactToItem(void *obj);
 
 #endif /* SONIC1_OBJECTS_H */

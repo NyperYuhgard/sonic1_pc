@@ -311,6 +311,23 @@ enum {
 #define col_32x48           0x11  /* MZ sideways stomper */
 #define col_16x32           0x12  /* Giant ring */
 #define col_64x224          0x13  /* MZ geyser */
+#define col_128x64          0x14  /* MZ lava wall, MZ lava tag */
+#define col_256x64          0x15  /* MZ lava tag */
+#define col_64x64           0x16  /* MZ lava tag */
+#define col_16x16_alt       0x17  /* SYZ bumper */
+#define col_8x8             0x18  /* SYZ spike chain, Bomb shrapnel, Orbinaut spike, LZ gargoyle fire */
+#define col_64x16           0x19  /* SLZ swing */
+#define col_24x24           0x1A  /* Bomb enemy, FZ plasma */
+#define col_16x8            0x1B  /* LZ harpoon */
+#define col_48x8            0x1C  /* LZ harpoon */
+#define col_80x8            0x1D  /* LZ harpoon */
+#define col_8x16            0x1E  /* LZ harpoon */
+#define col_8x48            0x1F  /* LZ harpoon */
+#define col_8x80            0x20  /* LZ harpoon */
+#define col_8x64            0x21  /* LZ pole */
+#define col_48x48_alt       0x22  /* SBZ saw */
+#define col_24x48           0x23  /* SBZ flamethrower */
+#define col_144x16          0x24  /* SBZ electric */
 
 /* ---------------------------------------------------------------------------
    Object variables — byte offsets into the 64-byte object structure

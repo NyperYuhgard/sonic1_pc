@@ -40,6 +40,13 @@ static const plc_entry plc_Main2[] = {
     plc_decl(Nem_Stars,    ArtTile_Invincibility),
 };
 
+/* PLC_Signpost (plcid_Signpost) — _inc/Pattern Load Cues.asm lines 296-300 */
+static const plc_entry plc_Signpost[] = {
+    plc_decl(Nem_SignPost, ArtTile_Signpost),
+    plc_decl(Nem_Bonus,    ArtTile_Hidden_Points),
+    plc_decl(Nem_BigFlash, ArtTile_Giant_Ring_Flash),
+};
+
 /* PLC_GHZ (plcid_GHZ) — _inc/Pattern Load Cues.asm lines 107-120 */
 static const plc_entry plc_GHZ[] = {
     plc_decl(Nem_GHZ_1st, ArtTile_Level),
@@ -85,7 +92,9 @@ static const plc_list plc_index[] = {
     /* 5..7: */        PLC_NONE, PLC_NONE, PLC_NONE,
     /* 8..11: */       PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
     /* 12..15: */      PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
-    /* 16..19: */      PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
+    /* 16..17: */      PLC_NONE, PLC_NONE,
+    /* 18: */          { plc_Signpost, (int)(sizeof(plc_Signpost) / sizeof(plc_Signpost[0])) - 1 },
+    /* 19: */          PLC_NONE,
     /* 20..23: */      PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
     /* 24..27: */      PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
     /* 28..31: */      PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
@@ -141,6 +150,11 @@ void AddPLC(int id) {
 void NewPLC(int id) {
     ClearPLC();
     AddPLC(id);
+}
+
+/* Non-zero when the PLC queue is empty (ASM: tst.l (v_plc_buffer).w) */
+int PLC_IsEmpty(void) {
+    return plc_src[0] == NULL;
 }
 
 /* Process one pending PLC entry per frame (sonic.asm RunPLC)

@@ -168,7 +168,7 @@ void Hud_Base(void) {
 static void TimeOver(void) {
     f_timecount = 0;
 
-    KillSonic(Object_GetSlot(0));
+    KillSonic(Object_GetSlot(0), NULL);
 
     f_timeover = 1;
 }

@@ -642,9 +642,18 @@ static inline void RAM_SET_U32(uint32_t addr, uint32_t v) {
 #define standonobject(obj)  (*(uint8_t *)((uint8_t *)(obj) + 0x3D))
 #define locktime(obj)       (*(uint8_t *)((uint8_t *)(obj) + 0x3E))
 
+/* ExplosionItem carry-over field (objoff_3E, word) — set by React_BadnikHit */
+#define exitem_pointsframe(obj) (*(uint16_t *)((uint8_t *)(obj) + 0x3E))
+
 /* Zone title card specific fields (objoff_30/objoff_32) */
 #define cardMainX(obj)   (*(int16_t *)((uint8_t *)(obj) + 0x30))  /* target X while moving in */
 #define cardFinalX(obj)  (*(int16_t *)((uint8_t *)(obj) + 0x32))  /* target X while moving out */
+
+/* Got Through Card object 3A specific fields
+   (obTimeFrame at objoff_1E is used as a 16-bit counter in 3A) */
+#define got_mainX(obj)   (*(int16_t *)((uint8_t *)(obj) + 0x30))  /* target X while moving in */
+#define got_finalX(obj)  (*(int16_t *)((uint8_t *)(obj) + 0x32))  /* target X while moving out (SBZ2) */
+#define got_timeframe(obj) (*(uint16_t *)((uint8_t *)(obj) + 0x1E)) /* 3*60 or post-delay counter */
 
 /* Ring/RingLoss specific fields */
 #define ring_origX(obj)      (*(int16_t *)((uint8_t *)(obj) + 0x32))  /* objoff_32: original ring X when spawned */

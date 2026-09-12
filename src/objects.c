@@ -30,6 +30,8 @@ static void TitleCard_Main(void *obj);
 static void GameOverCard_Main(void *obj);
 static void Ring_Main(void *obj);
 static void RingLoss_Main(void *obj);
+static void Signpost_Main(void *obj);
+static void GotThroughCard_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -55,6 +57,8 @@ void Objects_Init(void) {
     obj_dispatch[id_GameOverCard] = GameOverCard_Main;
     obj_dispatch[id_Rings]        = Ring_Main;
     obj_dispatch[id_RingLoss]     = RingLoss_Main;
+    obj_dispatch[id_Signpost]     = Signpost_Main;
+    obj_dispatch[id_GotThroughCard] = GotThroughCard_Main;
 
     /* Clear all object RAM */
     memset(ObjRAM, 0, NUM_OBJECTS * OBJECT_SIZE);
@@ -559,7 +563,9 @@ static void Sonic_JumpHeight(void *obj);
 static int Sonic_Jump(void *obj);
 
 static void Sonic_LevelBound(void *obj);
-void KillSonic(void *obj);
+void KillSonic(void *obj, void *damager);
+void HurtSonic(void *obj, void *damager);
+void ReactToItem(void *obj);
 
 static void Sonic_AngledRollSpeed(void *obj);
 static void Sonic_Floor(void *obj);
@@ -685,8 +691,9 @@ ignore_modes:
 
     Sonic_Animate(o);
 
-    if (!f_playerctrl) {
-        /* ReactToItem not yet ported */
+    /* ASM: tst.b (f_playerctrl).w / bmi.s .ignoreobjcoll — bit7 clears interaction */
+    if (!(f_playerctrl & 0x80)) {
+        ReactToItem(o);
     }
 
     Sonic_Loops(o);
@@ -996,9 +1003,8 @@ static void Ring_Animate(uint8_t *o) {
     }
 }
 
-/* Ring_Collect (routine 4): started by Sonic's collision in the original
-   (ReactToItem). Ring collection is not yet reachable (Sonic collision not
-   ported), but the routine is kept verbatim so the write path exists. */
+/* Ring_Collect (routine 4): started by ReactToItem when Sonic touches the
+   ring (addq.b #2 advances Ring_Animate → Ring_Collect). */
 static void Ring_Collect(uint8_t *o) {
     obRoutine(o) += 2;                       /* -> Ring_Sparkle */
     obColType(o)  = col_none;
@@ -1226,6 +1232,443 @@ static void RingLoss_Main(void *obj) {
         case 4: RingLoss_Collect(o); break;
         case 6: RingLoss_Sparkle(o); break;
         case 8: RingLoss_Delete(o); break;
+    }
+}
+
+/* ===========================================================================
+   Object 0D — Signpost (end-of-level goal post)
+   Ported verbatim from _incObj/0D Signpost.asm (REV01, FixBugs=0).
+   =========================================================================== */
+
+/* Signpost specific fields (spintime/sparkletime are words, sparkle_id byte) */
+#define sign_spintime(o)     (*(int16_t *)((uint8_t *)(o) + 0x30))  /* objoff_30 */
+#define sign_sparkletime(o)  (*(int16_t *)((uint8_t *)(o) + 0x32))  /* objoff_32 */
+#define sign_sparkle_id(o)   (*(uint8_t *)((uint8_t *)(o) + 0x34))  /* objoff_34 */
+
+/* Sign_SparkPos: byte pairs (x-pos, y-pos), addressed by even byte offsets */
+static const int8_t Sign_SparkPos[16] = {
+    -0x18, -0x10,  /* $0  */
+     0x08,  0x08,  /* $2  */
+    -0x10,  0x00,  /* $4  */
+     0x18, -0x08,  /* $6  */
+     0x00, -0x08,  /* $8  */
+     0x10,  0x00,  /* $A  */
+    -0x18,  0x08,  /* $C  */
+     0x18,  0x10,  /* $E  */
+};
+
+/* TimeBonuses: word table (time in 15-second increments), NoTimeBonus last */
+static const uint16_t Sign_TimeBonuses[21] = {
+    5000, 5000, 1000, 500, 400, 400, 300, 300, 200, 200,
+    200, 200, 100, 100, 100, 100, 50, 50, 50, 50,
+    0,    /* NoTimeBonus: 5:00 onwards */
+};
+
+static void GotThroughAct(void);
+static void Sign_LoadEndCards(uint8_t *o);
+
+/* Sign_Touch (routine 2): wait for Sonic to walk into the signpost */
+static void Sign_Touch(uint8_t *o) {
+    uint8_t *player = RAM_ADDR(v_player);
+    int16_t d0 = obX(player) - obX(o);           /* move.w (v_player+obX),d0; sub.w obX(a0),d0 */
+    if (d0 < 0) return;                          /* blo.s .notouch (Sonic to the left) */
+    if ((uint16_t)d0 >= 32u) return;             /* cmpi.w #32 / bhs.s .notouch */
+
+    Sound_Queue(sfx_Signpost, false);            /* jsr (QueueSound1) */
+    f_timecount = 0;                             /* clr.b (f_timecount).w */
+    v_limitleft2 = v_limitright2;                /* move.w (v_limitright2),(v_limitleft2): lock screen */
+    obRoutine(o) += 2;                           /* addq.b #2 -> Sign_Spin */
+}
+
+/* Sign_Spin (routine 4): spin cycles, then sparkles until Sonic runs off */
+static void Sign_Spin(uint8_t *o) {
+    sign_spintime(o) -= 1;                       /* subq.w #1,spintime(a0) */
+    if (sign_spintime(o) >= 0) {                 /* bpl.s .chksparkle */
+        goto chksparkle;
+    }
+    sign_spintime(o) = 60;                       /* move.w #60 (1 second cycle) */
+    obAnim(o) += 1;                              /* addq.b #1,obAnim(a0) */
+    if (obAnim(o) != 3) {                        /* cmpi.b #3 / bne.s .chksparkle */
+        goto chksparkle;
+    }
+    obRoutine(o) += 2;                           /* addq.b #2 -> Sign_SonicRun */
+
+chksparkle:
+    sign_sparkletime(o) -= 1;                    /* subq.w #1,sparkletime(a0) */
+    if (sign_sparkletime(o) >= 0) {              /* bpl.s .return */
+        return;
+    }
+    sign_sparkletime(o) = 12 - 1;                /* move.w #12-1 */
+
+    {
+        int d0 = sign_sparkle_id(o);             /* moveq #0,d0; move.b sparkle_id,d0 */
+        sign_sparkle_id(o) = (uint8_t)((sign_sparkle_id(o) + 2) & 0x0E); /* addq/andi.b #$E */
+        const int8_t *sp = &Sign_SparkPos[d0 & 0x0F]; /* lea Sign_SparkPos(pc,d0.w),a2 */
+
+        uint8_t *a1 = (uint8_t *)FindFreeObj();
+        if (!a1) return;                         /* bne.s .return (object RAM full) */
+
+        obID(a1)       = id_Rings;               /* _move.b #id_Rings,obID(a1) (sparkle effect) */
+        obRoutine(a1)  = 6;                      /* move.b #6 -> Ring_Sparkle */
+        obX(a1)        = (int16_t)(obX(o) + (int16_t)sp[0]); /* X-delta + signpost base X */
+        obY(a1)        = (int16_t)(obY(o) + (int16_t)sp[1]); /* Y-delta + signpost base Y */
+        obMap(a1)      = (uint32_t)(uintptr_t)Map_Ring;
+        obGfx(a1)      = (uint16_t)(ArtTile_Ring | Tile_Pal2);
+        obRender(a1)   = sprite_cam_field;
+        obPriority(a1) = 2;
+        obActWid(a1)   = 8;
+    }
+    return;
+}
+
+/* Sign_SonicRun (routine 6): lock controls and chase Sonic to the right edge */
+static void Sign_SonicRun(uint8_t *o) {
+    uint8_t *player = RAM_ADDR(v_player);
+
+    if (v_debuguse) {                            /* tst.w (v_debuguse).w / bne.w Sign_Return */
+        return;
+    }
+
+    /* FixBugs=0: lock controls when not airborne, regardless of player slot */
+    if (!(obStatus(player) & (1 << 1))) {        /* btst #1 / bne.s .airborne */
+        f_lockctrl = 1;                          /* move.b #1 */
+        v_jpadhold2 = btnR;                      /* move.w #btnR<<8: stores to the F602 byte = btnR */
+    }
+
+    if (obID(player) == 0) {                     /* tst.b (v_player+obID) / beq.s Sign_LoadEndCards */
+        Sign_LoadEndCards(o);
+        return;
+    }
+
+    int16_t d0 = obX(player);                    /* move.w (v_player+obX).w,d0 */
+    int16_t d1 = (int16_t)v_limitright2 + (320 - 24); /* addi.w #320-24 */
+    if ((uint16_t)d0 < (uint16_t)d1) {           /* cmp.w d1,d0 / blo.s Sign_Return */
+        return;
+    }
+    Sign_LoadEndCards(o);
+}
+
+/* Sign_LoadEndCards — advance routine and queue the act-tally (once) */
+static void Sign_LoadEndCards(uint8_t *o) {
+    obRoutine(o) += 2;                           /* addq.b #2 -> Sign_Exit */
+    GotThroughAct();
+}
+
+/* GotThroughAct — set up the score bonuses at the end of an act */
+static void GotThroughAct(void) {
+    if (RAM_BYTE(v_endcard)) {                   /* tst.b (v_endcard).w / bne.s Sign_Return */
+        return;
+    }
+
+    v_limitleft2 = v_limitright2;                /* lock left boundary to right */
+    v_invinc     = 0;                            /* clr.b (v_invinc).w */
+    f_timecount  = 0;                            /* clr.b (f_timecount).w */
+    RAM_BYTE(v_endcard) = id_GotThroughCard;     /* load end card object (prevents re-run) */
+    NewPLC(plcid_TitleCard);                     /* jsr (NewPLC).l */
+    f_endactbonus = 1;                           /* move.b #1 (pre-tally bonus HUD) */
+
+    /* Time bonus: v_timemin*60 + v_timesec, divided by 15 seconds per entry */
+    {
+        int d0 = v_timemin * 60 + v_timesec;     /* move.b (v_timemin)+v_timesec, mulu.w #60 */
+        d0 /= 15;                                /* divu.w #15 */
+        int d1 = 20;                             /* moveq #(NoTimeBonus-TimeBonuses)/2,d1 */
+        if (d0 >= d1) {                          /* cmp.w d1,d0 / blo.s .getTimeBonus */
+            d0 = d1;                             /* cap to last (0 points) entry */
+        }
+        v_timebonus = Sign_TimeBonuses[d0];      /* move.w TimeBonuses(pc,d0.w),(v_timebonus).w */
+    }
+
+    v_ringbonus = (uint16_t)(v_rings * 10);      /* mulu.w #10 */
+
+    Sound_Queue(bgm_GotThrough, false);          /* jsr (QueueSound2) */
+}
+
+/* Signpost dispatcher + per-frame common code */
+static void Signpost_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0: /* Sign_Main */ {
+            obRoutine(o) += 2;                   /* addq.b #2 -> Sign_Touch */
+            obMap(o)   = (uint32_t)(uintptr_t)Map_Sign;
+            obGfx(o)   = (uint16_t)ArtTile_Signpost;
+            obRender(o)= sprite_cam_field;
+            obActWid(o)= 48 / 2;
+            obPriority(o)= 4;
+            /* fall through into Sign_Touch */
+        }
+        /* fallthrough */
+        case 2: Sign_Touch(o); break;
+        case 4: Sign_Spin(o); break;
+        case 6: Sign_SonicRun(o); break;
+        case 8: /* Sign_Exit: nothing */ break;
+    }
+
+    if (Ani_Sign) {
+        AnimateSprite(obj, Ani_Sign);            /* lea (Ani_Sign).l,a1 / bsr AnimateSprite */
+    }
+    DisplaySprite(obj);                          /* bsr.w DisplaySprite (FixBugs=0: before out_of_range) */
+    if (OutOfRange(o, -1)) {                     /* out_of_range.w DeleteObject */
+        DeleteObject(o);
+    }
+}
+
+/* ===========================================================================
+   Object 3A — "SONIC HAS PASSED" title card
+   Ported verbatim from _incObj/3A Got Through Card.asm (REV01, FixBugs=0).
+   The 7 card elements live back-to-back in RAM starting at v_endcard; slot 0
+   is the controller (routine 0 sets up all seven, each element then runs its
+   own routine independently).
+   =========================================================================== */
+
+/* AddPoints — _incObj/sub AddPoints.asm (REV01).
+   Input: d0 = points to add / 10 (HUD score shows a trailing fake 0).
+   Awards an extra life every 50000 points, Japan region only. */
+void AddPoints(int32_t d0) {
+    f_scorecount = 1;                            /* move.b #1,(f_scorecount).w */
+
+    v_score += (uint32_t)d0;                     /* add.l d0,(v_score).w */
+    if (v_score > 999999) {                      /* move.l #999999,d1 / cmp.l / bhi.s .belowmax */
+        v_score = 999999;                        /* cap to 9999990 displayed */
+    }
+
+    if ((uint32_t)v_score < (uint32_t)v_scorelife) {
+        return;                                  /* cmp.l (v_scorelife).w,d0 / blo.s .return */
+    }
+
+    v_scorelife += 5000;                         /* addi.l #5000,(v_scorelife).w */
+
+    if (!(v_megadrive & 0x80)) {                 /* tst.b (v_megadrive).w / bmi.s .return (bit7=overseas) */
+        v_lives = v_lives + 1;                   /* addq.b #1,(v_lives).w */
+        f_lifecount = f_lifecount + 1;           /* addq.b #1,(f_lifecount).w */
+        Sound_Queue(bgm_ExtraLife, false);       /* jmp (QueueSound1).l */
+    }
+}
+
+/* Got_ItemData: per element - start X, main X (target), Y, routine, frame */
+struct GotItem {
+    int16_t start_x;
+    int16_t main_x;
+    int16_t y;
+    uint8_t routine;
+    uint8_t frame;
+};
+static const struct GotItem Got_ItemData[7] = {
+    /* "SONIC HAS" */
+    {  0x004,  0x124,  0xBC, 2, 0 },
+    /* "PASSED"  */
+    { -0x120,  0x120,  0xD0, 2, 1 },
+    /* "ACT 1/2/3" (dynamic frame: + v_act) */
+    {  0x40C,  0x14C,  0xD6, 2, 6 },
+    /* Score tally */
+    {  0x520,  0x120,  0xEC, 2, 2 },
+    /* Time Bonus tally */
+    {  0x540,  0x120,  0xFC, 2, 3 },
+    /* Ring Bonus tally (controller element) */
+    {  0x560,  0x120, 0x10C, 2, 4 },
+    /* Blue oval */
+    {  0x20C,  0x14C,  0xCC, 2, 5 },
+};
+
+/* LevelOrder — _inc/LevelOrder.asm (word table, indexed by
+   (v_zone&7)*8 + (v_act&3)*2).  A "0" entry sends the game to the Sega
+   screen (see Got_NextLevel). */
+static const uint16_t LevelOrder[24] = {
+    /* GHZ */      id_GHZ_act2, id_GHZ_act3, id_MZ_act1, 0,
+    /* LZ */       id_LZ_act2,  id_LZ_act3,  id_SLZ_act1, id_FZ,
+    /* MZ */       id_MZ_act2,  id_MZ_act3,  id_SYZ_act1, 0,
+    /* SLZ */      id_SLZ_act2, id_SLZ_act3, id_SBZ_act1, 0,
+    /* SYZ */      id_SYZ_act2, id_SYZ_act3, id_LZ_act1,  0,
+    /* SBZ */      id_SBZ_act2, id_LZ_act4,  0,           0,
+};
+
+static void Got_MoveIn(uint8_t *o);
+static void Got_Wait(uint8_t *o);
+static void Got_SBZ2_MoveOut(uint8_t *o);
+
+/* Got_ChkPLC (routine 0): wait for the PLC queue to empty, then set up all
+   seven card elements in the v_endcard..v_endcardoval slots. */
+static void Got_Main(uint8_t *o) {
+    uint8_t *a1 = o;
+
+    for (int i = 0; i < 7; i++) {
+        const struct GotItem *it = &Got_ItemData[i];
+        obID(a1)      = id_GotThroughCard;     /* load next element */
+        obX(a1)       = it->start_x;
+        got_finalX(a1)= it->start_x;           /* finish X (same as start) */
+        got_mainX(a1) = it->main_x;
+        obScreenY(a1) = it->y;
+        obRoutine(a1) = it->routine;
+
+        int d0 = it->frame;
+        if (d0 == 6) {                          /* cmpi.b #6,d0 / the act element */
+            d0 += v_act;                        /* add.b (v_act).w,d0 */
+        }
+        obFrame(a1) = (uint8_t)d0;
+
+        obMap(a1)     = (uint32_t)(uintptr_t)Map_Got;
+        obGfx(a1)     = (uint16_t)(ArtTile_Title_Card | Tile_Prio);
+        obRender(a1)  = sprite_cam_screen;
+        a1 += object_size;                      /* lea object_size(a1),a1 */
+    }
+}
+
+static void Got_ChkPLC(uint8_t *o) {
+    if (PLC_IsEmpty()) {                        /* tst.l (v_plc_buffer).w / beq.s Got_Main */
+        Got_Main(o);
+    }
+}
+
+/* Got_MoveIn / Got_MoveIn .checkOffScreen (routine 2):
+   Slide each element toward its main X at 0x10 px/frame; suppress display
+   while off-screen (X outside [0, 0x200), FixBugs=0 loses the left bound). */
+static void Got_MoveIn(uint8_t *o) {
+    int16_t d1 = 0x10;
+    int16_t d0 = got_mainX(o);
+
+    if (d0 == obX(o)) {
+        /* .reachedXTarget */
+        if (obRoutine((uint8_t *)RAM_ADDR(v_endcardring)) == 0xE) {
+            /* .startSBZ2Cutscene: post-SBZ2 cutscene is in progress */
+            obRoutine(o) = 0xE;                  /* move.b #$E,obRoutine(a0) */
+            Got_SBZ2_MoveOut(o);                 /* bra.w Got_SBZ2_MoveOut */
+            return;
+        }
+        if (obFrame(o) == 4) {                   /* cmpi.b #4,obFrame(a0) */
+            obRoutine(o) += 2;                   /* addq.b #2 -> Got_Wait */
+            got_timeframe(o) = 3 * 60;           /* 3 second delay before tally */
+        }
+    } else {
+        if (d0 < obX(o)) {                       /* bge.s .updateXPos — negate when coming from the right */
+            d1 = -d1;
+        }
+        obX(o) += d1;                            /* add.w d1,obX(a0) */
+    }
+
+    /* .checkOffScreen */
+    d0 = obX(o);
+    if (d0 < 0) return;                          /* bmi.s .return */
+    if ((uint16_t)d0 >= 0x80 + 320 + 64) return; /* bhs.s .return (FixBugs=0) */
+    DisplaySprite(o);                            /* bra.w DisplaySprite */
+}
+
+/* Got_Wait (routines 4, 8, $C): fixed delay then advance */
+static void Got_Wait(uint8_t *o) {
+    got_timeframe(o) -= 1;                       /* subq.w #1,obTimeFrame(a0) */
+    if (got_timeframe(o) != 0) {                 /* bne.s .display */
+        DisplaySprite(o);
+        return;
+    }
+    obRoutine(o) += 2;                           /* addq.b #2,obRoutine(a0) */
+    DisplaySprite(o);                            /* bra.w DisplaySprite */
+}
+
+/* Got_Bonus (routine 6): tick time/ring bonuses down to the score */
+static void Got_Bonus(uint8_t *o) {
+    DisplaySprite(o);                            /* bsr.w DisplaySprite */
+    f_endactbonus = 1;                           /* move.b #1,(f_endactbonus).w keep tally HUD updating */
+
+    int d0 = 0;
+    if (v_timebonus != 0) {                      /* tst.w (v_timebonus).w / beq.s .ringBonus */
+        d0 += 10;                                /* addi.w #10,d0 */
+        v_timebonus -= 10;                       /* subi.w #10,(v_timebonus).w */
+    }
+    if (v_ringbonus != 0) {                      /* tst.w (v_ringbonus).w / beq.s .checkFinished */
+        d0 += 10;
+        v_ringbonus -= 10;
+    }
+
+    if (d0 != 0) {
+        /* .addBonusPoints */
+        AddPoints(d0);                           /* jsr (AddPoints).l */
+        if ((v_vblank_byte & 3) == 0) {          /* move.b (v_vblank_byte).w,d0 / andi.b #3,d0 / bne.s .return */
+            Sound_Queue(sfx_Switch, false);      /* moveq #sfx_Switch,d0 / jmp (QueueSound2).l */
+        }
+        return;
+    }
+
+    /* .finished */
+    Sound_Queue(sfx_Cash, false);                /* move.w #sfx_Cash,d0 / jsr (QueueSound2).l */
+    obRoutine(o) += 2;                           /* addq.b #2 -> Got_Wait (8) */
+    if (v_zone_act == id_SBZ_act2) {             /* cmpi.w #id_SBZ_act2,(v_zone_act).w / bne.s .setPostDelay */
+        obRoutine(o) += 4;                       /* addq.b #4 -> Got_Wait ($C, pre-SBZ2 cutscene) */
+    }
+    got_timeframe(o) = 3 * 60;                   /* move.w #3*60,obTimeFrame(a0) */
+}
+
+/* Got_NextLevel (routine $A): advance to the next zone/act */
+static void Got_NextLevel(uint8_t *o) {
+    int d0 = (v_zone & 7) * 4 + (v_act & 3);     /* andi #7 / lsl #3 + andi #3 / add (word index) */
+    uint16_t nl = LevelOrder[d0];                /* move.w LevelOrder(pc,d0.w),d0 */
+    v_zone_act = nl;                             /* move.w d0,(v_zone_act).w */
+
+    if (nl == 0) {                               /* tst.w d0 / bne.s .validLevelNumber */
+        v_gamemode = 0x00;                       /* move.b #id_Sega,(v_gamemode).w */
+        DisplaySprite(o);                        /* bra.s .display */
+        return;
+    }
+
+    /* .validLevelNumber */
+    RAM_BYTE(v_lastlamp) = 0;                    /* clr.b (v_lastlamp).w */
+    if (!f_bigring) {                            /* tst.b (f_bigring).w / beq.s .restartLevel */
+        f_restart = 1;                           /* move.w #1,(f_restart).w */
+    } else {
+        v_gamemode = 0x10;                       /* move.b #id_Special,(v_gamemode).w */
+    }
+    DisplaySprite(o);                            /* bra.w DisplaySprite */
+}
+
+/* Got_SBZ2_MoveOut (routine $E): slide cards off at 0x20 px/frame, then
+   trigger the SBZ2->FZ cutscene (ring bonus element controls it). */
+static void Got_SBZ2_MoveOut(uint8_t *o) {
+    int16_t d1 = 2 * 0x10;
+    int16_t d0 = got_finalX(o);
+
+    if (d0 == obX(o)) {
+        /* Got_SBZ2_StartCutscene */
+        if (obFrame(o) != 4) {                   /* cmpi.b #4,obFrame(a0) / bne.w DeleteObject */
+            DeleteObject(o);
+            return;
+        }
+        obRoutine(o) += 2;                       /* addq.b #2 -> Got_SBZ2_Boundary */
+        f_lockctrl = 0;                          /* clr.b (f_lockctrl).w */
+        Sound_Queue(bgm_FZ, false);              /* move.w #bgm_FZ,d0 / jmp (QueueSound1).l */
+        return;
+    }
+
+    if (d0 < obX(o)) {                           /* bge.s .updateXPos */
+        d1 = -d1;
+    }
+    obX(o) += d1;
+
+    /* .checkOffScreen */
+    d0 = obX(o);
+    if (d0 < 0) return;                          /* bmi.s .return */
+    if ((uint16_t)d0 >= 0x80 + 320 + 64) return; /* bhs.s .return (FixBugs=0) */
+    DisplaySprite(o);
+}
+
+/* Got_SBZ2_Boundary (routine $10): push the right screen boundary forward */
+static void Got_SBZ2_Boundary(uint8_t *o) {
+    v_limitright2 += 2;                          /* addq.w #2,(v_limitright2).w */
+    if (v_limitright2 == (uint16_t)(boss_sbz2_x + 0xB0)) { /* cmpi.w #boss_sbz2_x+$B0 / beq.w DeleteObject */
+        DeleteObject(o);
+    }
+}
+
+static void GotThroughCard_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00: Got_ChkPLC(o); break;
+        case 0x02: Got_MoveIn(o); break;
+        case 0x04:
+        case 0x08:
+        case 0x0C: Got_Wait(o); break;
+        case 0x06: Got_Bonus(o); break;
+        case 0x0A: Got_NextLevel(o); break;
+        case 0x0E: Got_SBZ2_MoveOut(o); break;
+        case 0x10: Got_SBZ2_Boundary(o); break;
     }
 }
 
@@ -1952,7 +2395,7 @@ bottom:
             return;
         }
     }
-    KillSonic(o);
+    KillSonic(o, NULL);
     return;
 
 sides:
@@ -2300,7 +2743,7 @@ static void Sonic_HurtStop(void *obj) {
     int16_t d0 = v_limitbtm2 + 224;
 
     if ((int16_t)obY(o) >= d0) {
-        KillSonic(o);
+        KillSonic(o, NULL);
         return;
     }
     Sonic_Floor(o);
@@ -2944,11 +3387,12 @@ changeMode:
 }
 
 /* ===========================================================================
-   KillSonic — Port of KillSonic from _incObj/Sonic ReactToItem.asm
+   KillSonic — Port of KillSonic from _incObj/Sonic ReactToItem.asm (REV01)
    Sets up death state. Lives/game-over logic is in Sonic_HandleDeath (routine 6).
-   Input: obj = Sonic object pointer (a0)
+   Input: obj = Sonic object pointer (a0), damager = object killing Sonic (a2,
+   NULL if unknown/undefined as in the original's non-collision callers).
    =========================================================================== */
-void KillSonic(void *obj) {
+void KillSonic(void *obj, void *damager) {
     uint8_t *o = (uint8_t *)obj;
 
     if (v_debuguse) {
@@ -2961,9 +3405,339 @@ void KillSonic(void *obj) {
     obVelY(o) = (int16_t)-0x700;                   /* launch Sonic upwards while dying */
     obVelX(o) = 0;                                 /* stop horizontal movement */
     obInertia(o) = 0;                              /* stop ground movement */
+    *(int16_t *)(o + 0x38) = obY(o);               /* FixBugs=0 leftover: backup
+                                                     Y-position into objoff_38 */
     obAnim(o) = id_Death;                          /* death animation */
     obGfx(o) = obGfx(o) | 0x80;                   /* bset #7, high sprite priority */
-    Sound_Queue(sfx_Death, false);                 /* play death sound */
+    if (damager != NULL && obID(damager) == id_Spikes) {
+        Sound_Queue(sfx_HitSpikes, false);         /* killed by spikes */
+    } else {
+        Sound_Queue(sfx_Death, false);             /* play death sound */
+    }
+}
+
+/* ===========================================================================
+   HurtSonic — Port of HurtSonic from _incObj/Sonic ReactToItem.asm (REV01)
+   Hurts Sonic: drops rings (RingLoss object), removes shield, bounces him away.
+   Input: obj = Sonic object pointer (a0), damager = object hurting Sonic (a2)
+   =========================================================================== */
+void HurtSonic(void *obj, void *damager) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t *slot;
+
+    if (v_shield) {
+        goto bounceSonicAway;
+    }
+    if (v_rings == 0) {                            /* beq.w .hitWithoutRings */
+        if (f_debugmode) {                         /* tst.w f_debugmode; bne.w .bounceSonicAway */
+            goto bounceSonicAway;
+        }
+        KillSonic(o, damager);                     /* fall through to KillSonic */
+        return;
+    }
+    slot = (uint8_t *)FindFreeObj();
+    if (slot != NULL) {                            /* jsr FindFreeObj; bne.s .bounceSonicAway */
+        obID(slot) = id_RingLoss;
+        obX(slot)   = obX(o);
+        obY(slot)   = obY(o);
+    }
+
+bounceSonicAway:
+    v_shield = 0;                                  /* remove a potential shield */
+    obRoutine(o) = 4;                              /* set to Sonic_Hurt routine */
+    Sonic_ResetOnFloor(o);                         /* reset airborne state */
+    obStatus(o) = obStatus(o) | (1 << 1);          /* bset #1, force airborne */
+
+    obVelY(o) = (int16_t)-0x400;                   /* bounce Sonic vertically */
+    obVelX(o) = (int16_t)-0x200;                   /* bounce Sonic horizontally */
+    if (obStatus(o) & (1 << 6)) {                  /* underwater? */
+        obVelY(o) = (int16_t)-0x200;               /* slower vertical bounce */
+        obVelX(o) = (int16_t)-0x100;               /* slower horizontal bounce */
+    }
+    if ((int16_t)obX(o) >= (int16_t)obX(damager)) { /* right of object → reverse */
+        obVelX(o) = -(int16_t)obVelX(o);
+    }
+    obInertia(o) = 0;                              /* cancel ground speed */
+    obAnim(o) = id_Hurt;                           /* hurt animation */
+    flashtime(o) = 2 * 60;                         /* 2 seconds of invulnerability */
+
+    /* FixBugs=0 (buggy) sound: HitSpikes requires the damager to be BOTH
+       id_Spikes and id_Harpoon simultaneously, which is impossible, so the
+       generic damage sound always plays here. */
+    if (obID(damager) == id_Spikes) {
+        if (obID(damager) == id_Harpoon) {
+            Sound_Queue(sfx_HitSpikes, false);
+        } else {
+            Sound_Queue(sfx_Death, false);
+        }
+    } else {
+        Sound_Queue(sfx_Death, false);
+    }
+}
+
+/* ===========================================================================
+   ReactToItem — Port of _incObj/Sonic ReactToItem.asm (REV01, FixBugs=0)
+   Handles Sonic's interaction with all level objects via obColType collision.
+   Input: obj = Sonic object pointer (a0). Return value (d0) unused by caller.
+   =========================================================================== */
+
+/* Hitbox sizes, stored as box extents (half-width, half-height).
+   Index = (obColType & $3F) - 1. Transcribed from React_Sizes (REV01). */
+static const uint8_t React_Sizes[0x25 * 2] = {
+    20, 20,   /* $01 col_40x40     GHZ ball */
+    12, 20,   /* $02 col_24x40     (unused) */
+    20, 12,   /* $03 col_40x24     (unused) */
+     4, 16,   /* $04 col_8x32      GHZ spike pole, SYZ boss spike */
+    12, 18,   /* $05 col_24x36     Ball Hog, Burrobot */
+    16, 16,   /* $06 col_32x32     SBZ spikeball, Crabmeat, Monitor, SYZ spikeball, Prison */
+     6,  6,   /* $07 col_12x12     Cannonball, Crab/Buzz missile, Ring */
+    24, 12,   /* $08 col_48x24     Buzz Bomber */
+    12, 16,   /* $09 col_24x32     Chopper */
+    16, 12,   /* $0A col_32x24     Jaws */
+     8,  8,   /* $0B col_16x16     MZ fire, Fireball, Batbrain, LZ spikeball, SLZ seesaw spike, Orbinaut, Caterkiller */
+    20, 16,   /* $0C col_40x32     Newtron, Motobug, Yadrin */
+    20,  8,   /* $0D col_40x16     Newtron */
+    14, 14,   /* $0E col_28x28     Roller */
+    24, 24,   /* $0F col_48x48     Bosses */
+    40, 16,   /* $10 col_80x32     MZ vertical stomper */
+    16, 24,   /* $11 col_32x48     MZ sideways stomper */
+     8, 16,   /* $12 col_16x32     Giant ring */
+    32,112,   /* $13 col_64x224    MZ geyser */
+    64, 32,   /* $14 col_128x64    MZ lava wall, MZ lava tag */
+   128, 32,   /* $15 col_256x64    MZ lava tag */
+    32, 32,   /* $16 col_64x64     MZ lava tag */
+     8,  8,   /* $17 col_16x16_alt SYZ bumper */
+     4,  4,   /* $18 col_8x8       SYZ spike chain, Bomb shrapnel, Orbinaut spike, LZ gargoyle fire */
+    32,  8,   /* $19 col_64x16     SLZ swing */
+    12, 12,   /* $1A col_24x24     Bomb enemy, FZ plasma */
+     8,  4,   /* $1B col_16x8      LZ harpoon */
+    24,  4,   /* $1C col_48x8      LZ harpoon */
+    40,  4,   /* $1D col_80x8      LZ harpoon */
+     4,  8,   /* $1E col_8x16      LZ harpoon */
+     4, 24,   /* $1F col_8x48      LZ harpoon */
+     4, 40,   /* $20 col_8x80      LZ harpoon */
+     4, 32,   /* $21 col_8x64      LZ pole */
+    24, 24,   /* $22 col_48x48_alt SBZ saw */
+    12, 24,   /* $23 col_24x48     SBZ flamethrower */
+    72,  8,   /* $24 col_144x16    SBZ electric */
+};
+
+/* Combo points per destroyed badnik (/10); word-indexed by the bonus counter.
+   The 16th and subsequent badniks are hardcoded to 10000 points. */
+static const uint16_t React_PointsCombo[4] = { 10, 20, 50, 100 };
+
+void ReactToItem(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    uint8_t *a1;
+    int16_t d0, d5;
+
+    /* Compute Sonic's collision box:
+       d2 = left edge, d3 = top edge, d4 = full width, d5 = full height. */
+    int16_t d2 = (int16_t)obX(o) - sonic_react_width;
+    d5 = (int16_t)obHeight(o) - 3;                 /* subq.b #3 */
+    int16_t d3 = (int16_t)obY(o) - d5;
+    if (obFrame(o) == fr_Duck) {                   /* FixBugs=0: checks frame, not anim */
+        d3 += (int16_t)(((sonic_height - 3) - sonic_duck_height) * 2);
+        d5 = sonic_duck_height;                    /* alternate hitbox extent */
+    }
+    int16_t d4 = sonic_react_width * 2;            /* full hitbox width */
+    d5 += d5;                                      /* full hitbox height */
+
+    for (a1 = (uint8_t *)RAM_ADDR(v_lvlobjspace);
+         a1 < (uint8_t *)RAM_ADDR(v_lvlobjend);
+         a1 += object_size) {
+        /* React_LoopObjects: only on-screen objects check collision (bit7). */
+        if (!(obRender(a1) & 0x80)) {              /* bpl.s React_CheckNext */
+            continue;
+        }
+        uint8_t colType = obColType(a1);
+        if (colType == 0) {                        /* bne.s React_CheckHitboxOverlap */
+            continue;
+        }
+
+        /* React_CheckHitboxOverlap — horizontal test */
+        uint8_t masked = colType & (uint8_t)~(col_item | col_hurt | col_special);
+        if (masked == 0 || masked > 0x24) {
+            /* No sizing entry (pure subgroup, or reserved gap 0x25-$3F the
+               game never uses). The ASM would read ahead in ROM here; guard
+               the array bounds. */
+            continue;
+        }
+        const uint8_t *size = &React_Sizes[(masked - 1) * 2];
+        int16_t hw = size[0];
+        d0 = (int16_t)obX(a1) - hw - d2;
+        if (d0 < 0) {                              /* bhs.s .sonicLeft */
+            d0 += hw * 2;
+            if (d0 < 0) {                          /* blo.s .checkYOverlap → no overlap */
+                continue;
+            }
+        } else if (d0 > d4) {                      /* bhi.w React_CheckNext */
+            continue;
+        }
+
+        /* React_CheckHitboxOverlap — vertical test */
+        int16_t hh = size[1];
+        d0 = (int16_t)obY(a1) - hh - d3;
+        if (d0 < 0) {                              /* bhs.s .sonicAbove */
+            d0 += hh * 2;
+            if (d0 < 0) {                          /* blo.s React_CollisionDetected → no overlap */
+                continue;
+            }
+        } else if (d0 > d5) {
+            continue;
+        }
+
+        /* ---- React_CollisionDetected ---- */
+        uint8_t d1 = colType & (col_item | col_hurt | col_special);
+        if (d1 == 0) {
+            goto React_Enemy;                      /* col_badnik */
+        }
+        if (d1 == (col_item | col_hurt | col_special)) {
+            goto React_Special;                    /* col_special */
+        }
+        if ((int8_t)d1 < 0) {
+            goto React_ChkHurt;                    /* col_hurt (bits 7 set) */
+        }
+
+        /* Otherwise col_item ($40-$7F) */
+        d1 = colType & (uint8_t)~(col_item | col_hurt | col_special);
+        if (d1 == col_32x32) {
+            goto React_Monitor;
+        }
+        /* Assume object is a ring (standard, lost, or giant) */
+        if ((uint16_t)flashtime(o) >= 90) {        /* cmpi.w #90; bhs.w .return */
+            return;                                /* prevent collecting while flashing */
+        }
+        obRoutine(a1) = obRoutine(a1) + 2;         /* advance to Ring_Collect */
+        return;
+
+    React_Monitor:
+        if ((int16_t)obVelY(o) < 0) {              /* moving up: try bumping monitor */
+            d0 = (int16_t)obY(o) - 16;             /* check 16px higher */
+            if (d0 >= (int16_t)obY(a1)) {          /* blo.s .return */
+                obVelY(o) = -(int16_t)obVelY(o);   /* reverse Sonic's Y-speed */
+                obVelY(a1) = (int16_t)-0x180;      /* bump monitor upwards */
+                if (ob2ndRout(a1) == 0) {          /* not stood on / falling yet */
+                    ob2ndRout(a1) = ob2ndRout(a1) + 4; /* advance to ".fall" state */
+                }
+            }
+            return;
+        }
+        /* chkBreakMonitor */
+        if (obAnim(o) == id_Roll) {                /* bne.s .return */
+            obVelY(o) = -(int16_t)obVelY(o);       /* reverse Sonic's y-motion */
+            obRoutine(a1) = obRoutine(a1) + 2;     /* advance monitor routine */
+        }
+        return;
+
+    React_Enemy:
+        if (!v_invinc) {
+            if (obAnim(o) != id_Roll) {
+                goto React_ChkHurt;                /* not rolling → damage Sonic */
+            }
+        }
+        if (obBossHits(a1) == 0) {                 /* tst.b; beq.s React_BadnikHit */
+            goto React_BadnikHit;
+        }
+        /* React_BossHit: repel + halve Sonic's speed, disable boss collision */
+        obVelX(o) = (int16_t)(-(int16_t)obVelX(o));   /* neg.w */
+        obVelY(o) = (int16_t)(-(int16_t)obVelY(o));
+        obVelX(o) = (int16_t)(obVelX(o) >> 1);        /* asr.w */
+        obVelY(o) = (int16_t)(obVelY(o) >> 1);
+        obColType(a1) = col_none;
+        obBossHits(a1) = obBossHits(a1) - 1;          /* subq.b #1 */
+        if (obBossHits(a1) != 0) {
+            return;
+        }
+        obStatus(a1) |= (1 << 7);                     /* boss defeated flag */
+        return;
+
+    React_BadnikHit:
+        obStatus(a1) |= (1 << 7);                     /* badnik broken flag */
+
+        /* Points + points object */
+        uint16_t pb = (uint16_t)v_itembonus;          /* combo chain before floor */
+        v_itembonus = (uint16_t)(v_itembonus + 2);    /* addq.w #1*2 */
+        if (pb >= (3 * 2)) {                          /* cmpi.w #3*2; blo.s .getPoints */
+            pb = 3 * 2;                               /* cap points at 1000 */
+        }
+        exitem_pointsframe(a1) = pb;                  /* carry-over frame ID */
+        d0 = (int16_t)React_PointsCombo[pb / 2];      /* combo points for this chain */
+        if ((uint16_t)v_itembonus >= (16 * 2)) {      /* cmpi.w #16*2; blo.s .addPoints */
+            d0 = 1000;                                /* 10000 points onward */
+            exitem_pointsframe(a1) = 5 * 2;           /* points object frame 5 */
+        }
+        AddPoints(d0);
+
+        /* Change badnik into gray explosion/animal object */
+        obID(a1) = id_ExplosionItem;
+        obRoutine(a1) = 0;                            /* ExItem_Animal routine */
+
+        /* Bounce Sonic vertically */
+        if ((int16_t)obVelY(o) < 0) {                 /* moving up → slow down */
+            obVelY(o) = (int16_t)(obVelY(o) + 0x100);
+            return;
+        }
+        d0 = (int16_t)obY(o);
+        if (d0 >= (int16_t)obY(a1)) {                 /* Sonic at/below badnik → boost */
+            obVelY(o) = (int16_t)(obVelY(o) - 0x100);
+            return;
+        }
+        obVelY(o) = -(int16_t)obVelY(o);              /* negate to bounce upward */
+        return;
+
+    React_ChkHurt:
+        if (v_invinc) {
+            return;                                   /* .noDamage (FixBugs=0: exit ReactToItem) */
+        }
+        if (flashtime(o) != 0) {                      /* tst.w; bne.s .noDamage */
+            return;
+        }
+        HurtSonic(o, a1);                             /* movea.l a1,a2 → HurtSonic */
+        return;
+
+    React_Caterkiller:
+        obStatus(a1) |= (1 << 7);                     /* fragment on touch */
+        goto React_ChkHurt;
+
+    React_Special:
+        d1 = colType & (uint8_t)~(col_item | col_hurt | col_special);
+        if (d1 == col_16x16) {
+            goto React_Caterkiller;
+        }
+        if (d1 == col_40x32) {
+            goto React_Yadrin;
+        }
+        if (d1 == col_16x16_alt || d1 == col_8x64) {  /* SYZ bumper / LZ pole */
+            obColProp(a1) = obColProp(a1) + 1;        /* set touched flag */
+        }
+        return;
+
+    React_Yadrin:
+        /* d0 here = Yadrin's top edge - Sonic's top edge (vertical test result).
+           d5 becomes pixels Sonic's bottom clips into Yadrin's top edge. */
+        d5 = d5 - d0;
+        if (d5 >= 8) {                                /* bhs.s .normalBadnik */
+            goto React_Enemy;
+        }
+        d0 = (int16_t)obX(a1) - 4;                    /* left edge of spiked section */
+        if (obStatus(a1) & 1) {                       /* facing left? */
+            d0 -= 16;                                 /* mirror collision region */
+        }
+        d0 -= d2;                                     /* compare against Sonic's left edge */
+        if (d0 >= 0) {                                /* bhs.s .sonicLeft */
+            if (d0 > d4) {                            /* too far left */
+                goto React_Enemy;
+            }
+        } else {
+            d0 += 24;                                 /* spiked section is 24px wide */
+            if (d0 >= 0) {                            /* blo.s .damaging → overlaps */
+                goto React_ChkHurt;
+            }
+            goto React_Enemy;
+        }
+        goto React_ChkHurt;
+    }
 }
 
 /* ===========================================================================

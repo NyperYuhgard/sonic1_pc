@@ -18,6 +18,9 @@ void AddPLC(int id);
 /* Start a new PLC (clear + add) */
 void NewPLC(int id);
 
+/* Non-zero when the PLC queue is empty (ASM: tst.l (v_plc_buffer).w) */
+int PLC_IsEmpty(void);
+
 /* Process one pending PLC entry per frame */
 void RunPLC(void);
 

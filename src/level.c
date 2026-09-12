@@ -1397,8 +1397,8 @@ static void OPL_MovedRight(uint16_t d6) {
     a0 = opl_ptr_right;                         /* movea.l (v_opl_data),a0 */
     d6u = d6 + 320 + 320;                       /* addi.w #320+320,d6 */
 
-    while (1) {                                 /* .loop_find_right */
-        if (opl_be16(a0) <= d6u) break;         /* bls.s .found_right: stop when x >= d6 */
+while (1) {                                 /* .loop_find_right */
+        if (opl_be16(a0) >= d6u) break;         /* bls.s .found_right: stop when x >= d6 */
         if (a0[4] & 0x80) {                     /* remember flag */
             d2 = *a2;                           /* move.b (a2),d2 */
             (*a2)++;                            /* addq.b #1,(a2) */
@@ -1411,7 +1411,7 @@ static void OPL_MovedRight(uint16_t d6) {
     if (d6u >= 768) {                           /* bcs.s .found_left (borrow when < 768) */
         d6u -= 320 + 320 + 128;                 /* subi.w #320+320+128,d6 */
         while (1) {                             /* .loop_find_left */
-            if (opl_be16(a0) <= d6u) break;     /* bls.s .found_left */
+            if (opl_be16(a0) >= d6u) break;     /* bls.s .found_left: stop when x >= d6 */
             if (a0[4] & 0x80) (*(a2 + 1))++;    /* addq.b #1,1(a2) */
             a0 += 6;
         }
@@ -1796,11 +1796,24 @@ void PaletteCycle(void) {
 }
 
 /* ===================================================================
-   SignpostArtLoad — stub (sonic.asm SignpostArtLoad)
-   Load sign post art when approaching end of act.
+   SignpostArtLoad (sonic.asm:3186-3208)
+   End-of-act signpost pattern loading. Also locks the left boundary.
+   NewPLC(plcid_Signpost) queues the signpost, hidden bonus and giant
+   ring flash patterns (PLC_Signpost).
    =================================================================== */
 void SignpostArtLoad(void) {
-    /* TODO: sign post art loading at act end */
+    if (v_debuguse != 0) return;                 /* tst.w v_debuguse ; bne.s .return */
+    if (v_act == act3) return;                   /* cmpi.b #act3 ; beq.s .return (boss fight) */
+
+    int16_t d0 = (int16_t)RAM_WORD(0xF700);      /* move.w (v_screenposx).w,d0 */
+    int16_t d1 = (int16_t)v_limitright2 - 0x100; /* move.w v_limitright2,d1 ; subi.w #$100 */
+    if (d0 < d1) return;                         /* cmp.w d1,d0 ; blt.s .return */
+
+    if (f_timecount == 0) return;                /* tst.b f_timecount ; beq.s .return (time stopped) */
+    if (d1 == (int16_t)v_limitleft2) return;     /* cmp.w v_limitleft2,d1 ; beq.s .return (already locked) */
+
+    v_limitleft2 = (uint16_t)d1;                 /* move.w d1,(v_limitleft2).w */
+    NewPLC(plcid_Signpost);                      /* moveq #plcid_Signpost,d0 ; bra.w NewPLC */
 }
 
 /* ===================================================================
