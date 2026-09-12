@@ -1038,19 +1038,96 @@ void ColIndexLoad(void) {
 }
 
 /* ===================================================================
-   OscillateNumInit — stub
-   Initializes oscillation data used by swings, platforms, etc.
+   OscillateNumInit — from _inc/Oscillatory Routines.asm
+   Copies the baseline (value, rate) pairs into v_oscillate as
+   big-endian words (move.w (a2)+,(a1)+): the MSB of each value word is
+   the byte that consumers read and that OscillateNumDo compares.
    =================================================================== */
 void OscillateNumInit(void) {
-    /* TODO: fill v_oscillate table with initial values */
+    /* .baselines:  dc.w %0000000001111100  (direction bitfield),
+       then one value word + rate word per entry (2, 6, $A ... $3E). */
+    static const uint16_t baselines[] = {
+        0x007C,                                  /* bitfield: bits 2..5 set (down) */
+        0x0080, 0x0000,                          /*  2 - LZ water, MZ grass platforms */
+        0x0080, 0x0000,                          /*  6 - MZ grass platforms, SBZ saws */
+        0x0080, 0x0000,                          /*  $A - MZ magma, SYZ/SLZ floats */
+        0x0080, 0x0000,                          /*  $E - platforms, moving blocks */
+        0x0080, 0x0000,                          /* $12 - MZ glass/purple block */
+        0x0080, 0x0000,                          /* $16 - MZ purple block */
+        0x0080, 0x0000,                          /* $1A - swinging platforms */
+        0x0080, 0x0000,                          /* $1E - moving/floating blocks */
+        0x0080, 0x0000,                          /* $22 - SLZ circling platforms */
+        0x50F0, 0x011E,                          /* $26 - SLZ circling platforms */
+        0x2080, 0x00B4,                          /* $2A - SYZ/SLZ floating blocks */
+        0x3080, 0x010E,                          /* $2E - SYZ/SLZ floating blocks */
+        0x5080, 0x01C2,                          /* $32 - SYZ/SLZ floating blocks */
+        0x7080, 0x0276,                          /* $36 - SYZ/SLZ floating blocks */
+        0x0080, 0x0000,                          /* $3A - unused */
+        0x0080, 0x0000,                          /* $3E - unused */
+    };
+
+    for (size_t i = 0; i < sizeof(baselines) / sizeof(baselines[0]); i++) {
+        RAM_SET_U16(0xFE5E + (uint32_t)i * 2, baselines[i]);
+    }
 }
 
 /* ===================================================================
-   OscillateNumDo — stub (sonic.asm OscillateNumDo)
-   Advance oscillation values each frame.
+   OscillateNumDo — from _inc/Oscillatory Routines.asm
+   Advance each (value, rate) pair: rate += freq while rising,
+   rate -= freq while falling; flip direction when the value's MSB
+   (byte at 0(a1), stored big-endian) crosses the middle value d4.
    =================================================================== */
 void OscillateNumDo(void) {
-    /* TODO: advance v_oscillate table values */
+    /* cmpi.b #6,(v_player+obRoutine).w ; bhs.s .end — Sonic just died */
+    if (obRoutine(RAM_ADDR(v_player)) >= 6) {
+        return;
+    }
+
+    /* .settings: frequency, middle value — one per entry, 16 total. */
+    static const uint16_t settings[][2] = {
+        {2, 0x10}, {2, 0x18}, {2, 0x20}, {2, 0x30},
+        {4, 0x20}, {8, 0x08}, {8, 0x40}, {4, 0x40},
+        {2, 0x50}, {2, 0x50}, {2, 0x20}, {3, 0x30},
+        {5, 0x50}, {7, 0x70}, {2, 0x10}, {2, 0x10},
+    };
+
+    uint16_t d3 = RAM_U16(0xFE5E);               /* direction bitfield */
+
+    for (int i = 0; i < 16; i++) {
+        int bit = 15 - i;                        /* d1, decrements from 15 */
+        uint32_t addr = 0xFE5E + 2 + (uint32_t)i * 4;  /* value word; rate at +2 */
+        uint16_t d2 = settings[i][0];            /* frequency */
+        uint16_t d4 = settings[i][1];            /* middle value */
+        int16_t rate = (int16_t)RAM_U16(addr + 2);
+        uint16_t value = RAM_U16(addr);
+        uint16_t msb = value >> 8;               /* byte compared: 0(a1) */
+
+        if (d3 & (1u << bit)) {
+            /* .down: rate -= frequency; value += rate */
+            rate = (int16_t)(rate - (int16_t)d2);
+            value = (uint16_t)(value + (uint16_t)rate);
+            RAM_SET_U16(addr + 2, (uint16_t)rate);
+            RAM_SET_U16(addr, value);
+            /* _cmp.b 0(a1),d4 ; bls.s .next — value still at/above middle */
+            if (d4 <= msb) {
+                continue;
+            }
+            d3 &= (uint16_t)~(1u << bit);        /* bclr: start rising */
+        } else {
+            /* .up: rate += frequency; value += rate */
+            rate = (int16_t)(rate + (int16_t)d2);
+            value = (uint16_t)(value + (uint16_t)rate);
+            RAM_SET_U16(addr + 2, (uint16_t)rate);
+            RAM_SET_U16(addr, value);
+            /* _cmp.b 0(a1),d4 ; bhi.s .next — value still below middle */
+            if (d4 > msb) {
+                continue;
+            }
+            d3 |= (1u << bit);                   /* bset: start falling */
+        }
+    }
+
+    RAM_SET_U16(0xFE5E, d3);                     /* update direction bitfield */
 }
 
 /* ===================================================================
@@ -1472,7 +1549,7 @@ static void anis_mz(void) {
         v_lani1_time = 2 - 1;
         v_lani1_frame++;                                       /* increment frame counter (unused) */
         const uint8_t *a4 = Art_MzLava2 + ((uint32_t)v_lani0_frame << 9);  /* ror.w #7 -> *$200 */
-        uint16_t d3 = RAM_WORD(0xFE5E + 0xA);                  /* v_oscillate+$A */
+        uint16_t d3 = (uint16_t)ram[0xFE5E + 0xA];         /* move.b (v_oscillate+$A).w,d3 — MSB byte */
         uint8_t *dst = &vdp.vram[ArtTile_MZ_Animated_Magma * tile_size];
         for (int iter = 0; iter < 4; iter++) {                 /* move.w #4-1,d2 */
             int j = ((d3 * 2) & 0x1E) >> 1;                    /* andi.w #$1E */
@@ -1657,11 +1734,65 @@ void AnimateLevelAct(void) {
 }
 
 /* ===================================================================
-   PaletteCycle — stub (sonic.asm PaletteCycle)
-   Zone-specific palette cycling (waterfalls, lava, etc.)
+   PaletteCycle (_inc/PaletteCycle.asm)
+   Zone-specific palette cycling (waterfalls, lights, etc.)
    =================================================================== */
+
+/* PalCycle_GHZ + PalCycle_Title (PaletteCycle.asm:42-67). Shared by GHZ
+   and the Ending sequence. Every 6 frames, 4 colours (palette line 3,
+   colours 8-B) are replaced with the next block of 4 colours from
+   Pal_GHZCycWater (4 blocks of 4, big-endian words). */
+static void palcycle_ghz(void) {
+    const uint8_t *tab = Pal_GHZCycWater;
+    if (!tab || Pal_GHZCycWater_len < 32) return;
+
+    /* Decrementar temporizador */
+    v_pcyc_time = (uint16_t)(v_pcyc_time - 1);
+    if ((v_pcyc_time & 0x8000) == 0) return; /* Timer aún positivo (>= 0) */
+
+    v_pcyc_time = 6 - 1; /* Reset timer */
+
+    uint16_t d0 = v_pcyc_num & 3; /* cycle > 3 resets to 0 */
+    v_pcyc_num = (uint16_t)(v_pcyc_num + 1);
+
+    /* Cada bloque son 8 bytes (4 colores uint16_t) */
+    int base = (int)d0 * 4;
+
+    /* Escribir en la paleta RAM (Línea 3, colores 8 a 11) */
+    uint16_t *a1 = (uint16_t *)RAM_ADDR(v_palette_line_3 + (8 * 2));
+    for (int i = 0; i < 4; i++) {
+        uint16_t color = ((uint16_t)tab[(base + i) * 2] << 8) | tab[(base + i) * 2 + 1];
+        a1[i] = color;
+        vdp.cram[40 + i] = color; /* Sincronizar CRAM (Línea 3 = offset 32, 32+8 = 40) */
+    }
+}
+
+/* PalCycle_MZ (PaletteCycle.asm:158-166): Marble Zone has no palette cycles */
+static void palcycle_none(void) {
+}
+
+/* PalCycle_LZ/SLZ/SYZ/SBZ: still TODO — need conveyor/script cycle data.
+   Until ported they act like PalCycle_MZ and simply return. */
+#define palcycle_todo palcycle_none
+
+/* PalCycle_Index (PaletteCycle.asm:27-34): word-relative jump table. */
+static const void (*const palcycle_index[])(void) = {
+    palcycle_ghz,    /* GHZ   */
+    palcycle_todo,   /* LZ    */
+    palcycle_none,   /* MZ    */
+    palcycle_todo,   /* SLZ   */
+    palcycle_todo,   /* SYZ   */
+    palcycle_todo,   /* SBZ   */
+    palcycle_ghz,    /* Ending (reuses GHZ) */
+};
+
 void PaletteCycle(void) {
-    /* TODO: zone-specific palette cycling */
+    /* PaletteCycle (PaletteCycle.asm:6-21): dispatch by zone ID */
+    uint8_t zone = (uint8_t)v_zone;
+    if (zone >= (uint8_t)(sizeof(palcycle_index) / sizeof(palcycle_index[0]))) {
+        return; /* zonewarning PalCycle_Index,2 */
+    }
+    palcycle_index[zone](); /* jmp PalCycle_Index(pc,d0.w) */
 }
 
 /* ===================================================================

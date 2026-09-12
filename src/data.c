@@ -53,6 +53,9 @@ size_t   Pal_Title_len = 0;
 const uint8_t *Pal_TitleCycWater = NULL;
 size_t   Pal_TitleCycWater_len = 0;
 
+const uint8_t *Pal_GHZCycWater = NULL;
+size_t   Pal_GHZCycWater_len = 0;
+
 const uint8_t *Pal_LevelSel = NULL;
 size_t   Pal_LevelSel_len = 0;
 
@@ -386,6 +389,8 @@ int Data_Init(void) {
     Pal_Title_len = 0;
     Pal_TitleCycWater = NULL;
     Pal_TitleCycWater_len = 0;
+    Pal_GHZCycWater = NULL;
+    Pal_GHZCycWater_len = 0;
     Pal_LevelSel = NULL;
     Pal_LevelSel_len = 0;
     Pal_Sonic = NULL;
@@ -473,6 +478,11 @@ int Data_Init(void) {
     if (load_asset("palette/cycle_water.bin", &Pal_TitleCycWater, &Pal_TitleCycWater_len) != 0) {
         Pal_TitleCycWater = NULL;
         Pal_TitleCycWater_len = 0;
+    }
+
+    if (load_asset("palette/cycle_ghz.bin", &Pal_GHZCycWater, &Pal_GHZCycWater_len) != 0) {
+        Pal_GHZCycWater = NULL;
+        Pal_GHZCycWater_len = 0;
     }
 
     if (load_asset("palette/level_select.bin", &Pal_LevelSel, &Pal_LevelSel_len) != 0) {
@@ -897,6 +907,7 @@ void Data_Quit(void) {
     FREE_ASSET(Eni_SegaLogo);
     FREE_ASSET(Pal_Title);
     FREE_ASSET(Pal_TitleCycWater);
+    FREE_ASSET(Pal_GHZCycWater);
     FREE_ASSET(Pal_LevelSel);
     FREE_ASSET(Pal_Sonic);
     FREE_ASSET(Pal_GHZ);

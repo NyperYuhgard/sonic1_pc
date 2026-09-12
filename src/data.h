@@ -43,6 +43,10 @@ extern size_t   Pal_Title_len;
 extern const uint8_t *Pal_TitleCycWater;
 extern size_t   Pal_TitleCycWater_len;
 
+/* GHZ (and Ending) waterfall palette cycle data (assets/palette/cycle_ghz.bin) */
+extern const uint8_t *Pal_GHZCycWater;
+extern size_t   Pal_GHZCycWater_len;
+
 extern const uint8_t *Pal_LevelSel;
 extern size_t   Pal_LevelSel_len;
 

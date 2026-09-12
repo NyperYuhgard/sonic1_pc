@@ -79,6 +79,7 @@ RENAME_MAP = {
     "maps/titlecard.asm": "Title Cards.asm",
     "maps/titlesonic.asm": "Title Screen Sonic.asm",
     "palette/cycle_water.bin": "Cycle - Title Screen Water.bin",
+    "palette/cycle_ghz.bin": "Cycle - GHZ.bin",
     "palette/ghz.bin": "Green Hill Zone.bin",
     "palette/level_select.bin": "Level Select.bin",
     "palette/lz.bin": "Labyrinth Zone.bin",
