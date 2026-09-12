@@ -84,8 +84,10 @@ void DisplaySprite(void *obj) {
 }
 
 void *FindFreeObj(void) {
-    uint8_t *base = ObjRAM;
-    for (int i = 0; i < NUM_OBJECTS; i++) {
+    /* ASM: lea (v_lvlobjspace).w,a1 ; move.w #(v_lvlobjend-v_lvlobjspace)/object_size-1,d0 */
+    uint8_t *base = RAM_ADDR(v_lvlobjspace);
+    int count = (int)((v_lvlobjend - v_lvlobjspace) / OBJECT_SIZE);
+    for (int i = 0; i < count; i++) {
         if (base[i * OBJECT_SIZE] == 0) {
             return &base[i * OBJECT_SIZE];
         }
@@ -3269,7 +3271,7 @@ static void Sonic_Animate(void *obj) {
 
 static void Sonic_LoadGfx(void *obj) {
     uint8_t *o = (uint8_t *)obj;
-    fprintf(stdout, "SLG: frame=%d prev=%d\n", obFrame(o), (int)v_sonframenum);
+    //fprintf(stdout, "SLG: frame=%d prev=%d\n", obFrame(o), (int)v_sonframenum); //ONLY FOR DEBUG CONSOLE
     uint8_t d0 = obFrame(o);
 
     if (d0 == v_sonframenum) {
@@ -3531,72 +3533,98 @@ void ReactToItem(void *obj) {
     uint8_t *a1;
     int16_t d0, d5;
 
-    /* Compute Sonic's collision box:
-       d2 = left edge, d3 = top edge, d4 = full width, d5 = full height. */
-    int16_t d2 = (int16_t)obX(o) - sonic_react_width;
-    d5 = (int16_t)obHeight(o) - 3;                 /* subq.b #3 */
-    int16_t d3 = (int16_t)obY(o) - d5;
-    if (obFrame(o) == fr_Duck) {                   /* FixBugs=0: checks frame, not anim */
-        d3 += (int16_t)(((sonic_height - 3) - sonic_duck_height) * 2);
-        d5 = sonic_duck_height;                    /* alternate hitbox extent */
+    /* --- DEBUG TEMPORAL --- */
+    static int dbg_init = 0;
+    static int dbg_on = 0;
+    if (!dbg_init) {
+        dbg_init = 1;
+        dbg_on = getenv("SONIC_DEBUG_REACT") != NULL;
+        if (dbg_on) {
+            fprintf(stderr, "ReactToItem range: start=%p end=%p count=%d\n",
+                    (void*)RAM_ADDR(v_lvlobjspace), (void*)RAM_ADDR(v_lvlobjend),
+                    (int)((v_lvlobjend - v_lvlobjspace) / object_size));
+            fprintf(stderr, "ObjRAM=%p  v_objspace=%d  v_lvlobjspace=%d\n",
+                    (void*)ObjRAM, v_objspace, v_lvlobjspace);
+        }
     }
-    int16_t d4 = sonic_react_width * 2;            /* full hitbox width */
-    d5 += d5;                                      /* full hitbox height */
+    /* --- FIN DEBUG --- */
+
+    int16_t d2 = (int16_t)obX(o) - sonic_react_width;
+    d5 = (int16_t)obHeight(o) - 3;
+    int16_t d3 = (int16_t)obY(o) - d5;
+    if (obFrame(o) == fr_Duck) {
+        d3 += (int16_t)(((sonic_height - 3) - sonic_duck_height) * 2);
+        d5 = sonic_duck_height;
+    }
+    int16_t d4 = sonic_react_width * 2;
+    d5 += d5;
 
     for (a1 = (uint8_t *)RAM_ADDR(v_lvlobjspace);
          a1 < (uint8_t *)RAM_ADDR(v_lvlobjend);
-         a1 += object_size) {
-        /* React_LoopObjects: only on-screen objects check collision (bit7). */
-        if (!(obRender(a1) & 0x80)) {              /* bpl.s React_CheckNext */
+    a1 += object_size) {
+        if (!(obRender(a1) & 0x80)) {
             continue;
         }
         uint8_t colType = obColType(a1);
-        if (colType == 0) {                        /* bne.s React_CheckHitboxOverlap */
+        if (colType == 0) {
             continue;
         }
 
-        /* React_CheckHitboxOverlap — horizontal test */
+        /* --- DEBUG: imprime el primer ring que encontremos por frame --- */
+        if (dbg_on && colType == (col_12x12 | col_item)) {
+            static int ring_dbg_count = 0;
+            if (ring_dbg_count < 20) {
+                fprintf(stderr, "RING id=%02X render=%02X col=%02X obj=(%d,%d) son=(%d,%d) hbX=[%d,%d] hbY=[%d,%d]\n",
+                        obID(a1), obRender(a1), colType,
+                        obX(a1), obY(a1), obX(o), obY(o),
+                        d2, (int)(d2 + d4),
+                        d3, (int)(d3 + d5));
+                ring_dbg_count++;
+            }
+        }
+        /* --- FIN DEBUG --- */
+
         uint8_t masked = colType & (uint8_t)~(col_item | col_hurt | col_special);
         if (masked == 0 || masked > 0x24) {
-            /* No sizing entry (pure subgroup, or reserved gap 0x25-$3F the
-               game never uses). The ASM would read ahead in ROM here; guard
-               the array bounds. */
             continue;
         }
         const uint8_t *size = &React_Sizes[(masked - 1) * 2];
         int16_t hw = size[0];
         d0 = (int16_t)obX(a1) - hw - d2;
-        if (d0 < 0) {                              /* bhs.s .sonicLeft */
+        if (d0 < 0) {
             d0 += hw * 2;
-            if (d0 < 0) {                          /* blo.s .checkYOverlap → no overlap */
+            if (d0 < 0) {
+                if (dbg_on) fprintf(stderr, "  -> X test FAIL (left)\n");
                 continue;
             }
-        } else if (d0 > d4) {                      /* bhi.w React_CheckNext */
+        } else if (d0 > d4) {
+            if (dbg_on) fprintf(stderr, "  -> X test FAIL (right)\n");
             continue;
         }
 
-        /* React_CheckHitboxOverlap — vertical test */
         int16_t hh = size[1];
         d0 = (int16_t)obY(a1) - hh - d3;
-        if (d0 < 0) {                              /* bhs.s .sonicAbove */
+        if (d0 < 0) {
             d0 += hh * 2;
-            if (d0 < 0) {                          /* blo.s React_CollisionDetected → no overlap */
+            if (d0 < 0) {
+                if (dbg_on) fprintf(stderr, "  -> Y test FAIL (above)\n");
                 continue;
             }
         } else if (d0 > d5) {
+            if (dbg_on) fprintf(stderr, "  -> Y test FAIL (below)\n");
             continue;
         }
 
         /* ---- React_CollisionDetected ---- */
         uint8_t d1 = colType & (col_item | col_hurt | col_special);
         if (d1 == 0) {
-            goto React_Enemy;                      /* col_badnik */
+            goto React_Enemy;
         }
         if (d1 == (col_item | col_hurt | col_special)) {
-            goto React_Special;                    /* col_special */
+            goto React_Special;
         }
         if ((int8_t)d1 < 0) {
-            goto React_ChkHurt;                    /* col_hurt (bits 7 set) */
+            goto React_ChkHurt;
         }
 
         /* Otherwise col_item ($40-$7F) */
@@ -3604,103 +3632,97 @@ void ReactToItem(void *obj) {
         if (d1 == col_32x32) {
             goto React_Monitor;
         }
-        /* Assume object is a ring (standard, lost, or giant) */
-        if ((uint16_t)flashtime(o) >= 90) {        /* cmpi.w #90; bhs.w .return */
-            return;                                /* prevent collecting while flashing */
+        if ((uint16_t)flashtime(o) >= 90) {
+            if (dbg_on) fprintf(stderr, "  -> ring: flashtime >= 90, skip\n");
+            return;
         }
-        obRoutine(a1) = obRoutine(a1) + 2;         /* advance to Ring_Collect */
+        if (dbg_on) fprintf(stderr, "  -> ring: COLLECTING (routine %d -> %d)\n",
+            obRoutine(a1), obRoutine(a1) + 2);
+        obRoutine(a1) = obRoutine(a1) + 2;
         return;
 
-    React_Monitor:
-        if ((int16_t)obVelY(o) < 0) {              /* moving up: try bumping monitor */
-            d0 = (int16_t)obY(o) - 16;             /* check 16px higher */
-            if (d0 >= (int16_t)obY(a1)) {          /* blo.s .return */
-                obVelY(o) = -(int16_t)obVelY(o);   /* reverse Sonic's Y-speed */
-                obVelY(a1) = (int16_t)-0x180;      /* bump monitor upwards */
-                if (ob2ndRout(a1) == 0) {          /* not stood on / falling yet */
-                    ob2ndRout(a1) = ob2ndRout(a1) + 4; /* advance to ".fall" state */
+        React_Monitor:
+        if ((int16_t)obVelY(o) < 0) {
+            d0 = (int16_t)obY(o) - 16;
+            if (d0 >= (int16_t)obY(a1)) {
+                obVelY(o) = -(int16_t)obVelY(o);
+                obVelY(a1) = (int16_t)-0x180;
+                if (ob2ndRout(a1) == 0) {
+                    ob2ndRout(a1) = ob2ndRout(a1) + 4;
                 }
             }
             return;
         }
-        /* chkBreakMonitor */
-        if (obAnim(o) == id_Roll) {                /* bne.s .return */
-            obVelY(o) = -(int16_t)obVelY(o);       /* reverse Sonic's y-motion */
-            obRoutine(a1) = obRoutine(a1) + 2;     /* advance monitor routine */
+        if (obAnim(o) == id_Roll) {
+            obVelY(o) = -(int16_t)obVelY(o);
+            obRoutine(a1) = obRoutine(a1) + 2;
         }
         return;
 
-    React_Enemy:
+        React_Enemy:
         if (!v_invinc) {
             if (obAnim(o) != id_Roll) {
-                goto React_ChkHurt;                /* not rolling → damage Sonic */
+                goto React_ChkHurt;
             }
         }
-        if (obBossHits(a1) == 0) {                 /* tst.b; beq.s React_BadnikHit */
+        if (obBossHits(a1) == 0) {
             goto React_BadnikHit;
         }
-        /* React_BossHit: repel + halve Sonic's speed, disable boss collision */
-        obVelX(o) = (int16_t)(-(int16_t)obVelX(o));   /* neg.w */
+        obVelX(o) = (int16_t)(-(int16_t)obVelX(o));
         obVelY(o) = (int16_t)(-(int16_t)obVelY(o));
-        obVelX(o) = (int16_t)(obVelX(o) >> 1);        /* asr.w */
+        obVelX(o) = (int16_t)(obVelX(o) >> 1);
         obVelY(o) = (int16_t)(obVelY(o) >> 1);
         obColType(a1) = col_none;
-        obBossHits(a1) = obBossHits(a1) - 1;          /* subq.b #1 */
+        obBossHits(a1) = obBossHits(a1) - 1;
         if (obBossHits(a1) != 0) {
             return;
         }
-        obStatus(a1) |= (1 << 7);                     /* boss defeated flag */
+        obStatus(a1) |= (1 << 7);
         return;
 
-    React_BadnikHit:
-        obStatus(a1) |= (1 << 7);                     /* badnik broken flag */
-
-        /* Points + points object */
-        uint16_t pb = (uint16_t)v_itembonus;          /* combo chain before floor */
-        v_itembonus = (uint16_t)(v_itembonus + 2);    /* addq.w #1*2 */
-        if (pb >= (3 * 2)) {                          /* cmpi.w #3*2; blo.s .getPoints */
-            pb = 3 * 2;                               /* cap points at 1000 */
+        React_BadnikHit:
+        obStatus(a1) |= (1 << 7);
+        uint16_t pb = (uint16_t)v_itembonus;
+        v_itembonus = (uint16_t)(v_itembonus + 2);
+        if (pb >= (3 * 2)) {
+            pb = 3 * 2;
         }
-        exitem_pointsframe(a1) = pb;                  /* carry-over frame ID */
-        d0 = (int16_t)React_PointsCombo[pb / 2];      /* combo points for this chain */
-        if ((uint16_t)v_itembonus >= (16 * 2)) {      /* cmpi.w #16*2; blo.s .addPoints */
-            d0 = 1000;                                /* 10000 points onward */
-            exitem_pointsframe(a1) = 5 * 2;           /* points object frame 5 */
+        exitem_pointsframe(a1) = pb;
+        d0 = (int16_t)React_PointsCombo[pb / 2];
+        if ((uint16_t)v_itembonus >= (16 * 2)) {
+            d0 = 1000;
+            exitem_pointsframe(a1) = 5 * 2;
         }
         AddPoints(d0);
-
-        /* Change badnik into gray explosion/animal object */
         obID(a1) = id_ExplosionItem;
-        obRoutine(a1) = 0;                            /* ExItem_Animal routine */
-
-        /* Bounce Sonic vertically */
-        if ((int16_t)obVelY(o) < 0) {                 /* moving up → slow down */
+        obRoutine(a1) = 0;
+        if ((int16_t)obVelY(o) < 0) {
             obVelY(o) = (int16_t)(obVelY(o) + 0x100);
             return;
         }
         d0 = (int16_t)obY(o);
-        if (d0 >= (int16_t)obY(a1)) {                 /* Sonic at/below badnik → boost */
+        if (d0 >= (int16_t)obY(a1)) {
             obVelY(o) = (int16_t)(obVelY(o) - 0x100);
             return;
         }
-        obVelY(o) = -(int16_t)obVelY(o);              /* negate to bounce upward */
+        obVelY(o) = -(int16_t)obVelY(o);
         return;
 
-    React_ChkHurt:
+        React_ChkHurt:
         if (v_invinc) {
-            return;                                   /* .noDamage (FixBugs=0: exit ReactToItem) */
-        }
-        if (flashtime(o) != 0) {                      /* tst.w; bne.s .noDamage */
             return;
         }
-        HurtSonic(o, a1);                             /* movea.l a1,a2 → HurtSonic */
+        if (flashtime(o) != 0) {
+            return;
+        }
+        HurtSonic(o, a1);
         return;
 
-    React_Caterkiller:
-        obStatus(a1) |= (1 << 7);                     /* fragment on touch */
+        React_Caterkiller:
+        obStatus(a1) |= (1 << 7);
         goto React_ChkHurt;
 
-    React_Special:
+        React_Special:
         d1 = colType & (uint8_t)~(col_item | col_hurt | col_special);
         if (d1 == col_16x16) {
             goto React_Caterkiller;
@@ -3708,30 +3730,28 @@ void ReactToItem(void *obj) {
         if (d1 == col_40x32) {
             goto React_Yadrin;
         }
-        if (d1 == col_16x16_alt || d1 == col_8x64) {  /* SYZ bumper / LZ pole */
-            obColProp(a1) = obColProp(a1) + 1;        /* set touched flag */
+        if (d1 == col_16x16_alt || d1 == col_8x64) {
+            obColProp(a1) = obColProp(a1) + 1;
         }
         return;
 
-    React_Yadrin:
-        /* d0 here = Yadrin's top edge - Sonic's top edge (vertical test result).
-           d5 becomes pixels Sonic's bottom clips into Yadrin's top edge. */
+        React_Yadrin:
         d5 = d5 - d0;
-        if (d5 >= 8) {                                /* bhs.s .normalBadnik */
+        if (d5 >= 8) {
             goto React_Enemy;
         }
-        d0 = (int16_t)obX(a1) - 4;                    /* left edge of spiked section */
-        if (obStatus(a1) & 1) {                       /* facing left? */
-            d0 -= 16;                                 /* mirror collision region */
+        d0 = (int16_t)obX(a1) - 4;
+        if (obStatus(a1) & 1) {
+            d0 -= 16;
         }
-        d0 -= d2;                                     /* compare against Sonic's left edge */
-        if (d0 >= 0) {                                /* bhs.s .sonicLeft */
-            if (d0 > d4) {                            /* too far left */
+        d0 -= d2;
+        if (d0 >= 0) {
+            if (d0 > d4) {
                 goto React_Enemy;
             }
         } else {
-            d0 += 24;                                 /* spiked section is 24px wide */
-            if (d0 >= 0) {                            /* blo.s .damaging → overlaps */
+            d0 += 24;
+            if (d0 >= 0) {
                 goto React_ChkHurt;
             }
             goto React_Enemy;
