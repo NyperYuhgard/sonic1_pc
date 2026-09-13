@@ -1830,8 +1830,12 @@ void MoveSonicInDemo(void) {
    Ported from sonic.asm Level_MainLoop (lines 2998-3046)
    =================================================================== */
 void Level_Process(void) {
-    /* One-time init */
-    if (!level_init_done) {
+    /* One-time init. g_last_mode (from MainGameLoop) holds the mode
+       dispatched last frame: entering the level mode from anywhere else
+       forces Level_Enter even if a previous level session left
+       level_init_done set — mirrors the ASM, where GM_Level's setup
+       re-runs on every entry (start, restart, game-over→title→start). */
+    if (g_last_mode != (uint8_t)0x0C /* GM_Level */ || !level_init_done) {
         Level_Enter();
         level_init_done = 1;
         return;

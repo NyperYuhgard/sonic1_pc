@@ -52,6 +52,14 @@ static SDL_Window   *window   = NULL;
 static SDL_Renderer *renderer = NULL;
 int running = 1;
 
+/* Last game mode dispatched by MainGameLoop, masked to $1C like the ASM
+   (andi.w #$1C on v_gamemode). GM_Title_Screen and Level_Process use it to
+   re-run their entry setup each time the mode is (re)entered: the ASM
+   GM_Title/GM_Level handlers are linear code that re-execute their whole
+   setup whenever the mode is reached from another mode, so the pumped C
+   functions need this to tell a fresh arrival apart from a continuing frame. */
+uint8_t g_last_mode = 0xFF;
+
 /* ===================================================================
     Forward declarations for game mode functions
     =================================================================== */
@@ -329,9 +337,11 @@ void ClearScreen(void) {
    GM_Title_Screen (from sonic.asm GM_Title)
    =================================================================== */
 static void GM_Title_Screen(void) {
-    static int init_done = 0;
-
-    if (!init_done) {
+    /* Setup runs once per entry into GM_Title, matching the ASM's linear
+       GM_Title handler (which re-runs its whole setup any time the mode is
+       reached from another game mode). g_last_mode holds the mode that was
+       dispatched on the previous frame. */
+    if (g_last_mode != (uint8_t)GM_Title) {
         /* Stop music and clear PLC */
         QueueSound2(bgm_Stop, false);
         ClearPLC();
@@ -509,8 +519,6 @@ static void GM_Title_Screen(void) {
         v_vdp_buffer1 |= 0x0040;
         VDP_SetRegister(1, v_vdp_buffer1 | 0x34);
         Palette_FadeIn();
-
-        init_done = 1;
     }
 
     /* ==================================================================
@@ -588,8 +596,6 @@ static void GM_Title_Screen(void) {
     /* --- Timer / Start / Demo --- */
     if (v_generictimer == 0) {
         GotoDemo();
-        init_done = 0;
-        init_done = 0;
         return;
     }
 
@@ -620,14 +626,12 @@ static void GM_Title_Screen(void) {
                         if (f_creditscheat && sound == 0x9F) {
                             v_gamemode = GM_Ending;
                             v_zone_act = id_EndZ_good;
-                            init_done = 0;
                             return;
                         }
                         if (f_creditscheat && sound == 0x9E) {
                             v_gamemode = GM_Credits;
                             QueueSound2(bgm_Credits, false);
                             v_creditsnum = 0;
-                            init_done = 0;
                             return;
                         }
                         Sound_Queue(sound, false);
@@ -643,11 +647,9 @@ static void GM_Title_Screen(void) {
                                 v_time = 0;
                                 v_score = 0;
                                 v_scorelife = 5000;   /* Revision<>0 */
-                                init_done = 0;
                                 return;
                             }
                             v_zone_act = ptr & 0x3FFF;
-                            init_done = 0;
                             break;
                         }
                     }
@@ -666,8 +668,6 @@ static void GM_Title_Screen(void) {
         RAM_SET_U32((uint32_t)(v_emldlist + 4), 0);
         v_continues = 0;
         QueueSound2(bgm_Fade, false);
-        init_done = 0;
-        init_done = 0;
         return;
     }
 
@@ -893,12 +893,18 @@ static const GameModeFunc game_mode_table[] = {
 static void MainGameLoop(void) {
     while (running) {
         /* Get current game mode */
-        uint8_t mode = v_gamemode;
-        int index = (mode & 0x1C) >> 2;
+        uint8_t mode = v_gamemode & 0x1C;  /* match ASM: andi.w #$1C */
+        int index = mode >> 2;
 
         if (index < (int)GAME_MODE_TABLE_SIZE && game_mode_table[index]) {
             game_mode_table[index]();
         }
+
+        /* Record the mode dispatched this frame; set AFTER the handler so a
+           handler that changed v_gamemode is seen as a fresh entry next
+           frame (g_last_mode still holds the previous mode when the new
+           mode's handler runs next iteration). */
+        g_last_mode = mode;
 
         if (!running) break;
 

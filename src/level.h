@@ -7,6 +7,11 @@
    Handles one-time init (when level_init_done == 0) and per-frame gameplay. */
 void Level_Process(void);
 
+/* Last game mode dispatched by MainGameLoop, masked to $1C (owned by
+   main.c). Level_Process uses it to re-run Level_Enter every time the
+   level mode is (re)entered, mirroring the ASM's linear GM_Level setup. */
+extern uint8_t g_last_mode;
+
 /* Level entry-point helpers (also used internally) */
 void LevelSizeLoad(void);
 void LevelLayoutLoad(void);

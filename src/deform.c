@@ -168,15 +168,16 @@ static void SVSweetSpot(int16_t d0dist) {
 }
 
 static void SVScroll(int16_t d0dist, uint16_t speed8) {
-    /* Cmp +/-N against signed d0dist; move up/down or park in sweet spot */
+    /* Cmp +/-N against signed d0dist; move up/down or park in sweet spot.
+       ASM: move.w #N<<8,d1 ; ext.l ; asl.l #8 -> N<<16 on the 16.16 long. */
     if (d0dist > (int16_t)speed8) {              /* bgt -> down */
         /* SV_MoveCameraDown */
-        int32_t d1 = ((int32_t)(int16_t)speed8) << 8;
+        int32_t d1 = ((int32_t)(int16_t)speed8) << 16;
         int32_t newl = cam_getl(0xF704) + d1;   /* add.l old long */
         SVBottomBoundary((int16_t)((uint32_t)newl >> 16));
     } else if (d0dist < -(int16_t)speed8) {      /* blt -> up */
         /* SV_MoveCameraUp */
-        int32_t d1 = ((int32_t)(int16_t)(-(int16_t)speed8)) << 8;
+        int32_t d1 = ((int32_t)(int16_t)(-(int16_t)speed8)) << 16;
         int32_t newl = cam_getl(0xF704) + d1;
         SVTopBoundary((int16_t)((uint32_t)newl >> 16));
     } else {
