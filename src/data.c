@@ -218,6 +218,9 @@ size_t   Map_Bri_len = 0;
 
 /* GHZ purple rock (id_PurpleRock) mappings */
 static size_t Map_PRock_len = 0;
+/* GHZ edge walls (id_EdgeWalls)  */
+const uint8_t *Nem_GhzWall2 = NULL;
+size_t   Nem_GhzWall2_len = 0;
 
 /* Object mappings referenced by the DebugMode item lists.
    Most are unstaged (NULL) until their maps/*.asm assets are ported. */
@@ -228,6 +231,8 @@ const uint8_t *Map_Plat_GHZ = NULL;
 const uint8_t *Map_PRock = NULL;
 const uint8_t *Map_Spring = NULL;
 const uint8_t *Map_Newt = NULL;
+/* GHZ edge walls (id_EdgeWalls) mappings */
+static size_t Map_Edge_len = 0;
 const uint8_t *Map_Edge = NULL;
 const uint8_t *Map_GBall = NULL;
 const uint8_t *Map_Lamp = NULL;
@@ -285,8 +290,15 @@ const uint8_t *Map_Gird = NULL;
 const uint8_t *Map_Invis = NULL;
 const uint8_t *Map_Hog = NULL;
 const uint8_t *Map_Animal1 = NULL;
+size_t   Map_Animal1_len = 0;
 const uint8_t *Map_Animal2 = NULL;
+size_t   Map_Animal2_len = 0;
 const uint8_t *Map_Animal3 = NULL;
+size_t   Map_Animal3_len = 0;
+
+/* Points object mappings (28, 29 Animals and Points.asm) */
+const uint8_t *Map_Points = NULL;
+size_t   Map_Points_len = 0;
 
 /* Uncompressed level art for AnimateLevelAct (AnimateLevelGfx.asm).
    Art_MzLava1/2 and Art_MzTorch are for MZ, Art_SbzSmoke for SBZ,
@@ -658,6 +670,11 @@ int Data_Init(void) {
         Ani_TSon_len = 0;
     }
 
+    if (load_asset("artnem/GHZ Edge Wall.nem", &Nem_GhzWall2, &Nem_GhzWall2_len) != 0) {
+        Nem_GhzWall2 = NULL;
+        Nem_GhzWall2_len = 0;
+    }
+
     if (load_asm_asset("anim/psbtm.asm", &Ani_PSBTM, &Ani_PSBTM_len, 0) != 0) {
         Ani_PSBTM = NULL;
         Ani_PSBTM_len = 0;
@@ -697,6 +714,45 @@ int Data_Init(void) {
         Map_Got_len = 0;
     }
     fprintf(stderr, "Map_Got staged: %p len=%zu\n", (const void *)Map_Got, Map_Got_len);
+
+    if (load_asset("artnem/explosion.nem", &Nem_Explode, &Nem_Explode_len) != 0) {
+        Nem_Explode = NULL;
+        Nem_Explode_len = 0;
+    }
+
+    if (load_asm_asset_named("maps/explosions.asm", "Map_ExplodeItem",
+                             &Map_ExplodeItem, &Map_ExplodeItem_len) != 0) {
+        Map_ExplodeItem = NULL;
+        Map_ExplodeItem_len = 0;
+    }
+
+    if (load_asm_asset_named("maps/explosions.asm", "Map_ExplodeBomb",
+                             &Map_ExplodeBomb, &Map_ExplodeBomb_len) != 0) {
+        Map_ExplodeBomb = NULL;
+        Map_ExplodeBomb_len = 0;
+    }
+
+    /* Animals mappings (28, 29 Animals and Points.asm) — single table per file */
+    if (load_asm_asset("maps/Animals 1.asm", &Map_Animal1, &Map_Animal1_len, 1) != 0) {
+        Map_Animal1 = NULL;
+        Map_Animal1_len = 0;
+    }
+
+    if (load_asm_asset("maps/Animals 2.asm", &Map_Animal2, &Map_Animal2_len, 1) != 0) {
+        Map_Animal2 = NULL;
+        Map_Animal2_len = 0;
+    }
+
+    if (load_asm_asset("maps/Animals 3.asm", &Map_Animal3, &Map_Animal3_len, 1) != 0) {
+        Map_Animal3 = NULL;
+        Map_Animal3_len = 0;
+    }
+
+    /* Points object mappings (same file set, own table) */
+    if (load_asm_asset("maps/points.asm", &Map_Points, &Map_Points_len, 1) != 0) {
+        Map_Points = NULL;
+        Map_Points_len = 0;
+    }
 
     if (load_asm_asset("maps/sonic.asm", &Map_Sonic, &Map_Sonic_len, 1) != 0) {
         Map_Sonic = NULL;
@@ -864,6 +920,11 @@ int Data_Init(void) {
     if (load_asm_asset("maps/purple rock.asm", &Map_PRock, &Map_PRock_len, 1) != 0) {
         Map_PRock = NULL;
         Map_PRock_len = 0;
+    }
+
+    if (load_asm_asset("maps/ghz edge walls.asm", &Map_Edge, &Map_Edge_len, 1) != 0) {
+        Map_Edge = NULL;
+        Map_Edge_len = 0;
     }
 
     if (load_asset("objpos/ghz1.bin", &ObjPos_GHZ1, &ObjPos_GHZ1_len) != 0) {
@@ -1099,6 +1160,13 @@ void Data_Quit(void) {
     MUNMAP_ASSET(Ani_Missile);
     MUNMAP_ASSET(Map_Bri);
     MUNMAP_ASSET(Map_PRock);
+    MUNMAP_ASSET(Map_Edge);
+    MUNMAP_ASSET(Map_ExplodeItem);
+    MUNMAP_ASSET(Map_ExplodeBomb);
+    MUNMAP_ASSET(Map_Animal1);
+    MUNMAP_ASSET(Map_Animal2);
+    MUNMAP_ASSET(Map_Animal3);
+    MUNMAP_ASSET(Map_Points);
     FREE_ASSET(ObjPos_GHZ1);
     FREE_ASSET(Col_GHZ);
     FREE_ASSET(Art_GhzWater);
@@ -1173,11 +1241,21 @@ size_t   Map_Cred_len = 0;
 const uint8_t *Nem_TitleCard = NULL;
 size_t   Nem_TitleCard_len = 0;
 
+/* Explosion art (Nem_Explode) */
+const uint8_t *Nem_Explode = NULL;
+size_t   Nem_Explode_len = 0;
+
 /* Zone title card sprite mappings */
 const uint8_t *Map_Card = NULL;
 size_t   Map_Card_len = 0;
 const uint8_t *Map_Got = NULL;
 size_t   Map_Got_len = 0;
+
+/* Explosion mappings (27 ExplosionItem / 3F Explosion) */
+const uint8_t *Map_ExplodeItem = NULL;
+size_t   Map_ExplodeItem_len = 0;
+const uint8_t *Map_ExplodeBomb = NULL;
+size_t   Map_ExplodeBomb_len = 0;
 
 /* ===========================================================================
    ASM parser for original Sonic 1 anim/map assets

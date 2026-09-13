@@ -63,6 +63,10 @@ static const plc_entry plc_GHZ[] = {
     plc_decl(Nem_VSpring, ArtTile_Spring_Vertical),
 };
 
+static const plc_entry plc_GHZ2[] = {
+    plc_decl(Nem_GhzWall2, ArtTile_GHZ_Edge_Wall),
+};
+
 /* Static asset list sentinels (the value of a pointer is not a constant) */
 static const plc_entry plc_Empty[] = { { 0, 0 } };
 
@@ -89,7 +93,7 @@ static const plc_list plc_index[] = {
     /* 1: */           { plc_Main2, (int)(sizeof(plc_Main2) / sizeof(plc_Main2[0])) - 1 },
     /* 2..3: */        PLC_NONE, PLC_NONE,
     /* 4: */           { plc_GHZ,   (int)(sizeof(plc_GHZ) / sizeof(plc_GHZ[0])) - 1 },
-    /* 5..7: */        PLC_NONE, PLC_NONE, PLC_NONE,
+    /* 5..7: */        { plc_GHZ2,   (int)(sizeof(plc_GHZ2) / sizeof(plc_GHZ2[0])) - 1 }, PLC_NONE, PLC_NONE,
     /* 8..11: */       PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
     /* 12..15: */      PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
     /* 16..17: */      PLC_NONE, PLC_NONE,

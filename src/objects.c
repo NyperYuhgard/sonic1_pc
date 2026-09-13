@@ -38,6 +38,11 @@ static void BuzzBomber_Main(void *obj);
 static void Missile_Main(void *obj);
 static void Bridge_Main(void *obj);
 static void PurpleRock_Main(void *obj);
+static void EdgeWalls_Main(void *obj);
+static void ExplosionItem_Main(void *obj);
+static void Explosion_Main(void *obj);
+static void Animals_Main(void *obj);
+static void Points_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -71,6 +76,13 @@ void Objects_Init(void) {
     obj_dispatch[id_Missile]      = Missile_Main;
     obj_dispatch[id_Bridge]       = Bridge_Main;
     obj_dispatch[id_PurpleRock]   = PurpleRock_Main;
+    obj_dispatch[id_EdgeWalls]    = EdgeWalls_Main;
+
+    /* Register explosion/gray puff, fiery explosion, animals, and points */
+    obj_dispatch[id_ExplosionItem] = ExplosionItem_Main;
+    obj_dispatch[id_Explosion]     = Explosion_Main;
+    obj_dispatch[id_Animals]       = Animals_Main;
+    obj_dispatch[id_Points]        = Points_Main;
 
     /* Clear all object RAM */
     memset(ObjRAM, 0, NUM_OBJECTS * OBJECT_SIZE);
@@ -312,6 +324,35 @@ int OutOfRange(void *obj, int16_t ring_origX) {
         return 1;
     }
     return 0;
+}
+
+/* ===========================================================================
+   RandomNumber — _incObj/sub RandomNumber.asm.
+   Generates a pseudo-random number with a 32-bit LCG. Returns the resulting
+   word in the low 16 bits (ASM d0); the updated seed is stored in v_random.
+
+   move.l (v_random).w,d1 / bne.s .scramble / move.l #$2A6D365A,d1
+   .scramble: d1 = d1*41 (via asl/add); d0 = low(d1) + high(d1); seed = d0<<16
+   =========================================================================== */
+static uint16_t RandomNumber(void) {
+    uint32_t d1 = v_random;                          /* move.l (v_random).w,d1 */
+    if (d1 == 0) {                                   /* bne.s .scramble */
+        d1 = 0x2A6D365Au;                            /* move.l #$2A6D365A,d1 */
+    }
+
+    /* .scramble */
+    uint32_t d0 = d1;                                /* move.l d1,d0 */
+    d1 = (d1 << 2) + d0;                             /* asl.l #2,d1 / add.l d0,d1 */
+    d1 = (d1 << 3) + d0;                             /* asl.l #3,d1 / add.l d0,d1 */
+
+    d0 = (uint32_t)(uint16_t)d1;                     /* move.w d1,d0 (low word) */
+    d1 = (d1 >> 16) | (d1 << 16);                    /* swap d1 */
+    d0 = ((uint32_t)d0 + (uint16_t)d1) & 0xFFFF;     /* add.w d1,d0 (low+high words) */
+
+    d1 = d0 << 16;                                   /* move.w d0,d1 / swap d1 */
+    v_random = d1;                                   /* move.l d1,(v_random).w */
+
+    return (uint16_t)d0;                             /* d0 contains pseudo-random number */
 }
 
 /* ===========================================================================
@@ -5154,6 +5195,148 @@ solid_noreq:
     return 0;                                   /* moveq #0,d4 / rts */
 }
 
+/* --- _incObj/44 GHZ Edge Walls.asm ------------------------------------------
+   Decorative GHZ edge walls. Solid when obSubtype bit 4 ($10) is clear,
+   cosmetic-only when set. Solid via EdgeWall_SolidWall (sub SolidWall.asm). */
+
+static void Edge_Display(uint8_t *o);
+static void Edge_Solid(uint8_t *o);
+static void EdgeWall_SolidWall(uint8_t *o, int16_t d1, int16_t d2);
+static int EdgeWall_ChkCollision(uint8_t *o, int16_t d1, int16_t d2,
+                                 int16_t *d0out, int16_t *d3out);
+
+static void Edge_Main(uint8_t *o) {
+    obRoutine(o) += 2;                          /* advance to Edge_Solid */
+    obMap(o) = (uint32_t)(uintptr_t)Map_Edge;   /* load mappings */
+    obGfx(o) = (uint16_t)(ArtTile_GHZ_Edge_Wall | Tile_Pal3);
+    obRender(o) |= sprite_cam_field;            /* playfield-positioned mode */
+    obActWid(o) = 16 / 2;                       /* sprite display width */
+    obPriority(o) = 6;                          /* very low priority */
+
+    obFrame(o) = obSubtype(o);                  /* copy type to frame number */
+    if (obFrame(o) & 0x10) {                    /* bclr #4,obFrame / (Z=0) */
+        obFrame(o) &= ~0x10;                    /* bclr #4,obFrame(a0) */
+        obRoutine(o) += 2;                      /* advance to Edge_Display */
+        Edge_Display(o);                        /* bra.s Edge_Display */
+        return;
+    }
+    obFrame(o) &= ~0x10;                        /* bclr #4,obFrame(a0) (Z set) */
+    Edge_Solid(o);                              /* beq.s Edge_Solid */
+}
+
+static void Edge_Solid(uint8_t *o) {
+    EdgeWall_SolidWall(o, 38 / 2, 80 / 2);      /* collision detection width/height */
+    Edge_Display(o);                            /* fall through to Edge_Display */
+}
+
+static void Edge_Display(uint8_t *o) {
+    DisplaySprite(o);                           /* bsr.w DisplaySprite */
+    if (OutOfRange(o, -1)) {                    /* out_of_range.w DeleteObject */
+        DeleteObject(o);
+    }
+}
+
+static void EdgeWalls_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                     /* Edge_Index: 0/2/4 */
+        case 0:  Edge_Main(o);    break;
+        case 2:  Edge_Solid(o);   break;
+        case 4:  Edge_Display(o); break;
+    }
+}
+
+/* --- _incObj/sub SolidWall.asm (FixBugs=0) ---------------------------------
+   Stripped-down SolidObject: side push and top/bottom bump, no landing.
+   Input: d1 = width, d2 = height/2. Returns d4 collision type to caller:
+   0 = none, 1 = side collision, -1 = top/bottom collision. */
+
+static int EdgeWall_ChkCollision(uint8_t *o, int16_t d1, int16_t d2,
+                                 int16_t *d0out, int16_t *d3out) {
+    uint8_t *a1 = RAM_ADDR(v_player);          /* lea (v_player).w,a1 */
+    int16_t d0 = (int16_t)((int16_t)obX(a1) - (int16_t)obX(o) + d1); /* x rel + width */
+    if (d0 < 0) return 0;                      /* bmi.s Edge_Ignore */
+    int16_t d3 = (int16_t)(d1 + d1);           /* full width */
+    if (d0 > d3) return 0;                     /* bhi.s Edge_Ignore */
+    d3 = (int16_t)(int8_t)obHeight(a1);        /* move.b obHeight(a1),d3 / ext.w d3 */
+    d2 = (int16_t)(d2 + d3);                   /* add obHeight to stated height */
+    d3 = (int16_t)((int16_t)obY(a1) - (int16_t)obY(o)); /* y rel (+ve below) */
+    d3 = (int16_t)(d3 + d2);                   /* add total height */
+    if (d3 < 0) return 0;                      /* bmi.s Edge_Ignore */
+    int16_t d4 = (int16_t)(d2 + d2);           /* full height */
+    if (d3 >= d4) return 0;                    /* bhs.s Edge_Ignore */
+    if ((int8_t)f_playerctrl < 0) return 0;    /* tst.b / bmi.s Edge_Ignore */
+    if ((uint8_t)obRoutine(a1) >= 6) return 0; /* cmpi.b #6 / bhs.s Edge_Ignore */
+    if (v_debuguse) return 0;                  /* tst.w (v_debuguse).w / bne.s */
+    int16_t d5 = d0;                           /* move.w d0,d5 */
+    if (d0 <= d1) goto isright;                /* cmp.w d0,d1 / bhs.s .isright */
+    d1 = (int16_t)(d1 + d1);                   /* add.w d1,d1 */
+    d0 = (int16_t)(d0 - d1);                   /* sub.w d1,d0 */
+    d5 = (int16_t)(-d0);                       /* move.w d0,d5 / neg.w d5 */
+isright:
+    d1 = d3;                                   /* move.w d3,d1 */
+    if (d3 <= d2) goto isbelow;                /* cmp.w d3,d2 / bhs.s .isbelow */
+    d3 = (int16_t)(d3 - d4);                   /* sub.w d4,d3 */
+    d1 = (int16_t)(-d3);                       /* move.w d3,d1 / neg.w d1 */
+isbelow:
+    if (d5 > d1) {                             /* cmp.w d1,d5 / bhi.s Edge_TopBottom */
+        *d0out = d0;
+        *d3out = d3;
+        return -1;                             /* moveq #-1,d4 / rts */
+    }
+    *d0out = d0;
+    *d3out = d3;
+    return 1;                                  /* moveq #1,d4 / rts */
+}
+
+/* EdgeWall_SolidWall — act on the collision returned by ChkCollision. */
+static void EdgeWall_SolidWall(uint8_t *o, int16_t d1, int16_t d2) {
+    int16_t d0 = 0, d3 = 0;
+    uint8_t *a1;
+    int type;
+
+    a1 = RAM_ADDR(v_player); /* ChkCollision leaves a1 = Sonic OST */
+    type = EdgeWall_ChkCollision(o, d1, d2, &d0, &d3);
+    if (type == 0) {                           /* beq.s .no_collision */
+        if (obStatus(o) & (1 << 5)) {          /* btst #5,obStatus(a0) / beq.s .exit */
+            obAnim(a1) = id_Run;               /* FixBugs=0 "walk-jump bug" */
+        }
+        /* .air */
+        obStatus(o)  &= ~(1 << 5);             /* bclr #5,obStatus(a0) */
+        obStatus(a1) &= ~(1 << 5);             /* bclr #5,obStatus(a1) */
+        /* .exit */
+        return;
+    }
+    if (type < 0) {                            /* bmi.w .topbottom */
+        if (obVelY(a1) >= 0) return;           /* tst.w obVelY(a1) / bpl.s .exit2 */
+        if (d3 >= 0) return;                   /* tst.w d3 / bpl.s .exit2 (above object) */
+        obY(a1) = (int16_t)((int16_t)obY(a1) - d3); /* sub.w d3,obY(a1) */
+        obVelY(a1) = 0;                        /* move.w #0,obVelY(a1) */
+        /* .exit2 */
+        return;
+    }
+
+    /* side collision: stop Sonic against the wall */
+    if (d0 == 0) goto wall_centre;             /* tst.w d0 / beq.w .centre */
+    if (d0 < 0) goto wall_right;               /* bmi.s .right */
+    if (obVelX(a1) < 0) goto wall_centre;      /* tst.w obVelX(a1) / bmi.s .centre */
+    goto wall_left;                            /* bra.s .left */
+wall_right:
+    if (obVelX(a1) >= 0) goto wall_centre;     /* tst.w obVelX(a1) / bpl.s .centre */
+wall_left:
+    obX(a1) = (int16_t)((int16_t)obX(a1) - d0);/* sub.w d0,obX(a1) */
+    obInertia(a1) = 0;                         /* move.w #0,obInertia(a1) */
+    obVelX(a1) = 0;                            /* move.w #0,obVelX(a1) */
+wall_centre:
+    if (obStatus(a1) & (1 << 1)) goto wall_air;/* btst #1,obStatus(a1) / bne.s .air */
+    obStatus(a1) |= (1 << 5);                  /* bset #5,obStatus(a1): push object */
+    obStatus(o)  |= (1 << 5);                  /* bset #5,obStatus(a0): be pushed */
+    return;
+wall_air:
+    obStatus(o)  &= ~(1 << 5);                 /* bclr #5,obStatus(a0) */
+    obStatus(a1) &= ~(1 << 5);                 /* bclr #5,obStatus(a1) */
+}
+
 /* ===========================================================================
    AnimateSprite - Port of _incObj/sub AnimateSprite.asm
    Input: obj = object pointer, anim_script = animation script pointer (a1)
@@ -5243,4 +5426,644 @@ obFrame(o) = frame_id & 0x1F;
                 break;
         }
     }
+}
+
+/* ===========================================================================
+   ExplosionItem (id_ExplosionItem = $27) - gray explosion from a destroyed
+   enemy or monitor, plus Explosion (id_Explosion = $3F) - fiery explosion
+   from destroyed boss, Walking Bomb, or Ball Hog cannonball.
+   Ported from _incObj/27, 3F Explosions.asm (FixBugs=0).
+   =========================================================================== */
+
+/* Forward declarations: routines shared later in this file. */
+static void ExItem_Main(uint8_t *o);
+static void ExItem_Animate(uint8_t *o);
+
+/* ExItem_Animal — Routine 0: spawn the animal that pops out of exploded
+   badniks, then fall through to ExItem_Main. */
+static void ExItem_Animal(uint8_t *o) {
+    obRoutine(o) += 2;                            /* addq.b #2,obRoutine(a0) */
+
+    uint8_t *a1 = (uint8_t *)FindFreeObj();       /* bsr.w FindFreeObj */
+    if (a1 == NULL) {                             /* bne.s ExItem_Main: RAM full */
+        ExItem_Main(o);                           /* idem: explosion still fires */
+        return;
+    }
+    /* _move.b #id_Animals,obID(a1) */
+    obID(a1) = id_Animals;
+    obX(a1) = obX(o);                             /* move.w obX(a0),obX(a1) */
+    obY(a1) = obY(o);                             /* move.w obY(a0),obY(a1) */
+    /* move.w exitem_pointsframe(a0),animal_pointsframe(a1) */
+    animal_pointsframe(a1) = exitem_pointsframe(o);
+}
+
+/* ExItem_Main — Routine 2 (also set directly for non-Badnik objects such as
+   monitors), then falls through into ExItem_Animate. */
+static void ExItem_Main(uint8_t *o) {
+    obRoutine(o) += 2;                            /* addq.b #2,obRoutine(a0) */
+    obMap(o)    = (uint32_t)(uintptr_t)Map_ExplodeItem; /* move.l #Map_ExplodeItem,obMap(a0) */
+    obGfx(o)    = ArtTile_Explosion;              /* move.w #ArtTile_Explosion,obGfx(a0) */
+    obRender(o) = sprite_cam_field;               /* move.b #sprite_cam_field,obRender(a0) */
+    obPriority(o) = 1;                            /* move.b #1,obPriority(a0) */
+    obColType(o) = col_none;                      /* move.b #col_none,obColType(a0) */
+    obActWid(o)  = 24 / 2;                        /* move.b #24/2,obActWid(a0) */
+    obTimeFrame(o) = 8 - 1;                       /* move.b #8-1,obTimeFrame(a0) */
+    obFrame(o)   = 0;                             /* move.b #0,obFrame(a0) */
+    Sound_Queue(sfx_BreakItem, false);            /* move.w #sfx_BreakItem,d0 / jsr (QueueSound2).l */
+    ExItem_Animate(o);                            /* fall through to ExItem_Animate */
+}
+
+/* ExItem_Animate — Routine 4 (2 for Explosion): frame timer, delete after
+   the final frame (05) is displayed. Holds the sprite. */
+static void ExItem_Animate(uint8_t *o) {
+    obTimeFrame(o) -= 1;                          /* subq.b #1,obTimeFrame(a0) */
+    if ((int8_t)obTimeFrame(o) >= 0) {            /* bpl.s .display */
+        DisplaySprite(o);                         /* bra.w DisplaySprite */
+        return;
+    }
+    obTimeFrame(o) = 8 - 1;                       /* move.b #8-1,obTimeFrame(a0) */
+    obFrame(o) += 1;                              /* addq.b #1,obFrame(a0) */
+    if (obFrame(o) == 5) {                        /* cmpi.b #5,obFrame(a0) / beq.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);                             /* .display: bra.w DisplaySprite */
+}
+
+/* ExplosionItem dispatcher — ExItem_Index: 0=Animal, 2=Main, 4=Animate.
+   ExItem_Animal falls through into ExItem_Main (ASM: jmp into the routine). */
+static void ExplosionItem_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                       /* ExItem_Index */
+        case 0:
+            ExItem_Animal(o);                    /* falls through to ExItem_Main */
+            /* fall through */
+        case 2: ExItem_Main(o);   break;
+        case 4: ExItem_Animate(o); break;
+    }
+}
+
+/* Expl_Main — Routine 0 for Explosion (3F). */
+static void Expl_Main(uint8_t *o) {
+    obRoutine(o) += 2;                            /* addq.b #2,obRoutine(a0) */
+    obMap(o)    = (uint32_t)(uintptr_t)Map_ExplodeBomb; /* move.l #Map_ExplodeBomb,obMap(a0) */
+    obGfx(o)    = ArtTile_Explosion;              /* move.w #ArtTile_Explosion,obGfx(a0) */
+    obRender(o) = sprite_cam_field;               /* move.b #sprite_cam_field,obRender(a0) */
+    obPriority(o) = 1;                            /* move.b #1,obPriority(a0) */
+    obColType(o) = col_none;                      /* move.b #col_none,obColType(a0) */
+    obActWid(o)  = 24 / 2;                        /* move.b #24/2,obActWid(a0) */
+    obTimeFrame(o) = 8 - 1;                       /* move.b #8-1,obTimeFrame(a0) */
+    obFrame(o)   = 0;                             /* move.b #0,obFrame(a0) */
+    Sound_Queue(sfx_Bomb, false);                 /* move.w #sfx_Bomb,d0 / jmp (QueueSound2).l */
+}
+
+/* Explosion dispatcher — Expl_Index: 0=Main, 2=ExItem_Animate (27) */
+static void Explosion_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                       /* Expl_Index */
+        case 0: Expl_Main(o);     break;
+        case 2: ExItem_Animate(o); break;         /* <-- branches to object 27 above */
+    }
+}
+
+/* ===========================================================================
+   Animals (id_Animals = $28) - animals from destroyed badniks, prison
+   capsules, and the ending sequence.
+   Ported from _incObj/28, 29 Animals and Points.asm.
+   ===========================================================================
+   Anml_VarIndex: two animal IDs per zone, must be "even/odd".               */
+
+static const uint8_t Anml_VarIndex[12] = {   /* dc.b 0,5 / 2,3 / ... (6 zones x 2) */
+    0, 5,                                   /* Green Hill Zone */
+    2, 3,                                   /* Labyrinth Zone */
+    6, 3,                                   /* Marble Zone */
+    4, 5,                                   /* Star Light Zone */
+    4, 1,                                   /* Spring Yard Zone */
+    0, 1,                                   /* Scrap Brain Zone */
+};
+
+/* Anml_Variables: horizontal speed, vertical speed, mappings (1/2/3 maps
+   resolved at runtime through Anml_MapFor, like Debug_MapForId). */
+typedef struct {
+    int16_t speedX;
+    int16_t speedY;
+    uint8_t mapsel;                          /* 1 = Map_Animal1, 2 = Map_Animal2, 3 = Map_Animal3 */
+} Anml_Variables_t;
+
+static const uint8_t *Anml_MapFor(uint8_t sel) {
+    switch (sel) {
+        case 2:  return Map_Animal2;
+        case 3:  return Map_Animal3;
+        default: return Map_Animal1;
+    }
+}
+
+static const Anml_Variables_t Anml_Variables[7] = {
+    { -0x200, -0x400, 1 },                  /* type 0: Pocky/bunny (GHZ/SBZ) */
+    { -0x200, -0x300, 2 },                  /* type 1: Cucky/chicken (SYZ/SBZ) */
+    { -0x180, -0x300, 1 },                  /* type 2: Pecky/penguin (LZ) */
+    { -0x140, -0x180, 2 },                  /* type 3: Ricky/squirrel (MZ/LZ) */
+    { -0x1C0, -0x300, 3 },                  /* type 4: Picky/pig (SYZ/SLZ) */
+    { -0x300, -0x400, 2 },                  /* type 5: Flicky/bird (GHZ/SLZ) */
+    { -0x280, -0x380, 3 },                  /* type 6: Rocky/seal (MZ) */
+};
+
+/* Ending sequence config; each entry one ending animal, subtype $A-$14 used
+   as index (Anml_EndSpeed / Anml_EndMap / Anml_EndVram). */
+static const int16_t Anml_EndSpeed[11][2] = {
+    { -0x440, -0x400 },                     /* 0A - Flicky/bird (type A) */
+    { -0x440, -0x400 },                     /* 0B - Flicky/bird (type B, unused) */
+    { -0x440, -0x400 },                     /* 0C - Flicky/bird (type C) */
+    { -0x300, -0x400 },                     /* 0D - Pocky/bunny (type A) */
+    { -0x300, -0x400 },                     /* 0E - Pocky/bunny (type B) */
+    { -0x180, -0x300 },                     /* 0F - Pecky/penguin (type A) */
+    { -0x180, -0x300 },                     /* 10 - Pecky/penguin (type B) */
+    { -0x140, -0x180 },                     /* 11 - Rocky/seal */
+    { -0x1C0, -0x300 },                     /* 12 - Picky/pig */
+    { -0x200, -0x300 },                     /* 13 - Cucky/chicken */
+    { -0x280, -0x380 },                     /* 14 - Ricky/squirrel */
+};
+
+static const uint8_t Anml_EndMap[11] = {
+    2,                                      /* 0A - Flicky/bird (type A) */
+    2,                                      /* 0B - Flicky/bird (type B, unused) */
+    2,                                      /* 0C - Flicky/bird (type C) */
+    1,                                      /* 0D - Pocky/bunny (type A) */
+    1,                                      /* 0E - Pocky/bunny (type B) */
+    1,                                      /* 0F - Pecky/penguin (type A) */
+    1,                                      /* 10 - Pecky/penguin (type B) */
+    2,                                      /* 11 - Rocky/seal */
+    3,                                      /* 12 - Picky/pig */
+    2,                                      /* 13 - Cucky/chicken */
+    3,                                      /* 14 - Ricky/squirrel */
+};
+
+static const uint16_t Anml_EndVram[11] = {
+    ArtTile_Ending_Flicky,                  /* 0A - Flicky/bird (type A) */
+    ArtTile_Ending_Flicky,                  /* 0B - Flicky/bird (type B, unused) */
+    ArtTile_Ending_Flicky,                  /* 0C - Flicky/bird (type C) */
+    ArtTile_Ending_Rabbit,                  /* 0D - Pocky/bunny (type A) */
+    ArtTile_Ending_Rabbit,                  /* 0E - Pocky/bunny (type B) */
+    ArtTile_Ending_Penguin,                 /* 0F - Pecky/penguin (type A) */
+    ArtTile_Ending_Penguin,                 /* 10 - Pecky/penguin (type B) */
+    ArtTile_Ending_Seal,                    /* 11 - Rocky/seal */
+    ArtTile_Ending_Pig,                     /* 12 - Picky/pig */
+    ArtTile_Ending_Chicken,                 /* 13 - Cucky/chicken */
+    ArtTile_Ending_Squirrel,                /* 14 - Ricky/squirrel */
+};
+
+/* Anml_Main — Routine 0: pick the animal to spawn. */
+static void Anml_FromEnemy(uint8_t *o);
+static void Anml_End_ChkDel(uint8_t *o);
+static void Anml_CheckCloseToSonic(uint8_t *o, int *bhs, int *bpl);
+static void Anml_NormalGravity(uint8_t *o);
+static void Anml_SlowGravity(uint8_t *o);
+static void Anml_End_Bounce(uint8_t *o);
+static void Anml_End_FaceSonic(uint8_t *o);
+
+/* Anml_Main — Routine 0 */
+static void Anml_Main(uint8_t *o) {
+    if (obSubtype(o) == 0) {                /* tst.b obSubtype / beq.w Anml_FromEnemy */
+        Anml_FromEnemy(o);
+        return;
+    }
+
+    /* Ending sequence animal with custom subtype ($A-$14) */
+    int S = obSubtype(o);
+    obRoutine(o) = (uint8_t)(S * 2);        /* add.w d0,d0 ; move.b d0,obRoutine(a0) */
+    int idx = S - 0x0A;                     /* subi.w #$14,d0 ; /2 */
+    obGfx(o) = Anml_EndVram[idx];           /* move.w Anml_EndVram(pc,d0.w),obGfx(a0) */
+    obMap(o) = (uint32_t)(uintptr_t)Anml_MapFor(Anml_EndMap[idx]); /* move.l ... obMap */
+    animal_speedX(o) = Anml_EndSpeed[idx][0];   /* move.w (a1,d0.w),animal_speedX(a0) */
+    obVelX(o)        = Anml_EndSpeed[idx][0];
+    animal_speedY(o) = Anml_EndSpeed[idx][1];   /* move.w 2(a1,d0.w),animal_speedY(a0) */
+    obVelY(o)        = Anml_EndSpeed[idx][1];
+
+    obHeight(o)     = 24 / 2;               /* move.b #24/2,obHeight(a0) */
+    obRender(o)     = sprite_cam_field;     /* move.b #sprite_cam_field,obRender(a0) */
+    obRender(o)    |= (1 << sprite_xflip_bit); /* bset #sprite_xflip_bit,obRender(a0) */
+    obPriority(o)   = 6;                    /* move.b #6,obPriority(a0) */
+    obActWid(o)     = 16 / 2;               /* move.b #16/2,obActWid(a0) */
+    obTimeFrame(o)  = 8 - 1;                /* move.b #8-1,obTimeFrame(a0) */
+    DisplaySprite(o);                       /* bra.w DisplaySprite */
+}
+
+/* Anml_FromEnemy — animal from a destroyed badnik. */
+static void Anml_FromEnemy(uint8_t *o) {
+    obRoutine(o) += 2;                      /* addq.b #2,obRoutine(a0) -> Anml_ChkFloor */
+
+    uint16_t rand = RandomNumber() & 1;     /* bsr.w RandomNumber ; andi.w #1,d0 */
+    uint8_t zone  = v_zone;                 /* move.b (v_zone).w,d1 */
+    uint8_t animal = Anml_VarIndex[zone * 2 + rand]; /* add.w d1,d1 ; add.w d0,d1 ; move.b (a1,d1.w),d0 */
+    animal_id(o) = animal;                  /* move.b d0,animal_id(a0) */
+
+    const Anml_Variables_t *v = &Anml_Variables[animal];   /* lsl.w #3,d0 */
+    animal_speedX(o) = v->speedX;           /* move.w (a1)+,animal_speedX(a0) */
+    animal_speedY(o) = v->speedY;           /* move.w (a1)+,animal_speedY(a0) */
+    obMap(o) = (uint32_t)(uintptr_t)Anml_MapFor(v->mapsel); /* move.l (a1)+,obMap(a0) */
+
+    obGfx(o) = ArtTile_Animal_1;            /* move.w #ArtTile_Animal_1,obGfx(a0) */
+    if (animal_id(o) & 1) {                 /* btst #0,animal_id(a0) / beq.s .setupAnimal */
+        obGfx(o) = ArtTile_Animal_2;        /* move.w #ArtTile_Animal_2,obGfx(a0) */
+    }
+    /* .setupAnimal */
+    obHeight(o)    = 24 / 2;                /* move.b #24/2,obHeight(a0) */
+    obRender(o)    = sprite_cam_field;      /* move.b #sprite_cam_field,obRender(a0) */
+    obRender(o)   |= (1 << sprite_xflip_bit); /* bset #sprite_xflip_bit,obRender(a0) */
+    obPriority(o)  = 6;                     /* move.b #6,obPriority(a0) */
+    obActWid(o)    = 16 / 2;                /* move.b #16/2,obActWid(a0) */
+    obTimeFrame(o) = 8 - 1;                 /* move.b #8-1,obTimeFrame(a0) */
+    obFrame(o)     = 2;                     /* move.b #2,obFrame(a0) */
+    obVelY(o)      = (int16_t)-0x400;       /* move.w #-$400,obVelY(a0) */
+
+    if (v_bossstatus != 0) {                /* tst.b (v_bossstatus).w / bne.s .fromPrison */
+        /* .fromPrison */
+        obRoutine(o) = 0x12;                /* move.b #$12,obRoutine(a0) */
+        obVelX(o)    = 0;                   /* clr.w obVelX(a0) */
+        DisplaySprite(o);
+        return;
+    }
+
+    /* spawn the points object */
+    uint8_t *a1 = (uint8_t *)FindFreeObj(); /* bsr.w FindFreeObj */
+    if (a1 == NULL) {                       /* bne.s .display */
+        DisplaySprite(o);
+        return;
+    }
+    obID(a1) = id_Points;                   /* _move.b #id_Points,obID(a1) */
+    obX(a1)  = obX(o);                      /* move.w obX(a0),obX(a1) */
+    obY(a1)  = obY(o);                      /* move.w obY(a0),obY(a1) */
+    /* move.w animal_pointsframe(a0),d0 ; lsr.w #1,d0 ; move.b d0,obFrame(a1) */
+    obFrame(a1) = (uint8_t)(animal_pointsframe(o) >> 1);
+    /* .display */
+    DisplaySprite(o);
+}
+
+/* Anml_CheckCloseToSonic — d0 = playerX - animalX - 184. Sets both flags
+   the callers branch on: bhs = no borrow (Sonic > 184px right), bpl = N clear. */
+static void Anml_CheckCloseToSonic(uint8_t *o, int *bhs, int *bpl) {
+    uint8_t *player = (uint8_t *)RAM_ADDR(v_player);
+    uint16_t pre = (uint16_t)((uint16_t)obX(player) - (uint16_t)obX(o)); /* move.w ; sub.w */
+    int16_t d0f  = (int16_t)(pre - 184);    /* subi.w #(320/2)+24,d0 */
+    *bhs = pre >= 184;                      /* CC clear after subi */
+    *bpl = d0f >= 0;                        /* N clear after subi */
+}
+
+/* Anml_ChkFloor — Routine 2: wait for first floor hit after initial spawn. */
+static void Anml_ChkFloor(uint8_t *o) {
+    if (!(obRender(o) & sprite_rendered)) { /* tst.b obRender / bpl.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+
+    ObjectFall(o);                          /* bsr.w ObjectFall */
+    if ((int16_t)obVelY(o) < 0) {           /* tst.w obVelY / bmi.s .display */
+        DisplaySprite(o);
+        return;
+    }
+
+    int16_t d1, angle;
+    ObjFloorDist(o, &d1, &angle);           /* jsr (ObjFloorDist).l */
+    if (d1 >= 0) {                          /* tst.w d1 / bpl.s .display */
+        DisplaySprite(o);
+        return;
+    }
+    obY(o) = (int16_t)(obY(o) + d1);        /* add.w d1,obY(a0) */
+    obVelX(o) = animal_speedX(o);           /* move.w animal_speedX(a0),obVelX(a0) */
+    obVelY(o) = animal_speedY(o);           /* move.w animal_speedY(a0),obVelY(a0) */
+    obFrame(o) = 1;                         /* move.b #1,obFrame(a0) */
+
+    obRoutine(o) = (uint8_t)(animal_id(o) * 2 + 4); /* move.b animal_id; add.b d0,d0; addq.b #4 */
+
+    if (v_bossstatus != 0) {                /* tst.b (v_bossstatus).w / beq.s .display */
+        if (v_vblank_byte & (1 << 4)) {     /* btst #4,(v_vblank_byte).w / beq.s .display */
+            obVelX(o) = (int16_t)-obVelX(o);    /* neg.w obVelX(a0) */
+            obRender(o) ^= (1 << sprite_xflip_bit); /* bchg #sprite_xflip_bit,obRender(a0) */
+        }
+    }
+    /* .display */
+    DisplaySprite(o);
+}
+
+/* Anml_End_ChkDel — ending animals offscreen delete helper. */
+static void Anml_End_ChkDel(uint8_t *o) {
+    uint8_t *player = (uint8_t *)RAM_ADDR(v_player);
+    /* move.w obX(a0),d0 ; sub.w (v_player+obX).w,d0 */
+    uint16_t pre = (uint16_t)((uint16_t)obX(o) - (uint16_t)obX(player));
+    if ((uint16_t)obX(o) < (uint16_t)obX(player)) {  /* blo.s .display (borrow) */
+        DisplaySprite(o);
+        return;
+    }
+    int16_t d0f = (int16_t)(pre - 384);     /* subi.w #320+64,d0 */
+    if (d0f >= 0) {                         /* bpl.s .display */
+        DisplaySprite(o);
+        return;
+    }
+    if (!(obRender(o) & sprite_rendered)) { /* tst.b obRender(a0) / bpl.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    /* .display */
+    DisplaySprite(o);
+}
+
+/* Anml_NormalGravity — Routine 4/8/A/C/10: normal gravity, animate on floor hit. */
+static void Anml_NormalGravity(uint8_t *o) {
+    ObjectFall(o);                          /* bsr.w ObjectFall */
+    obFrame(o) = 1;                         /* move.b #1,obFrame(a0) */
+    if ((int16_t)obVelY(o) >= 0) {          /* tst.w obVelY / bmi.s .chkDel */
+        obFrame(o) = 0;                     /* move.b #0,obFrame(a0) */
+        int16_t d1, angle;
+        ObjFloorDist(o, &d1, &angle);       /* jsr (ObjFloorDist).l */
+        if (d1 >= 0) goto chkDel;           /* tst.w d1 / bpl.s .chkDel */
+        obY(o) = (int16_t)(obY(o) + d1);    /* add.w d1,obY(a0) */
+        obVelY(o) = animal_speedY(o);       /* move.w animal_speedY(a0),obVelY(a0) */
+    }
+chkDel:
+    if (obSubtype(o) != 0) {                /* tst.b obSubtype(a0) / bne.s Anml_End_ChkDel */
+        Anml_End_ChkDel(o);
+        return;
+    }
+    if (!(obRender(o) & sprite_rendered)) { /* tst.b obRender(a0) / bpl.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);                       /* bra.w DisplaySprite */
+}
+
+/* Anml_SlowGravity — Routine 6/E: reduced gravity, animate every other frame. */
+static void Anml_SlowGravity(uint8_t *o) {
+    SpeedToPos(o);                          /* bsr.w SpeedToPos */
+    obVelY(o) = (int16_t)(obVelY(o) + 0x18); /* addi.w #$18,obVelY(a0) */
+    if ((int16_t)obVelY(o) >= 0) {          /* tst.w obVelY / bmi.s .animate */
+        int16_t d1, angle;
+        ObjFloorDist(o, &d1, &angle);       /* jsr (ObjFloorDist).l */
+        if (d1 >= 0) goto animate;          /* tst.w d1 / bpl.s .animate */
+        obY(o) = (int16_t)(obY(o) + d1);    /* add.w d1,obY(a0) */
+        obVelY(o) = animal_speedY(o);       /* move.w animal_speedY(a0),obVelY(a0) */
+        if (obSubtype(o) != 0 && obSubtype(o) != 0x0A) { /* tst.b ; cmpi.b #$A / beq.s */
+            obVelX(o) = (int16_t)-obVelX(o);   /* neg.w obVelX(a0) */
+            obRender(o) ^= (1 << sprite_xflip_bit); /* bchg #sprite_xflip_bit */
+        }
+    }
+animate:
+    obTimeFrame(o)--;                       /* subq.b #1,obTimeFrame(a0) */
+    if ((int8_t)obTimeFrame(o) >= 0) goto chkDel; /* bpl.s .chkDel */
+    obTimeFrame(o) = 2 - 1;                 /* move.b #2-1,obTimeFrame(a0) */
+    obFrame(o) = (uint8_t)((obFrame(o) + 1) & 1); /* addq.b #1 ; andi.b #1 */
+chkDel:
+    if (obSubtype(o) != 0) {                /* tst.b obSubtype(a0) / bne.s Anml_End_ChkDel */
+        Anml_End_ChkDel(o);
+        return;
+    }
+    if (!(obRender(o) & sprite_rendered)) { /* tst.b obRender(a0) / bpl.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);                       /* bra.w DisplaySprite */
+}
+
+/* Anml_FromPrison — Routine $12: delay hopping out of the prison capsule. */
+static void Anml_FromPrison(uint8_t *o) {
+    if (!(obRender(o) & sprite_rendered)) { /* tst.b obRender / bpl.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    animal_prisondelay(o)--;                /* subq.w #1,animal_prisondelay(a0) */
+    if (animal_prisondelay(o) != 0) {       /* bne.w .display */
+        DisplaySprite(o);
+        return;
+    }
+    obRoutine(o) = 2;                       /* move.b #2,obRoutine(a0) -> Anml_ChkFloor */
+    obPriority(o) = 3;                      /* move.b #3,obPriority(a0) */
+    /* .display */
+    DisplaySprite(o);
+}
+
+/* Anml_End_FlyLeft — Routine $14/$16 */
+static void Anml_End_FlyLeft(uint8_t *o) {
+    int bhs, bpl;
+    Anml_CheckCloseToSonic(o, &bhs, &bpl);  /* bsr.w Anml_CheckCloseToSonic */
+    if (bhs) {                              /* bhs.s .chkDel */
+        Anml_End_ChkDel(o);
+        return;
+    }
+    obVelX(o) = animal_speedX(o);           /* move.w animal_speedX(a0),obVelX(a0) */
+    obVelY(o) = animal_speedY(o);           /* move.w animal_speedY(a0),obVelY(a0) */
+    obRoutine(o) = 0x0E;                    /* move.b #$E,obRoutine(a0) -> Anml_SlowGravity */
+    Anml_SlowGravity(o);                    /* bra.w Anml_SlowGravity */
+}
+
+/* Anml_End_StayFace_Slow — Routine $18 */
+static void Anml_End_StayFace_Slow(uint8_t *o) {
+    int bhs, bpl;
+    Anml_CheckCloseToSonic(o, &bhs, &bpl);  /* bsr.w Anml_CheckCloseToSonic */
+    if (bpl) goto chkDel;                   /* bpl.s .chkDel */
+
+    obVelX(o) = 0;                          /* clr.w obVelX(a0) */
+    animal_speedX(o) = 0;                   /* clr.w animal_speedX(a0) */
+    SpeedToPos(o);                          /* bsr.w SpeedToPos */
+    obVelY(o) = (int16_t)(obVelY(o) + 0x18); /* addi.w #$18,obVelY(a0) */
+    Anml_End_Bounce(o);                     /* bsr.w Anml_End_Bounce */
+    Anml_End_FaceSonic(o);                  /* bsr.w Anml_End_FaceSonic */
+
+    obTimeFrame(o)--;                       /* subq.b #1,obTimeFrame(a0) */
+    if ((int8_t)obTimeFrame(o) < 0) {       /* bpl.s .chkDel */
+        obTimeFrame(o) = 2 - 1;             /* move.b #2-1,obTimeFrame(a0) */
+        obFrame(o) = (uint8_t)((obFrame(o) + 1) & 1); /* addq.b #1 ; andi.b #1 */
+    }
+chkDel:
+    Anml_End_ChkDel(o);                     /* bra.w Anml_End_ChkDel */
+}
+
+/* Anml_End_HopLeft — Routine $1A */
+static void Anml_End_HopLeft(uint8_t *o) {
+    int bhs, bpl;
+    Anml_CheckCloseToSonic(o, &bhs, &bpl);  /* bsr.w Anml_CheckCloseToSonic */
+    if (bpl) {                              /* bpl.s Anml_End_DoubleHop.chkDel */
+        Anml_End_ChkDel(o);
+        return;
+    }
+    obVelX(o) = animal_speedX(o);           /* move.w animal_speedX(a0),obVelX(a0) */
+    obVelY(o) = animal_speedY(o);           /* move.w animal_speedY(a0),obVelY(a0) */
+    obRoutine(o) = 4;                       /* move.b #4,obRoutine(a0) -> Anml_NormalGravity */
+    Anml_NormalGravity(o);                  /* bra.w Anml_NormalGravity */
+}
+
+/* Anml_End_StayFace_Fast — Routine $1C/$20/$24 */
+static void Anml_End_StayFace_Fast(uint8_t *o) {
+    int bhs, bpl;
+    Anml_CheckCloseToSonic(o, &bhs, &bpl);  /* bsr.w Anml_CheckCloseToSonic */
+    if (bpl) goto chkDel;                   /* bpl.s .chkDel */
+
+    obVelX(o) = 0;                          /* clr.w obVelX(a0) */
+    animal_speedX(o) = 0;                   /* clr.w animal_speedX(a0) */
+    ObjectFall(o);                          /* bsr.w ObjectFall */
+    Anml_End_Bounce(o);                     /* bsr.w Anml_End_Bounce */
+    Anml_End_FaceSonic(o);                  /* bsr.w Anml_End_FaceSonic */
+chkDel:
+    Anml_End_ChkDel(o);                     /* bra.w Anml_End_ChkDel */
+}
+
+/* Anml_End_HopAround — Routine $1E/$22 */
+static void Anml_End_HopAround(uint8_t *o) {
+    int bhs, bpl;
+    Anml_CheckCloseToSonic(o, &bhs, &bpl);  /* bsr.w Anml_CheckCloseToSonic */
+    if (bpl) goto chkDel;                   /* bpl.s .chkDel */
+
+    ObjectFall(o);                          /* bsr.w ObjectFall */
+    obFrame(o) = 1;                         /* move.b #1,obFrame(a0) */
+    if ((int16_t)obVelY(o) >= 0) {          /* tst.w obVelY / bmi.s .chkDel */
+        obFrame(o) = 0;                     /* move.b #0,obFrame(a0) */
+        int16_t d1, angle;
+        ObjFloorDist(o, &d1, &angle);       /* jsr (ObjFloorDist).l */
+        if (d1 >= 0) goto chkDel;           /* tst.w d1 / bpl.s .chkDel */
+        obVelX(o) = (int16_t)-obVelX(o);    /* neg.w obVelX(a0) */
+        obRender(o) ^= (1 << sprite_xflip_bit); /* bchg #sprite_xflip_bit */
+        obY(o) = (int16_t)(obY(o) + d1);    /* add.w d1,obY(a0) */
+        obVelY(o) = animal_speedY(o);       /* move.w animal_speedY(a0),obVelY(a0) */
+    }
+chkDel:
+    Anml_End_ChkDel(o);                     /* bra.w Anml_End_ChkDel */
+}
+
+/* Anml_End_DoubleFly — Routine $26 */
+static void Anml_End_DoubleFly(uint8_t *o) {
+    int bhs, bpl;
+    Anml_CheckCloseToSonic(o, &bhs, &bpl);  /* bsr.w Anml_CheckCloseToSonic */
+    if (bpl) goto chkDel;                   /* bpl.s .chkDel */
+
+    SpeedToPos(o);                          /* bsr.w SpeedToPos */
+    obVelY(o) = (int16_t)(obVelY(o) + 0x18); /* addi.w #$18,obVelY(a0) */
+    if ((int16_t)obVelY(o) >= 0) {          /* tst.w obVelY / bmi.s .animate */
+        int16_t d1, angle;
+        ObjFloorDist(o, &d1, &angle);       /* jsr (ObjFloorDist).l */
+        if (d1 >= 0) goto animate;          /* tst.w d1 / bpl.s .animate */
+        animal_doublehop(o) = (uint8_t)~(animal_doublehop(o));  /* not.b */
+        if (animal_doublehop(o) == 0) {     /* bne.s .bounce */
+            obVelX(o) = (int16_t)-obVelX(o);    /* neg.w obVelX(a0) */
+            obRender(o) ^= (1 << sprite_xflip_bit); /* bchg #sprite_xflip_bit */
+        }
+        /* .bounce */
+        obY(o) = (int16_t)(obY(o) + d1);    /* add.w d1,obY(a0) */
+        obVelY(o) = animal_speedY(o);       /* move.w animal_speedY(a0),obVelY(a0) */
+    }
+animate:
+    obTimeFrame(o)--;                       /* subq.b #1,obTimeFrame(a0) */
+    if ((int8_t)obTimeFrame(o) >= 0) goto chkDel; /* bpl.s .chkDel */
+    obTimeFrame(o) = 2 - 1;                 /* move.b #2-1,obTimeFrame(a0) */
+    obFrame(o) = (uint8_t)((obFrame(o) + 1) & 1); /* addq.b #1 ; andi.b #1 */
+chkDel:
+    Anml_End_ChkDel(o);                     /* bra.w Anml_End_ChkDel */
+}
+
+/* Anml_End_DoubleHop — Routine $28 */
+static void Anml_End_DoubleHop(uint8_t *o) {
+    ObjectFall(o);                          /* bsr.w ObjectFall */
+    obFrame(o) = 1;                         /* move.b #1,obFrame(a0) */
+    if ((int16_t)obVelY(o) >= 0) {          /* tst.w obVelY / bmi.s .chkDel */
+        obFrame(o) = 0;                     /* move.b #0,obFrame(a0) */
+        int16_t d1, angle;
+        ObjFloorDist(o, &d1, &angle);       /* jsr (ObjFloorDist).l */
+        if (d1 >= 0) goto chkDel;           /* tst.w d1 / bpl.s .chkDel */
+        animal_doublehop(o) = (uint8_t)~(animal_doublehop(o));  /* not.b */
+        if (animal_doublehop(o) == 0) {     /* bne.s .bounce */
+            obVelX(o) = (int16_t)-obVelX(o);    /* neg.w obVelX(a0) */
+            obRender(o) ^= (1 << sprite_xflip_bit); /* bchg #sprite_xflip_bit */
+        }
+        /* .bounce */
+        obY(o) = (int16_t)(obY(o) + d1);    /* add.w d1,obY(a0) */
+        obVelY(o) = animal_speedY(o);       /* move.w animal_speedY(a0),obVelY(a0) */
+    }
+chkDel:
+    Anml_End_ChkDel(o);                     /* bra.w Anml_End_ChkDel */
+}
+
+/* Anml_End_Bounce — bounce and animate helper (returns, not dispatch). */
+static void Anml_End_Bounce(uint8_t *o) {
+    obFrame(o) = 1;                         /* move.b #1,obFrame(a0) */
+    if ((int16_t)obVelY(o) < 0) return;     /* tst.w obVelY / bmi.s .return */
+    obFrame(o) = 0;                         /* move.b #0,obFrame(a0) */
+    int16_t d1, angle;
+    ObjFloorDist(o, &d1, &angle);           /* jsr (ObjFloorDist).l */
+    if (d1 >= 0) return;                    /* tst.w d1 / bpl.s .return */
+    obY(o) = (int16_t)(obY(o) + d1);        /* add.w d1,obY(a0) */
+    obVelY(o) = animal_speedY(o);           /* move.w animal_speedY(a0),obVelY(a0) */
+    /* .return: rts */
+}
+
+/* Anml_End_FaceSonic — face Sonic through the X-flip flag. */
+static void Anml_End_FaceSonic(uint8_t *o) {
+    uint8_t *player = (uint8_t *)RAM_ADDR(v_player);
+    obRender(o) |= (1 << sprite_xflip_bit); /* bset #sprite_xflip_bit,obRender(a0) -> face left */
+    /* move.w obX(a0),d0 ; sub.w (v_player+obX).w,d0 ; bhs.s .return */
+    if ((uint16_t)obX(o) >= (uint16_t)obX(player)) return;
+    obRender(o) &= (uint8_t)~(1 << sprite_xflip_bit); /* bclr -> face right */
+}
+
+/* Animals dispatcher — Anml_Index */
+static void Animals_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                 /* Anml_Index */
+        case 0x00: Anml_Main(o);               break;   /* init */
+        case 0x02: Anml_ChkFloor(o);           break;   /* wait for first floor hit */
+        case 0x04: case 0x08: case 0x0A: case 0x0C: case 0x10:
+            Anml_NormalGravity(o);           break;   /* types 0/2/3/4/6 */
+        case 0x06: case 0x0E:
+            Anml_SlowGravity(o);             break;   /* types 1/5 */
+        case 0x12: Anml_FromPrison(o);       break;   /* prison capsule */
+        case 0x14: case 0x16:
+            Anml_End_FlyLeft(o);             break;   /* ending Flicky A/B */
+        case 0x18: Anml_End_StayFace_Slow(o);break;   /* ending Flicky C */
+        case 0x1A: Anml_End_HopLeft(o);      break;   /* ending Pocky A */
+        case 0x1C: case 0x20: case 0x24:
+            Anml_End_StayFace_Fast(o);       break;   /* ending Pocky B / Penguin B / Pig */
+        case 0x1E: case 0x22:
+            Anml_End_HopAround(o);           break;   /* ending Penguin A / Seal */
+        case 0x26: Anml_End_DoubleFly(o);    break;   /* ending Cucky/chicken */
+        case 0x28: Anml_End_DoubleHop(o);    break;   /* ending Ricky/squirrel */
+    }
+}
+
+/* ===========================================================================
+   Points (id_Points = $29) - points that appear from destroyed badniks.
+   Uses the FixBugs=0 path: the routine is jsr'd and Points_Main always
+   calls DisplaySprite afterwards (even for a just-deleted slot; harmless,
+   as BuildSprites skips obID==0 objects).
+   =========================================================================== */
+
+/* Forward declaration: Poi_Slower is defined below Poi_Main but called from it. */
+static void Poi_Slower(uint8_t *o);
+
+/* Poi_Main — Routine 0, falls through into Poi_Slower. */
+static void Poi_Main(uint8_t *o) {
+    obRoutine(o) += 2;                      /* addq.b #2,obRoutine(a0) -> Poi_Slower */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Points;   /* move.l #Map_Points,obMap(a0) */
+    obGfx(o)     = (uint16_t)(ArtTile_Points | Tile_Pal2); /* move.w #ArtTile_Points|Tile_Pal2 */
+    obRender(o)  = sprite_cam_field;        /* move.b #sprite_cam_field,obRender(a0) */
+    obPriority(o) = 1;                      /* move.b #1,obPriority(a0) */
+    obActWid(o)  = 16 / 2;                  /* move.b #16/2,obActWid(a0) */
+    obVelY(o)    = (int16_t)-0x300;         /* move.w #-$300,obVelY(a0) */
+    Poi_Slower(o);                          /* (falls through in ASM) */
+}
+
+/* Poi_Slower — Routine 2 */
+static void Poi_Slower(uint8_t *o) {
+    if ((int16_t)obVelY(o) >= 0) {          /* tst.w obVelY / bpl.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    SpeedToPos(o);                          /* bsr.w SpeedToPos */
+    obVelY(o) = (int16_t)(obVelY(o) + 0x18); /* addi.w #$18,obVelY(a0) */
+    /* FixBugs=0: rts — return to Points_Main for DisplaySprite */
+}
+
+/* Points dispatcher — Poi_Index: 0=Main, 2=Slower */
+static void Points_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                 /* Poi_Index */
+        case 0: Poi_Main(o);   break;
+        case 2: Poi_Slower(o); break;
+    }
+    DisplaySprite(o);                       /* FixBugs=0: bra.w DisplaySprite after jsr */
 }

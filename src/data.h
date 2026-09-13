@@ -129,6 +129,9 @@ extern size_t   Nem_Bonus_len;
 extern const uint8_t *Nem_BigFlash;
 extern size_t   Nem_BigFlash_len;
 
+extern const uint8_t *Nem_GhzWall2;
+extern size_t   Nem_GhzWall2_len;
+
 /* Cheat codes */
 extern const uint8_t LevSelCode_US[];
 extern const uint32_t LevSelCode_US_len;
@@ -159,6 +162,10 @@ extern size_t   Map_Cred_len;
 extern const uint8_t *Nem_TitleCard;
 extern size_t   Nem_TitleCard_len;
 
+/* Explosion art (Nem_Explode) */
+extern const uint8_t *Nem_Explode;
+extern size_t   Nem_Explode_len;
+
 /* Zone title card sprite mappings */
 extern const uint8_t *Map_Card;
 extern size_t   Map_Card_len;
@@ -166,6 +173,12 @@ extern size_t   Map_Card_len;
 /* "SONIC HAS PASSED" card sprite mappings (same file, own table) */
 extern const uint8_t *Map_Got;
 extern size_t   Map_Got_len;
+
+/* Explosion mappings (27 ExplosionItem / 3F Explosion) */
+extern const uint8_t *Map_ExplodeItem;
+extern size_t   Map_ExplodeItem_len;
+extern const uint8_t *Map_ExplodeBomb;
+extern size_t   Map_ExplodeBomb_len;
 
 /* Sonic sprite mappings */
 extern const uint8_t *Map_Sonic;
@@ -305,8 +318,15 @@ extern const uint8_t *Map_Gird;
 extern const uint8_t *Map_Invis;
 extern const uint8_t *Map_Hog;
 extern const uint8_t *Map_Animal1;
+extern size_t   Map_Animal1_len;
 extern const uint8_t *Map_Animal2;
+extern size_t   Map_Animal2_len;
 extern const uint8_t *Map_Animal3;
+extern size_t   Map_Animal3_len;
+
+/* Points object mappings (28, 29 Animals and Points.asm: Map_Points) */
+extern const uint8_t *Map_Points;
+extern size_t   Map_Points_len;
 
 /* Object placement data (objpos binaries) */
 extern const uint8_t *ObjPos_GHZ1;

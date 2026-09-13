@@ -642,8 +642,19 @@ static inline void RAM_SET_U32(uint32_t addr, uint32_t v) {
 #define standonobject(obj)  (*(uint8_t *)((uint8_t *)(obj) + 0x3D))
 #define locktime(obj)       (*(uint8_t *)((uint8_t *)(obj) + 0x3E))
 
+/* Animals (28, 29 Animals and Points.asm) per-slot fields */
+#define animal_doublehop(obj)   (*(uint8_t  *)((uint8_t *)(obj) + 0x29)) /* flag for double hopping in ending */
+#define animal_id(obj)          (*(uint8_t  *)((uint8_t *)(obj) + 0x30)) /* animal type ID from Anml_VarIndex */
+#define animal_speedX(obj)      (*(int16_t  *)((uint8_t *)(obj) + 0x32)) /* base animal X-speed */
+#define animal_speedY(obj)      (*(int16_t  *)((uint8_t *)(obj) + 0x34)) /* base animal Y-speed */
+#define animal_prisondelay(obj) (*(uint16_t *)((uint8_t *)(obj) + 0x36)) /* delay before jumping out of prison capsule */
+
 /* ExplosionItem carry-over field (objoff_3E, word) — set by React_BadnikHit */
 #define exitem_pointsframe(obj) (*(uint16_t *)((uint8_t *)(obj) + 0x3E))
+
+/* Animals carry-over field (objoff_3E, word) — copied from the explosion item
+   in ExItem_Animal (27, 3F Explosions.asm). Same offset as exitem_pointsframe. */
+#define animal_pointsframe(obj)   (*(uint16_t *)((uint8_t *)(obj) + 0x3E))
 
 /* Zone title card specific fields (objoff_30/objoff_32) */
 #define cardMainX(obj)   (*(int16_t *)((uint8_t *)(obj) + 0x30))  /* target X while moving in */
