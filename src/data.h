@@ -103,16 +103,12 @@ extern const uint8_t *Nem_Stalk;
 extern size_t   Nem_Stalk_len;
 extern const uint8_t *Nem_PplRock;
 extern size_t   Nem_PplRock_len;
-extern const uint8_t *Nem_Crabmeat;
-extern size_t   Nem_Crabmeat_len;
 extern const uint8_t *Nem_Buzz;
 extern size_t   Nem_Buzz_len;
 extern const uint8_t *Nem_Chopper;
 extern size_t   Nem_Chopper_len;
 extern const uint8_t *Nem_Newtron;
 extern size_t   Nem_Newtron_len;
-extern const uint8_t *Nem_Motobug;
-extern size_t   Nem_Motobug_len;
 extern const uint8_t *Nem_Spikes;
 extern size_t   Nem_Spikes_len;
 extern const uint8_t *Nem_HSpring;
@@ -212,17 +208,31 @@ extern size_t   Map_Sign_len;
 extern const uint8_t *Ani_Sign;
 extern size_t   Ani_Sign_len;
 
+/* Crabmeat graphics, mappings and animation scripts */
+extern const uint8_t *Nem_Crabmeat;
+extern size_t   Nem_Crabmeat_len;
+extern const uint8_t *Map_Crab;
+extern size_t   Map_Crab_len;
+extern const uint8_t *Ani_Crab;
+extern size_t   Ani_Crab_len;
+
+/* Motobug graphics, mappings and animation scripts */
+extern const uint8_t *Nem_Motobug;
+extern size_t   Nem_Motobug_len;
+extern const uint8_t *Map_Moto;
+extern size_t   Map_Moto_len;
+extern const uint8_t *Ani_Moto;
+extern size_t   Ani_Moto_len;
+
 /* Object mappings referenced by the DebugMode item lists (DebugMode.asm).
    Most are unstaged (NULL) until their maps/*.asm assets are ported; the
    debug list itself (debugmode.c) still references them faithfully. */
 extern const uint8_t *Map_Monitor;
-extern const uint8_t *Map_Crab;
 extern const uint8_t *Map_Buzz;
 extern const uint8_t *Map_Chop;
 extern const uint8_t *Map_Spike;
 extern const uint8_t *Map_Plat_GHZ;
 extern const uint8_t *Map_PRock;
-extern const uint8_t *Map_Moto;
 extern const uint8_t *Map_Spring;
 extern const uint8_t *Map_Newt;
 extern const uint8_t *Map_Edge;

@@ -32,6 +32,8 @@ static void Ring_Main(void *obj);
 static void RingLoss_Main(void *obj);
 static void Signpost_Main(void *obj);
 static void GotThroughCard_Main(void *obj);
+static void Crabmeat_Main(void *obj);
+static void MotoBug_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -59,6 +61,8 @@ void Objects_Init(void) {
     obj_dispatch[id_RingLoss]     = RingLoss_Main;
     obj_dispatch[id_Signpost]     = Signpost_Main;
     obj_dispatch[id_GotThroughCard] = GotThroughCard_Main;
+    obj_dispatch[id_Crabmeat]     = Crabmeat_Main;
+    obj_dispatch[id_MotoBug]      = MotoBug_Main;
 
     /* Clear all object RAM */
     memset(ObjRAM, 0, NUM_OBJECTS * OBJECT_SIZE);
@@ -235,6 +239,46 @@ void ObjFloorDist(void *obj, int16_t *dist, int16_t *angle) {
         d3 = 0;
     if (dist)  *dist  = d1;
     if (angle) *angle = (int16_t)d3;
+}
+
+/* ===========================================================================
+   ObjFloorDist2 — second entry of _incObj/sub ObjFloorDist.asm.
+   Same as ObjFloorDist, but the X-position comes in as a parameter (d3),
+   e.g. "16px ahead" for ledge checks. FixBugs=0.
+   Ported verbatim from ObjFloorDist.asm lines 21-39.
+   =========================================================================== */
+void ObjFloorDist2(void *obj, int16_t x, int16_t *dist, int16_t *angle) {
+    uint8_t *o = (uint8_t *)obj;
+    int16_t d1;
+    uint8_t d3;
+    int16_t y = (int16_t)(obY(o) + (int8_t)obHeight(o));
+    FindFloor(y, x, 0x0D, 0, 0x10, &v_anglebuffer, obj, &d1);
+    d3 = v_anglebuffer;
+    if (d3 & 0x01)
+        d3 = 0;
+    if (dist)  *dist  = d1;
+    if (angle) *angle = (int16_t)d3;
+}
+
+/* ===========================================================================
+   RememberState — _incObj/sub RememberState.asm.
+   out_of_range.w .offscreen: if the object is on-screen, DisplaySprite;
+   otherwise clear its respawn-table bit and delete it so it can respawn. */
+void RememberState(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (!OutOfRange(obj, -1)) {            /* out_of_range.w .offscreen (bne) */
+        DisplaySprite(obj);                /* bra.w DisplaySprite */
+        return;
+    }
+
+    /* .offscreen */
+    uint8_t d0 = obRespawnNo(o);           /* moveq #0,d0 ; move.b obRespawnNo,d0 */
+    if (d0 != 0) {                         /* beq.s .delete */
+        RAM_BYTE(v_objstate + 2 + d0) &= ~0x80;  /* bclr #7,2(a2,d0.w) */
+    }
+    /* .delete */
+    DeleteObject(obj);                     /* bra.w DeleteObject */
 }
 
 /* ===========================================================================
@@ -3761,6 +3805,389 @@ void ReactToItem(void *obj) {
 }
 
 /* ===========================================================================
+   Crabmeat enemy (id_Crabmeat = $1F, GHZ/SYZ)
+   Ported from _incObj/1F Badnik - Crabmeat.asm (FixBugs=0).
+   crab_timedelay = objoff_30, crab_flags = objoff_32.
+   =========================================================================== */
+
+#define crab_timedelay(obj) (*(int16_t *)((uint8_t *)(obj) + 0x30)) /* objoff_30 */
+#define crab_flags(obj)     (*(uint8_t *)((uint8_t *)(obj) + 0x32)) /* objoff_32 */
+
+static void Crab_Action_WaitFire(uint8_t *o);
+static void Crab_Action_Scuttle(uint8_t *o);
+static void Crab_Action_Fire(uint8_t *o);
+
+/* Crab_SetAni — set d0 to the correct animation ID based on the floor angle:
+   0 = flat
+   1 = sloped (regular, left leg extended)
+   2 = sloped (flipped, right leg extended) */
+static uint8_t Crab_SetAni(uint8_t *o) {
+    uint8_t d3 = obAngle(o);                     /* moveq #0,d0 ; move.b obAngle,d3 */
+
+    if ((int8_t)d3 < 0) {                        /* bmi Crab_SetAni_Ascending */
+        /* Crab_SetAni_Ascending: ascending slope to the right */
+        if ((uint8_t)d3 > (uint8_t)-6) {         /* cmpi.b #-6,d3 ; bhi.s .return */
+            return 0;                            /* keep flat */
+        }
+        if (obStatus(o) & sprite_xflip) {        /* btst #0,obStatus ; bne.s .return */
+            return 2;                            /* facing left: X-flipped sloped */
+        }
+        return 1;                                /* regular sloped */
+    }
+
+    /* Crab_SetAni_Descending: descending slope to the right */
+    if (d3 < 6) {                                /* cmpi.b #6,d3 ; blo.s .return */
+        return 0;                                /* keep flat */
+    }
+    if (obStatus(o) & sprite_xflip) {            /* btst #0,obStatus ; bne.s .return */
+        return 1;                                /* facing left: regular sloped */
+    }
+    return 2;                                    /* X-flipped sloped */
+}
+
+/* Crab_Main — routine 0 */
+static void Crab_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    obHeight(o)  = 32 / 2;                       /* set height */
+    obWidth(o)   = 16 / 2;                       /* set width */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Crab;
+    obGfx(o)     = ArtTile_Crabmeat;
+    obRender(o)  = sprite_cam_field;
+    obPriority(o) = 3;
+    obColType(o) = (uint8_t)(col_badnik | col_32x32); /* set collision type ($06) */
+    obActWid(o)  = 42 / 2;
+
+    /* Make the Crabmeat fall until it has collided with the floor (while invisible) */
+    ObjectFall(o);                               /* increase gravity and update position */
+    int16_t d1;
+    int16_t d3;
+    ObjFloorDist(obj, &d1, &d3);                 /* get distance between Crabmeat and floor */
+    if (d1 >= 0) {                               /* tst.w d1 ; bpl.s .hide: not hit floor */
+        return;                                  /* .hide: rts, do NOT display sprite yet */
+    }
+    obY(o)     += d1;                            /* add.w d1,obY: match position with floor */
+    obAngle(o) = (uint8_t)d3;                    /* update angle to floor */
+    obVelY(o)  = 0;                              /* clear falling speed */
+    obRoutine(o) += 2;                           /* advance to Crab_Action */
+    /* FixBugs=1-only "delete below $7FF" guard is omitted (FixBugs=0). */
+}
+
+/* Crab_Action — routine 2 */
+static void Crab_Action(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (ob2ndRout(o)) {                      /* Crab_ActIndex: 0 = WaitFire, 2 = Scuttle */
+        case 0:  Crab_Action_WaitFire(o); break;
+        case 2:  Crab_Action_Scuttle(o); break;
+    }
+
+    if (Ani_Crab) {                              /* lea (Ani_Crab).l,a1 */
+        AnimateSprite(obj, Ani_Crab);            /* bsr.w AnimateSprite */
+    }
+    RememberState(obj);                          /* bra.w RememberState */
+}
+
+/* Crab_Action_WaitFire */
+static void Crab_Action_WaitFire(uint8_t *o) {
+    crab_timedelay(o)--;                         /* subq.w #1,crab_timedelay */
+    if ((int16_t)crab_timedelay(o) >= 0) {       /* bpl.s .return */
+        return;
+    }
+
+    if ((int8_t)obRender(o) < 0) {               /* tst.b obRender ; bpl.s .startMoving */
+        /* on screen: toggle the firing flag */
+        crab_flags(o) ^= (1 << 1);               /* bchg #1,crab_flags */
+        if (!(crab_flags(o) & (1 << 1))) {       /* bne.s Crab_Action_Fire: it was already set */
+            Crab_Action_Fire(o);
+            return;
+        }
+    }
+
+    /* .startMoving */
+    ob2ndRout(o) += 2;                           /* advance to Crab_Action_Scuttle */
+    crab_timedelay(o) = 128 - 1;                 /* set time delay to approx 2 seconds */
+    obVelX(o) = 0x80;                            /* move Crabmeat to the right */
+    obAnim(o) = (uint8_t)(Crab_SetAni(o) + 3);   /* advance to walking set of animations */
+    obStatus(o) ^= sprite_xflip;                 /* bchg #0,obStatus: X-flip Crabmeat */
+    if (obStatus(o) & sprite_xflip) {            /* bne.s .return: now facing RIGHT? */
+        obVelX(o) = -obVelX(o);                  /* negate direction when moving left */
+    }
+    /* .return */
+}
+
+/* Crab_Action_Fire */
+static void Crab_Action_Fire(uint8_t *o) {
+    crab_timedelay(o) = 60 - 1;                  /* set time to stay on post-firing animation */
+    obAnim(o) = 6;                               /* use firing animation */
+
+    /* .loadLeftFireball */
+    uint8_t *a1 = (uint8_t *)FindFreeObj();
+    if (a1) {                                    /* bne.s .loadRightFireball: RAM full */
+        obID(a1) = id_Crabmeat;                  /* _move.b #id_Crabmeat,obID */
+        obRoutine(a1) = 6;                       /* set to Crab_BallMain */
+        obX(a1) = obX(o);                        /* copy X-position */
+        obX(a1) -= 0x10;                         /* align with left claw */
+        obY(a1) = obY(o);                        /* copy Y-position */
+        obVelX(a1) = -0x100;                     /* launch ball leftward */
+    }
+
+    /* .loadRightFireball */
+    a1 = (uint8_t *)FindFreeObj();
+    if (!a1) {                                   /* if RAM is full, branch */
+        return;
+    }
+    obID(a1) = id_Crabmeat;
+    obRoutine(a1) = 6;                           /* set to Crab_BallMain */
+    obX(a1) = obX(o);
+    obX(a1) += 0x10;                             /* align with right claw */
+    obY(a1) = obY(o);
+    obVelX(a1) = 0x100;                          /* launch ball rightward */
+}
+
+/* Crab_Action_Scuttle */
+static void Crab_Action_Scuttle(uint8_t *o) {
+    crab_timedelay(o)--;                         /* decrement timer until firing */
+    if ((int16_t)crab_timedelay(o) < 0) {        /* bmi.s .initFire */
+        goto initFire;
+    }
+
+    SpeedToPos(o);                               /* update Crabmeat position */
+    crab_flags(o) ^= (1 << 0);                   /* bchg #0,crab_flags: alternate wall check/align */
+    if (!(crab_flags(o) & (1 << 0))) {           /* bne.s .alignAndAnimate: it was already set */
+        goto alignAndAnimate;
+    }
+
+    /* .checkLedge: look 16px ahead in the facing direction */
+    int16_t d3 = obX(o);                         /* move.w obX,d3 */
+    d3 += 16;                                    /* addi.w #16 */
+    if (obStatus(o) & sprite_xflip) {            /* btst #0,obStatus ; beq.s .checkLedge */
+        d3 -= 16 * 2;                            /* subi.w #16*2 */
+    }
+    int16_t d1;
+    ObjFloorDist2(o, d3, &d1, NULL);             /* jsr (ObjFloorDist2).l */
+    if (d1 < -8 || d1 >= 0x0C) {                 /* cmpi.w #-8 blt / cmpi.w #$C bge */
+        goto initFire;                           /* steep slope or drop ahead */
+    }
+    return;
+
+alignAndAnimate:
+    {
+        int16_t d1b;
+        int16_t d3b;
+        ObjFloorDist(o, &d1b, &d3b);             /* jsr (ObjFloorDist).l */
+        obY(o)    += d1b;                        /* align to floor */
+        obAngle(o) = (uint8_t)d3b;               /* update angle to floor */
+        obAnim(o)  = (uint8_t)(Crab_SetAni(o) + 3); /* advance to walking set */
+    }
+    return;
+
+initFire:
+    ob2ndRout(o) -= 2;                           /* go back to Crab_Action_WaitFire */
+    crab_timedelay(o) = 60 - 1;                  /* set pre-firing delay to 1 second */
+    obVelX(o) = 0;                               /* stop Crabmeat from moving */
+    obAnim(o) = Crab_SetAni(o);                  /* standing animation for current angle */
+}
+
+/* Crab_Delete — routine 4 (unreachable, deletion is handled elsewhere) */
+static void Crab_Delete(void *obj) {
+    DeleteObject(obj);                           /* delete object */
+}
+
+/* Crab_BallMain — routine 6 (missile thrown by the Crabmeat) */
+static void Crab_BallMain(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    obRoutine(o) += 2;                           /* advance to Crab_BallMove */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Crab;
+    obGfx(o)     = ArtTile_Crabmeat;
+    obRender(o)  = sprite_cam_field;
+    obPriority(o) = 3;
+    obColType(o) = (uint8_t)(col_12x12 | col_hurt); /* damaging 12x12 hitbox */
+    obActWid(o)  = 16 / 2;
+    obVelY(o)    = -0x400;                       /* launch balls upwards */
+    obAnim(o)    = 7;                            /* use ball animation */
+}
+
+/* Crab_BallMove — routine 8 */
+static void Crab_BallMove(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (Ani_Crab) {                              /* lea (Ani_Crab).l,a1 */
+        AnimateSprite(obj, Ani_Crab);            /* bsr.w AnimateSprite: animate balls */
+    }
+    ObjectFall(o);                               /* make balls fall (apply gravity) */
+
+    /* FixBugs=0: another bug where an object is queued for display and then
+       deleted, causing a null-pointer dereference in the real game. */
+    DisplaySprite(obj);                          /* bsr.w DisplaySprite */
+    int16_t d0 = v_limitbtm2;                    /* move.w (v_limitbtm2).w,d0 */
+    d0 += 224;                                   /* addi.w #224 */
+    if ((uint16_t)d0 < (uint16_t)obY(o)) {       /* cmp.w obY(a0),d0 ; blo.s .delete */
+        DeleteObject(obj);                       /* delete balls */
+    }
+}
+
+/* Crabmeat_Main — object entry: dispatch by obRoutine (Crab_Index) */
+static void Crabmeat_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                      /* Crab_Index: 0/2/4/6/8 */
+        case 0: Crab_Main(obj);     break;
+        case 2: Crab_Action(obj);   break;
+        case 4: Crab_Delete(obj);   break;
+        case 6: Crab_BallMain(obj); break;
+        case 8: Crab_BallMove(obj); break;
+    }
+}
+
+/* ===========================================================================
+   Moto Bug enemy (id_MotoBug = $40, GHZ)
+   Ported from _incObj/40 Badnik - Moto Bug.asm (FixBugs=0).
+   moto_ledgewait = objoff_30, moto_smokewait = objoff_33.
+   =========================================================================== */
+
+#define moto_ledgewait(obj) (*(int16_t *)((uint8_t *)(obj) + 0x30)) /* objoff_30 */
+#define moto_smokewait(obj) (*(uint8_t *)((uint8_t *)(obj) + 0x33)) /* objoff_33 */
+
+static void Moto_Main(void *obj);
+static void Moto_Action(void *obj);
+static void Moto_Smoke_Animate(void *obj);
+static void Moto_Smoke_Delete(void *obj);
+static void Moto_Action_Ledge(uint8_t *o);
+static void Moto_Action_Drive(uint8_t *o);
+
+/* Moto_Main — routine 0: initialization */
+static void Moto_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Moto;
+    obGfx(o)     = ArtTile_Moto_Bug;
+    obRender(o)  = sprite_cam_field;
+    obPriority(o) = 4;
+    obActWid(o)  = 40 / 2;
+
+    if (obAnim(o) != 0) {                        /* tst.b obAnim ; bne.s .smoke: smoke particle? */
+        obRoutine(o) += 4;                       /* set to Moto_Smoke_Animate */
+        Moto_Smoke_Animate(obj);                 /* bra.w Moto_Smoke_Animate */
+        return;
+    }
+
+    obHeight(o)  = 28 / 2;
+    obWidth(o)   = 16 / 2;
+    obColType(o) = (uint8_t)(col_40x32 | col_badnik);
+
+    /* Make the Motobug fall until it has collided with the floor (while invisible) */
+    ObjectFall(o);                               /* increase gravity and update position */
+    int16_t d1;
+    int16_t d3;
+    ObjFloorDist(obj, &d1, &d3);                 /* get distance between Motobug and floor */
+    if (d1 >= 0) {                               /* tst.w d1 ; bpl.s .hide: not hit floor */
+        return;                                  /* .hide: rts, do NOT display sprite yet */
+    }
+    obY(o)     += d1;                            /* match object's position with the floor */
+    obVelY(o)  = 0;                              /* clear falling speed */
+    obRoutine(o) += 2;                           /* advance to Moto_Action */
+    obStatus(o) ^= sprite_xflip;                 /* make Motobug face to the left on spawn */
+    /* FixBugs=1-only "delete below $7FF" guard is omitted (FixBugs=0). */
+}
+
+/* Moto_Action — routine 2 */
+static void Moto_Action(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (ob2ndRout(o)) {                      /* Moto_ActIndex: 0 = Ledge, 2 = Drive */
+        case 0:  Moto_Action_Ledge(o); break;
+        case 2:  Moto_Action_Drive(o); break;
+    }
+
+    if (Ani_Moto) {                              /* lea (Ani_Moto).l,a1 */
+        AnimateSprite(obj, Ani_Moto);            /* bsr.w AnimateSprite */
+    }
+    RememberState(obj);                          /* RememberState is inlined here in the ASM */
+}
+
+/* Moto_Action_Ledge — pause when reaching a ledge, then drive the other way */
+static void Moto_Action_Ledge(uint8_t *o) {
+    moto_ledgewait(o)--;                         /* subq.w #1,moto_ledgewait */
+    if ((int16_t)moto_ledgewait(o) >= 0) {       /* bpl.s .wait */
+        return;
+    }
+
+    ob2ndRout(o) += 2;                           /* advance to Moto_Action_Drive */
+    obVelX(o) = -0x100;                          /* move Motobug to the left */
+    obAnim(o) = 1;                               /* use "drive" animation */
+    obStatus(o) ^= sprite_xflip;                 /* invert X-flip flag */
+    if (obStatus(o) & sprite_xflip) {            /* bne.s .wait (not taken): change direction */
+        obVelX(o) = -obVelX(o);                  /* make Motobug move to the right */
+    }
+    /* .wait */
+}
+
+/* Moto_Action_Drive — drive forward, aligning to the floor and pumping smoke */
+static void Moto_Action_Drive(uint8_t *o) {
+    SpeedToPos(o);                               /* update position based on velocities */
+
+    int16_t d1;
+    int16_t d3;
+    ObjFloorDist(o, &d1, &d3);                   /* find Motobug's distance to floor */
+    if (d1 < -8 || d1 >= 0x0C) {                 /* cmpi.w #-8 blt / cmpi.w #$C bge */
+        goto ledgeHit;                           /* steep slope or drop ahead */
+    }
+    obY(o) += d1;                                /* match position with the floor */
+
+    moto_smokewait(o)--;                         /* subq.b #1,moto_smokewait */
+    if ((int8_t)moto_smokewait(o) >= 0) {        /* bpl.s .return */
+        return;
+    }
+    moto_smokewait(o) = 16 - 1;                  /* reset smoke delay timer */
+
+    uint8_t *a1 = (uint8_t *)FindFreeObj();
+    if (!a1) {                                   /* bne.s .return: RAM full */
+        return;
+    }
+    obID(a1) = id_MotoBug;                       /* exhaust smoke particle (obAnim != 0) */
+    obX(a1) = obX(o);                            /* copy X-position */
+    obY(a1) = obY(o);                            /* copy Y-position */
+    obStatus(a1) = obStatus(o);                  /* copy flipped status */
+    obAnim(a1) = 2;                              /* set to smoke animation */
+    /* .return */
+    return;
+
+ledgeHit:
+    ob2ndRout(o) -= 2;                           /* go back to Moto_Action_Ledge */
+    moto_ledgewait(o) = 60 - 1;                  /* set time to wait at ledge to 1 second */
+    obVelX(o) = 0;                               /* stop the Motobug moving */
+    obAnim(o) = 0;                               /* set to "wait" animation */
+}
+
+/* Moto_Smoke_Animate — routine 4 */
+static void Moto_Smoke_Animate(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    if (Ani_Moto) {                              /* lea (Ani_Moto).l,a1 */
+        AnimateSprite(obj, Ani_Moto);            /* bsr.w AnimateSprite (afRoutine -> routine 6) */
+    }
+    DisplaySprite(obj);                          /* display smoke sprite */
+}
+
+/* Moto_Smoke_Delete — routine 6 */
+static void Moto_Smoke_Delete(void *obj) {
+    DeleteObject(obj);                           /* delete smoke object */
+}
+
+/* MotoBug_Main — object entry: dispatch by obRoutine (Moto_Index) */
+static void MotoBug_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                      /* Moto_Index: 0/2/4/6 */
+        case 0: Moto_Main(obj);           break;
+        case 2: Moto_Action(obj);         break;
+        case 4: Moto_Smoke_Animate(obj);  break;
+        case 6: Moto_Smoke_Delete(obj);   break;
+    }
+}
+
+/* ===========================================================================
    AnimateSprite - Port of _incObj/sub AnimateSprite.asm
    Input: obj = object pointer, anim_script = animation script pointer (a1)
    =========================================================================== */
@@ -3789,11 +4216,11 @@ void AnimateSprite(void *obj, const uint8_t *anim_script) {
 
     if ((int8_t)frame_id >= 0) {
         /* Anim_SetFrameAndFlipFlags */
-        obFrame(o) = frame_id;
+        obFrame(o) = frame_id & 0x1F;
 
         uint8_t status = obStatus(o);
         uint8_t render = obRender(o);
-        uint8_t flip_bits = (frame_id << 3) & (sprite_xflip | sprite_yflip);
+        uint8_t flip_bits = (frame_id >> 5) & (sprite_xflip | sprite_yflip);
         render = (render & ~(sprite_xflip | sprite_yflip)) | ((status ^ flip_bits) & (sprite_xflip | sprite_yflip));
         obRender(o) = render;
 
@@ -3805,10 +4232,10 @@ void AnimateSprite(void *obj, const uint8_t *anim_script) {
                 obAniFrame(o) = 0;
                 frame_id = anim_data[1];
                 {
-                    obFrame(o) = frame_id;
+                    obFrame(o) = frame_id & 0x1F;
                     uint8_t status = obStatus(o);
                     uint8_t render = obRender(o);
-                    uint8_t flip_bits = (frame_id << 3) & (sprite_xflip | sprite_yflip);
+                    uint8_t flip_bits = (frame_id >> 5) & (sprite_xflip | sprite_yflip);
                     render = (render & ~(sprite_xflip | sprite_yflip)) | ((status ^ flip_bits) & (sprite_xflip | sprite_yflip));
                     obRender(o) = render;
                     obAniFrame(o) = 1;
@@ -3821,13 +4248,13 @@ void AnimateSprite(void *obj, const uint8_t *anim_script) {
                     obAniFrame(o) -= back;
                     frame_idx = obAniFrame(o);
                     frame_id = anim_data[1 + frame_idx];
-                    obFrame(o) = frame_id;
-                    uint8_t status = obStatus(o);
-                    uint8_t render = obRender(o);
-                    uint8_t flip_bits = (frame_id << 3) & (sprite_xflip | sprite_yflip);
-                    render = (render & ~(sprite_xflip | sprite_yflip)) | ((status ^ flip_bits) & (sprite_xflip | sprite_yflip));
-                    obRender(o) = render;
-                    obAniFrame(o)++;
+obFrame(o) = frame_id & 0x1F;
+                        uint8_t status = obStatus(o);
+                        uint8_t render = obRender(o);
+                        uint8_t flip_bits = (frame_id >> 5) & (sprite_xflip | sprite_yflip);
+                        render = (render & ~(sprite_xflip | sprite_yflip)) | ((status ^ flip_bits) & (sprite_xflip | sprite_yflip));
+                        obRender(o) = render;
+                        obAniFrame(o)++;
                 }
                 break;
 

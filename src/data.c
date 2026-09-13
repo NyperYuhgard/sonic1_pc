@@ -185,16 +185,28 @@ size_t   Map_Sign_len = 0;
 const uint8_t *Ani_Sign = NULL;
 size_t   Ani_Sign_len = 0;
 
+/* Crabmeat mappings and animation scripts */
+const uint8_t *Map_Crab = NULL;
+size_t   Map_Crab_len = 0;
+
+const uint8_t *Ani_Crab = NULL;
+size_t   Ani_Crab_len = 0;
+
+/* Motobug mappings and animation scripts */
+const uint8_t *Map_Moto = NULL;
+size_t   Map_Moto_len = 0;
+
+const uint8_t *Ani_Moto = NULL;
+size_t   Ani_Moto_len = 0;
+
 /* Object mappings referenced by the DebugMode item lists.
    Most are unstaged (NULL) until their maps/*.asm assets are ported. */
 const uint8_t *Map_Monitor = NULL;
-const uint8_t *Map_Crab = NULL;
 const uint8_t *Map_Buzz = NULL;
 const uint8_t *Map_Chop = NULL;
 const uint8_t *Map_Spike = NULL;
 const uint8_t *Map_Plat_GHZ = NULL;
 const uint8_t *Map_PRock = NULL;
-const uint8_t *Map_Moto = NULL;
 const uint8_t *Map_Spring = NULL;
 const uint8_t *Map_Newt = NULL;
 const uint8_t *Map_Edge = NULL;
@@ -785,6 +797,26 @@ int Data_Init(void) {
         Ani_Sign_len = 0;
     }
 
+    if (load_asm_asset("maps/crabmeat.asm", &Map_Crab, &Map_Crab_len, 1) != 0) {
+        Map_Crab = NULL;
+        Map_Crab_len = 0;
+    }
+
+    if (load_asm_asset("anim/crabmeat.asm", &Ani_Crab, &Ani_Crab_len, 0) != 0) {
+        Ani_Crab = NULL;
+        Ani_Crab_len = 0;
+    }
+
+    if (load_asm_asset("maps/motobug.asm", &Map_Moto, &Map_Moto_len, 1) != 0) {
+        Map_Moto = NULL;
+        Map_Moto_len = 0;
+    }
+
+    if (load_asm_asset("anim/motobug.asm", &Ani_Moto, &Ani_Moto_len, 0) != 0) {
+        Ani_Moto = NULL;
+        Ani_Moto_len = 0;
+    }
+
     if (load_asset("objpos/ghz1.bin", &ObjPos_GHZ1, &ObjPos_GHZ1_len) != 0) {
         ObjPos_GHZ1 = NULL;
         ObjPos_GHZ1_len = 0;
@@ -1008,6 +1040,10 @@ void Data_Quit(void) {
     MUNMAP_ASSET(Ani_Ring);
     MUNMAP_ASSET(Map_Sign);
     MUNMAP_ASSET(Ani_Sign);
+    MUNMAP_ASSET(Map_Crab);
+    MUNMAP_ASSET(Ani_Crab);
+    MUNMAP_ASSET(Map_Moto);
+    MUNMAP_ASSET(Ani_Moto);
     FREE_ASSET(ObjPos_GHZ1);
     FREE_ASSET(Col_GHZ);
     FREE_ASSET(Art_GhzWater);
@@ -1110,51 +1146,64 @@ static const char *skip_comments_and_spaces(const char *p) {
 }
 
 static long parse_asm_number(const char *p, const char **end) {
-    while (*p && isspace((unsigned char)*p)) p++;
-    if (*p == '-') {
-        const char *e2 = NULL;
-        long neg = parse_asm_number(p + 1, &e2);
-        if (end) *end = e2;
-        return -neg;
-    }
-    if (*p == '$') {
+    long total = 0;
+    for (;;) {
+        while (*p && isspace((unsigned char)*p)) p++;
+        long term = 0;
+        if (*p == '-') {
+            const char *e2 = NULL;
+            long neg = parse_asm_number(p + 1, &e2);
+            if (end) *end = e2;
+            term = -neg;
+        } else if (*p == '$') {
+            p++;
+            while (isxdigit((unsigned char)*p)) {
+                term = term * 16 + (isdigit((unsigned char)*p) ? *p - '0' : tolower((unsigned char)*p) - 'a' + 10);
+                p++;
+            }
+            if (end) *end = p;
+        } else if (*p == '0' && (p[1] == 'x' || p[1] == 'X')) {
+            p += 2;
+            while (isxdigit((unsigned char)*p)) {
+                term = term * 16 + (isdigit((unsigned char)*p) ? *p - '0' : tolower((unsigned char)*p) - 'a' + 10);
+                p++;
+            }
+            if (end) *end = p;
+        } else {
+            /* Symbolic animation flags used in dc.b lines (afBack, afEnd, ...)
+               plus the frame flip bits (aniXFlip = $20, aniYFlip = $40). */
+            static const char *af_names[] = { "afBack", "afEnd", "afChange",
+                                              "afRoutine", "afReset", "af2ndRoutine", "afWait",
+                                              "aniXFlip", "aniYFlip" };
+            static const long  af_vals[]   = { 0xFE, 0xFF, 0xFD, 0xFC, 0xFB, 0xFA, 0x80,
+                                               0x20, 0x40 };
+            const char *sym = p;
+            while (*sym && isalnum((unsigned char)*sym)) sym++;
+            size_t sym_len = (size_t)(sym - p);
+            int found = 0;
+            for (int i = 0; i < 9; i++) {
+                size_t n = strlen(af_names[i]);
+                if (sym_len == n && strncmp(p, af_names[i], n) == 0) {
+                    term = af_vals[i];
+                    if (end) *end = sym;
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found) {
+                char *ep = NULL;
+                term = strtol(p, &ep, 10);
+                if (ep && end) *end = ep;
+            }
+        }
+        total |= (unsigned long)term;
+        /* Bitwise OR expression: "2|aniXFlip" etc. */
+        p = (end && *end) ? *end : p;
+        while (*p && isspace((unsigned char)*p)) p++;
+        if (*p != '|') break;
         p++;
-        long val = 0;
-        while (isxdigit((unsigned char)*p)) {
-            val = val * 16 + (isdigit((unsigned char)*p) ? *p - '0' : tolower((unsigned char)*p) - 'a' + 10);
-            p++;
-        }
-        if (end) *end = p;
-        return val;
     }
-    if (*p == '0' && (p[1] == 'x' || p[1] == 'X')) {
-        p += 2;
-        long val = 0;
-        while (isxdigit((unsigned char)*p)) {
-            val = val * 16 + (isdigit((unsigned char)*p) ? *p - '0' : tolower((unsigned char)*p) - 'a' + 10);
-            p++;
-        }
-        if (end) *end = p;
-        return val;
-    }
-    /* Symbolic animation flags used in dc.b lines (afBack, afEnd, ...) */
-    static const char *af_names[] = { "afBack", "afEnd", "afChange",
-                                      "afRoutine", "afReset", "af2ndRoutine", "afWait" };
-    static const long  af_vals[]   = { 0xFE, 0xFF, 0xFD, 0xFC, 0xFB, 0xFA, 0x80 };
-    const char *sym = p;
-    while (*sym && isalnum((unsigned char)*sym)) sym++;
-    size_t sym_len = (size_t)(sym - p);
-    for (int i = 0; i < 7; i++) {
-        size_t n = strlen(af_names[i]);
-        if (sym_len == n && strncmp(p, af_names[i], n) == 0) {
-            if (end) *end = sym;
-            return af_vals[i];
-        }
-    }
-    char *ep = NULL;
-    long val = strtol(p, &ep, 10);
-    if (ep && end) *end = ep;
-    return val;
+    return (long)total;
 }
 
 static int is_directive(const char *line, const char *dir) {

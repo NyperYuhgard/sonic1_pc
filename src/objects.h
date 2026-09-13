@@ -69,6 +69,14 @@ void SpeedToPos(void *obj);
    outputs: *dist = d1, *angle = d3. */
 void ObjFloorDist(void *obj, int16_t *dist, int16_t *angle);
 
+/* Same as ObjFloorDist, but the X-position is supplied by the caller
+   (ASM entry ObjFloorDist2, d3 = X to check "ahead" of the object). */
+void ObjFloorDist2(void *obj, int16_t x, int16_t *dist, int16_t *angle);
+
+/* Display the object if on-screen; otherwise clear its respawn-table bit
+   and delete it. Ported from _incObj/sub RememberState.asm. */
+void RememberState(void *obj);
+
 /* Is the object's spawn marker (default obX, else the passed field) outside
    the range of ± 128+320+192 px around the screen? Mirrors the out_of_range
    macro in Macros.asm. Returns nonzero when out of range. */
