@@ -199,10 +199,29 @@ size_t   Map_Moto_len = 0;
 const uint8_t *Ani_Moto = NULL;
 size_t   Ani_Moto_len = 0;
 
+/* Buzz Bomber mappings and animation scripts */
+const uint8_t *Map_Buzz = NULL;
+size_t   Map_Buzz_len = 0;
+
+const uint8_t *Ani_Buzz = NULL;
+size_t   Ani_Buzz_len = 0;
+
+const uint8_t *Map_Missile = NULL;
+size_t   Map_Missile_len = 0;
+
+const uint8_t *Ani_Missile = NULL;
+size_t   Ani_Missile_len = 0;
+
+/* GHZ bridge (id_Bridge) mappings */
+const uint8_t *Map_Bri = NULL;
+size_t   Map_Bri_len = 0;
+
+/* GHZ purple rock (id_PurpleRock) mappings */
+static size_t Map_PRock_len = 0;
+
 /* Object mappings referenced by the DebugMode item lists.
    Most are unstaged (NULL) until their maps/*.asm assets are ported. */
 const uint8_t *Map_Monitor = NULL;
-const uint8_t *Map_Buzz = NULL;
 const uint8_t *Map_Chop = NULL;
 const uint8_t *Map_Spike = NULL;
 const uint8_t *Map_Plat_GHZ = NULL;
@@ -817,6 +836,36 @@ int Data_Init(void) {
         Ani_Moto_len = 0;
     }
 
+    if (load_asm_asset("maps/buzzbomber.asm", &Map_Buzz, &Map_Buzz_len, 1) != 0) {
+        Map_Buzz = NULL;
+        Map_Buzz_len = 0;
+    }
+
+    if (load_asm_asset("anim/buzzbomber.asm", &Ani_Buzz, &Ani_Buzz_len, 0) != 0) {
+        Ani_Buzz = NULL;
+        Ani_Buzz_len = 0;
+    }
+
+    if (load_asm_asset("maps/buzzmissile.asm", &Map_Missile, &Map_Missile_len, 1) != 0) {
+        Map_Missile = NULL;
+        Map_Missile_len = 0;
+    }
+
+    if (load_asm_asset("anim/buzzmissile.asm", &Ani_Missile, &Ani_Missile_len, 0) != 0) {
+        Ani_Missile = NULL;
+        Ani_Missile_len = 0;
+    }
+
+    if (load_asm_asset("maps/bridge.asm", &Map_Bri, &Map_Bri_len, 1) != 0) {
+        Map_Bri = NULL;
+        Map_Bri_len = 0;
+    }
+
+    if (load_asm_asset("maps/purple rock.asm", &Map_PRock, &Map_PRock_len, 1) != 0) {
+        Map_PRock = NULL;
+        Map_PRock_len = 0;
+    }
+
     if (load_asset("objpos/ghz1.bin", &ObjPos_GHZ1, &ObjPos_GHZ1_len) != 0) {
         ObjPos_GHZ1 = NULL;
         ObjPos_GHZ1_len = 0;
@@ -1044,6 +1093,12 @@ void Data_Quit(void) {
     MUNMAP_ASSET(Ani_Crab);
     MUNMAP_ASSET(Map_Moto);
     MUNMAP_ASSET(Ani_Moto);
+    MUNMAP_ASSET(Map_Buzz);
+    MUNMAP_ASSET(Ani_Buzz);
+    MUNMAP_ASSET(Map_Missile);
+    MUNMAP_ASSET(Ani_Missile);
+    MUNMAP_ASSET(Map_Bri);
+    MUNMAP_ASSET(Map_PRock);
     FREE_ASSET(ObjPos_GHZ1);
     FREE_ASSET(Col_GHZ);
     FREE_ASSET(Art_GhzWater);

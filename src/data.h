@@ -224,11 +224,24 @@ extern size_t   Map_Moto_len;
 extern const uint8_t *Ani_Moto;
 extern size_t   Ani_Moto_len;
 
+/* Buzz Bomber mappings and animation scripts */
+extern const uint8_t *Map_Buzz;
+extern size_t   Map_Buzz_len;
+extern const uint8_t *Ani_Buzz;
+extern size_t   Ani_Buzz_len;
+extern const uint8_t *Map_Missile;
+extern size_t   Map_Missile_len;
+extern const uint8_t *Ani_Missile;
+extern size_t   Ani_Missile_len;
+
+/* GHZ bridge (id_Bridge) mappings */
+extern const uint8_t *Map_Bri;
+extern size_t   Map_Bri_len;
+
 /* Object mappings referenced by the DebugMode item lists (DebugMode.asm).
    Most are unstaged (NULL) until their maps/*.asm assets are ported; the
    debug list itself (debugmode.c) still references them faithfully. */
 extern const uint8_t *Map_Monitor;
-extern const uint8_t *Map_Buzz;
 extern const uint8_t *Map_Chop;
 extern const uint8_t *Map_Spike;
 extern const uint8_t *Map_Plat_GHZ;

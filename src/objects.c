@@ -34,6 +34,10 @@ static void Signpost_Main(void *obj);
 static void GotThroughCard_Main(void *obj);
 static void Crabmeat_Main(void *obj);
 static void MotoBug_Main(void *obj);
+static void BuzzBomber_Main(void *obj);
+static void Missile_Main(void *obj);
+static void Bridge_Main(void *obj);
+static void PurpleRock_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -63,6 +67,10 @@ void Objects_Init(void) {
     obj_dispatch[id_GotThroughCard] = GotThroughCard_Main;
     obj_dispatch[id_Crabmeat]     = Crabmeat_Main;
     obj_dispatch[id_MotoBug]      = MotoBug_Main;
+    obj_dispatch[id_BuzzBomber]   = BuzzBomber_Main;
+    obj_dispatch[id_Missile]      = Missile_Main;
+    obj_dispatch[id_Bridge]       = Bridge_Main;
+    obj_dispatch[id_PurpleRock]   = PurpleRock_Main;
 
     /* Clear all object RAM */
     memset(ObjRAM, 0, NUM_OBJECTS * OBJECT_SIZE);
@@ -4185,6 +4193,965 @@ static void MotoBug_Main(void *obj) {
         case 4: Moto_Smoke_Animate(obj);  break;
         case 6: Moto_Smoke_Delete(obj);   break;
     }
+}
+
+/* ===========================================================================
+   Buzz Bomber enemy (id_BuzzBomber = $22) and its missile (id_Missile = $23),
+   Ported from _incObj/22, 23 Badnik - Buzz Bomber and Missile.asm (FixBugs=0).
+   buzz_timedelay = objoff_32, buzz_buzzstate = objoff_34;
+   missile msl_timedelay = objoff_32, msl_parent = objoff_3C.
+   =========================================================================== */
+
+#define buzz_timedelay(obj) (*(int16_t *)((uint8_t *)(obj) + 0x32)) /* objoff_32 */
+#define buzz_buzzstate(obj) (*(uint8_t *)((uint8_t *)(obj) + 0x34)) /* objoff_34 */
+#define msl_timedelay(obj)  (*(int16_t *)((uint8_t *)(obj) + 0x32)) /* objoff_32 */
+/* objoff_3C is a 4-byte field (move.l a0,msl_parent(a1) in the disasm), but
+   x86-64 object pointers live above 4 GB, so we store the parent's SLOT INDEX
+   (word value, < 128) here and rebuild the pointer later. Same 32-bit width
+   and same semantics as the ASM long. */
+#define msl_parent(obj)     (*(uint32_t *)((uint8_t *)(obj) + 0x3C)) /* objoff_3C */
+
+static void Buzz_Main(uint8_t *o);
+static void Buzz_Action(uint8_t *o);
+static void Buzz_Action_Wait(uint8_t *o);
+static void Buzz_Action_Fire(uint8_t *o);
+static void Buzz_Action_Move(uint8_t *o);
+static void Buzz_Delete(uint8_t *o);
+static void Msl_Main(uint8_t *o);
+static void Msl_Animate(uint8_t *o);
+static void Msl_FromBuzz(uint8_t *o);
+static void Msl_FromNewt(uint8_t *o);
+static void Msl_FromNewt_Animate(uint8_t *o);
+static void Msl_ChkCancel(uint8_t *o);
+static void Msl_Delete(uint8_t *o);
+
+/* Buzz_Main — routine 0: initialization */
+static void Buzz_Main(uint8_t *o) {
+    obRoutine(o) += 2;                           /* advance to Buzz_Action */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Buzz; /* set mappings */
+    obGfx(o)     = ArtTile_Buzz_Bomber;          /* set art tile */
+    obRender(o)  = sprite_cam_field;             /* set to playfield-positioned mode */
+    obPriority(o) = 3;                           /* set sprite priority */
+    obColType(o) = (uint8_t)(col_48x24 | col_badnik); /* ReactToItem entry 8 (badnik, 48x24) */
+    obActWid(o)  = 48 / 2;                       /* set sprite display width */
+}
+
+/* Buzz_Action — routine 2 */
+static void Buzz_Action(uint8_t *o) {
+    switch (ob2ndRout(o)) {                      /* Buzz_ActIndex: 0 = Wait, 2 = Move */
+        case 0:  Buzz_Action_Wait(o); break;
+        case 2:  Buzz_Action_Move(o); break;
+    }
+
+    if (Ani_Buzz) {                              /* lea (Ani_Buzz).l,a1 */
+        AnimateSprite(o, Ani_Buzz);              /* bsr.w AnimateSprite */
+    }
+    RememberState(o);                            /* display sprite, or delete object if offscreen */
+}
+
+/* .move */
+static void Buzz_Action_Wait(uint8_t *o) {
+    buzz_timedelay(o)--;                         /* subq.w #1,buzz_timedelay */
+    if ((int16_t)buzz_timedelay(o) >= 0) {       /* bpl.s .return */
+        return;
+    }
+    if (buzz_buzzstate(o) & (1 << 1)) {          /* btst #1,buzz_buzzstate / bne.s Buzz_Action_Fire */
+        Buzz_Action_Fire(o);                     /* Buzz Bomber is near Sonic: fire missile */
+        return;
+    }
+
+    ob2ndRout(o) += 2;                           /* set to Buzz_Action_Move */
+    buzz_timedelay(o) = 128 - 1;                 /* set flight time to just over 2 seconds */
+    obVelX(o) = 0x400;                           /* move Buzz Bomber to the right */
+    obAnim(o) = 1;                               /* use "flying" animation */
+    if (obStatus(o) & sprite_xflip) {            /* btst #0,obStatus / bne.s .return */
+        return;                                  /* facing right, keep moving right */
+    }
+    obVelX(o) = -obVelX(o);                      /* neg.w obVelX: move to the left instead */
+}
+
+/* .fire */
+static void Buzz_Action_Fire(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)FindFreeObj();
+    if (!a1) {                                   /* bne.s .return: object RAM is full */
+        return;
+    }
+    obID(a1) = id_Missile;                       /* _move.b #id_Missile,obID(a1) */
+    obX(a1) = obX(o);                            /* copy Buzz Bomber's X-position */
+    obY(a1) = obY(o);                            /* copy Buzz Bomber's Y-position */
+    obY(a1) += 0x1C;                             /* addi.w #$1C: align missile vertically */
+    obVelY(a1) = 0x200;                          /* move missile downwards */
+    obVelX(a1) = 0x200;                          /* move missile to the right */
+
+    int16_t d0 = 0x18;                           /* FixBugs=0: misaligned horizontal offset */
+    if (obStatus(o) & sprite_xflip) {            /* btst #0,obStatus / bne.s .alignX */
+        /* facing right, keep offsets and velocities */
+    } else {
+        d0 = -d0;                                /* neg.w d0 */
+        obVelX(a1) = -obVelX(a1);                /* neg.w obVelX(a1): missile to the left */
+    }
+    /* .alignX */
+    obX(a1) += d0;                               /* add.w d0: align missile horizontally */
+
+    obStatus(a1) = obStatus(o);                  /* copy X-flip flag to missile */
+    msl_timedelay(a1) = 15 - 1;                  /* 15 frames delay before missile becomes active */
+    msl_parent(a1) = (uint32_t)Object_GetIndex(o);  /* missile remembers the parent object */
+    buzz_buzzstate(o) = 1;                       /* "already fired" to prevent refiring */
+    buzz_timedelay(o) = 60 - 1;                  /* stay on firing animation for 1 second */
+    obAnim(o) = 2;                               /* use "firing" animation */
+}
+
+/* .chknearsonic */
+static void Buzz_Action_Move(uint8_t *o) {
+    buzz_timedelay(o)--;                         /* subq.w #1,buzz_timedelay */
+    if ((int16_t)buzz_timedelay(o) < 0) {        /* bmi.s .changeDirection */
+        goto changeDirection;
+    }
+
+    SpeedToPos(o);                               /* update Buzz Bomber's position */
+
+    if (buzz_buzzstate(o) != 0) {                /* tst.b / bne.s .return: just fired */
+        return;                                  /* prevent firing again until it changed direction */
+    }
+
+    int16_t d0 = obX(RAM_ADDR(v_player));        /* move.w (v_player+obX).w,d0 */
+    d0 -= obX(o);                                /* sub.w obX(a0): difference to Buzz Bomber */
+    if (d0 < 0) {                                /* bpl.s .checkDistance */
+        d0 = -d0;                                /* neg.w d0: make difference positive */
+    }
+    /* .checkDistance */
+    if ((uint16_t)d0 >= 96) {                    /* cmpi.w #96,d0 / bhs.s .return: not near */
+        return;
+    }
+    if (!(obRender(o) & sprite_rendered)) {      /* tst.b obRender / bpl.s .return: offscreen */
+        return;
+    }
+
+    buzz_buzzstate(o) = 2;                       /* set Buzz Bomber to "near Sonic" */
+    buzz_timedelay(o) = 30 - 1;                  /* set time delay before firing to half a second */
+    goto stopMoving;                             /* bra.s .stopMoving */
+
+changeDirection:
+    buzz_buzzstate(o) = 0;                       /* set state to "normal" (no firing) */
+    obStatus(o) ^= sprite_xflip;                 /* reverse direction */
+    buzz_timedelay(o) = 60 - 1;                  /* set delay before moving again to 1 second */
+
+stopMoving:
+    ob2ndRout(o) -= 2;                           /* go back to Buzz_Action_Wait */
+    obVelX(o) = 0;                               /* stop Buzz Bomber moving */
+    obAnim(o) = 0;                               /* use "hovering" animation */
+}
+
+/* Buzz_Delete — routine 4 (unreachable, deletion is handled elsewhere) */
+static void Buzz_Delete(uint8_t *o) {
+    DeleteObject(o);                             /* bsr.w DeleteObject */
+}
+
+/* Msl_Main — missile routine 0 */
+static void Msl_Main(uint8_t *o) {
+    msl_timedelay(o)--;                          /* subq.w #1,msl_timedelay */
+    if ((int16_t)msl_timedelay(o) >= 0) {        /* bpl.s Msl_ChkCancel */
+        Msl_ChkCancel(o);                        /* time remains: check if parent was destroyed */
+        return;                                  /* (branch, no rts to Msl_Main) */
+    }
+
+    obRoutine(o) += 2;                           /* advance to Msl_Animate */
+    obMap(o)    = (uint32_t)(uintptr_t)Map_Missile; /* set mappings */
+    obGfx(o)    = (uint16_t)(ArtTile_Buzz_Bomber | Tile_Pal2); /* art tile and palette line */
+    obRender(o) = sprite_cam_field;              /* set to playfield-positioned mode */
+    obPriority(o) = 3;                           /* set sprite priority */
+    obActWid(o) = 16 / 2;                        /* set sprite display width */
+    obStatus(o) &= 3;                            /* andi.b #3: clear flags except X/Y-flip */
+
+    if (obSubtype(o) != 0) {                     /* tst.b obSubtype / beq.s Msl_Animate */
+        obRoutine(o) = 8;                        /* set to Msl_FromNewt */
+        obColType(o) = (uint8_t)(col_12x12 | col_hurt); /* damaging 12x12 hitbox */
+        obAnim(o) = 1;                           /* set animation directly to ".missile" */
+        Msl_FromNewt_Animate(o);                 /* bra.s Msl_FromNewt_Animate */
+        return;
+    }
+    /* Msl_Animate */
+    Msl_ChkCancel(o);                            /* check if parent Buzz Bomber was destroyed */
+    if (Ani_Missile) {                           /* lea (Ani_Missile).l,a1 */
+        AnimateSprite(o, Ani_Missile);           /* bsr.w AnimateSprite */
+    }
+    DisplaySprite(o);                            /* display missile sprite */
+}
+
+/* Msl_Animate — missile routine 2 */
+static void Msl_Animate(uint8_t *o) {
+    Msl_ChkCancel(o);                            /* delete missile if parent Buzz Bomber died */
+    /* FixBugs=0: no return check after Msl_ChkCancel (may display a freed slot) */
+    if (Ani_Missile) {                           /* lea (Ani_Missile).l,a1 */
+        AnimateSprite(o, Ani_Missile);           /* bsr.w AnimateSprite (.flare advances routine) */
+    }
+    DisplaySprite(o);                            /* display missile sprite */
+}
+
+/* Msl_ChkCancel — delete missile if the Buzz Bomber which fired it was destroyed */
+static void Msl_ChkCancel(uint8_t *o) {
+    uint8_t *parent = Object_GetSlot((int)msl_parent(o)); /* movea.l msl_parent(a0),a1 */
+    if (obID(parent) == id_ExplosionItem) {      /* cmpi.b #id_ExplosionItem,obID(a1) / beq.s Msl_Delete */
+        Msl_Delete(o);                           /* parent destroyed: delete missile */
+    }
+}
+
+/* Msl_FromBuzz — missile routine 4 */
+static void Msl_FromBuzz(uint8_t *o) {
+    /* Bit 7 of status is never set, so this branch is unreachable (see ASM notes). */
+    if (obStatus(o) & (1 << 7)) {                /* btst #7,obStatus / bne.s .explode */
+        /* .explode: change missile into the (broken gfx) small explosion */
+        obID(o) = id_UnusedExplosion;            /* _move.b #id_UnusedExplosion,obID(a0) */
+        obRoutine(o) = 0;                        /* reset routine counter */
+        /* ASM branches to the unported UnusedExplosion object ($24); it resolves
+           to the unmapped-ID slot (NullObject) in the PC port. */
+        return;
+    }
+
+    obColType(o) = (uint8_t)(col_12x12 | col_hurt); /* damaging 12x12 hitbox */
+    obAnim(o) = 1;                               /* set to ".missile" animation */
+    SpeedToPos(o);                               /* update missile position */
+
+    /* FixBugs=0: animate and display before the bottom-boundary check */
+    if (Ani_Missile) {                           /* lea (Ani_Missile).l,a1 */
+        AnimateSprite(o, Ani_Missile);           /* bsr.w AnimateSprite */
+    }
+    DisplaySprite(o);                            /* display missile sprite */
+
+    int16_t d0 = v_limitbtm2;                    /* move.w (v_limitbtm2).w,d0 */
+    d0 += 224;                                   /* addi.w #224: add screen height */
+    if (d0 < obY(o)) {                           /* cmp.w obY(a0) / blo.s Msl_Delete */
+        Msl_Delete(o);                           /* below the bottom level boundary */
+    }
+}
+
+/* Msl_Delete — missile routine 6 */
+static void Msl_Delete(uint8_t *o) {
+    DeleteObject(o);                             /* bsr.w DeleteObject */
+}
+
+/* Msl_FromNewt — missile routine 8 (spawned by wall Newtron badniks) */
+static void Msl_FromNewt(uint8_t *o) {
+    if (!(obRender(o) & sprite_rendered)) {      /* tst.b obRender / bpl.s Msl_Delete */
+        Msl_Delete(o);                           /* missile is offscreen */
+        return;
+    }
+    SpeedToPos(o);                               /* update missile's position */
+    Msl_FromNewt_Animate(o);
+}
+
+/* Msl_FromNewt_Animate */
+static void Msl_FromNewt_Animate(uint8_t *o) {
+    if (Ani_Missile) {                           /* lea (Ani_Missile).l,a1 */
+        AnimateSprite(o, Ani_Missile);           /* bsr.w AnimateSprite */
+    }
+    DisplaySprite(o);                            /* display missile sprite */
+}
+
+/* BuzzBomber_Main — object entry: dispatch by obRoutine (Buzz_Index) */
+static void BuzzBomber_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                      /* Buzz_Index: 0/2/4 */
+        case 0: Buzz_Main(obj);        break;
+        case 2: Buzz_Action(obj);      break;
+        case 4: Buzz_Delete(obj);      break;
+    }
+}
+
+/* Missile_Main — object entry: dispatch by obRoutine (Msl_Index) */
+static void Missile_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                      /* Msl_Index: 0/2/4/6/8 */
+        case 0: Msl_Main(obj);        break;
+        case 2: Msl_Animate(obj);     break;
+        case 4: Msl_FromBuzz(obj);    break;
+        case 6: Msl_Delete(obj);      break;
+        case 8: Msl_FromNewt(obj);    break;
+    }
+}
+
+/* ===========================================================================
+   GHZ bridge (id_Bridge = $11) and the shared platform solidity routines it
+   is built on. Ported from _incObj/11 GHZ Bridge.asm (FixBugs=0); that file
+   sandwiches in _incObj/sub PlatformObject & SlopeObject.asm and
+   _incObj/sub ExitPlatform.asm, so those subroutines live here too.
+
+   bridge_children      = obSubtype ($28): number of logs after construction
+   bridge_children_ram  = $29-$39: object-slot index of every log (incl. parent)
+   bridge_origY         = objoff_3C (word): initial Y each log remembers
+   bridge_nudge         = objoff_3E: 0-$40, how far the bridge has bent
+   bridge_currentlog    = objoff_3F: 0-based log Sonic is standing on
+   =========================================================================== */
+
+#define bri_children(obj)     (*(uint8_t *)((uint8_t *)(obj) + 0x28))  /* bridge_children = obSubtype */
+#define bri_children_ram(obj) ((uint8_t *)(obj) + 0x29)                /* bridge_children_ram */
+#define bri_origY(obj)        (*(int16_t *)((uint8_t *)(obj) + 0x3C))  /* objoff_3C */
+#define bri_nudge(obj)        (*(uint8_t *)((uint8_t *)(obj) + 0x3E))  /* objoff_3E */
+#define bri_curlog(obj)       (*(uint8_t *)((uint8_t *)(obj) + 0x3F))  /* objoff_3F */
+
+/* GHZ bridge-bending data (Bri_Data_Y_Max: max Y a log dips when stood on,
+   indexed by log count*16 + current log; only 12 logs are used in-game).
+   Bri_Data_Align: per-standing-log bend fractions for each log left/right,
+   $FF = full bend. Ported byte-for-byte; the `_` placeholder is 0. */
+static const uint8_t Bri_Data_Y_Max[17 * 16] = {
+    /* 0 logs  */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 1 log   */ 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 2 logs  */ 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 3 logs  */ 2, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 4 logs  */ 2, 4, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 5 logs  */ 2, 4, 6, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 6 logs  */ 2, 4, 6, 6, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 7 logs  */ 2, 4, 6, 8, 6, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 8 logs  */ 2, 4, 6, 8, 8, 6, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 9 logs  */ 2, 4, 6, 8,10, 8, 6, 4, 2, 0, 0, 0, 0, 0, 0, 0,
+    /* 10 logs */ 2, 4, 6, 8,10,10, 8, 6, 4, 2, 0, 0, 0, 0, 0, 0,
+    /* 11 logs */ 2, 4, 6, 8,10,12,10, 8, 6, 4, 2, 0, 0, 0, 0, 0,
+    /* 12 logs */ 2, 4, 6, 8,10,12,12,10, 8, 6, 4, 2, 0, 0, 0, 0,
+    /* 13 logs */ 2, 4, 6, 8,10,12,14,12,10, 8, 6, 4, 2, 0, 0, 0,
+    /* 14 logs */ 2, 4, 6, 8,10,12,14,14,12,10, 8, 6, 4, 2, 0, 0,
+    /* 15 logs */ 2, 4, 6, 8,10,12,14,16,14,12,10, 8, 6, 4, 2, 0,
+    /* 16 logs */ 2, 4, 6, 8,10,12,14,16,16,14,12,10, 8, 6, 4, 2,
+};
+
+static const uint8_t Bri_Data_Align[16 * 16] = {
+    /* log 0  */ 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* log 1  */ 0xB5, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* log 2  */ 0x7E, 0xDB, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* log 3  */ 0x61, 0xB5, 0xEC, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* log 4  */ 0x4A, 0x93, 0xCD, 0xF3, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* log 5  */ 0x3E, 0x7E, 0xB0, 0xDB, 0xF6, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* log 6  */ 0x38, 0x6D, 0x9D, 0xC5, 0xE4, 0xF8, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* log 7  */ 0x31, 0x61, 0x8E, 0xB5, 0xD4, 0xEC, 0xFB, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* log 8  */ 0x2B, 0x56, 0x7E, 0xA2, 0xC1, 0xDB, 0xEE, 0xFB, 0xFF, 0, 0, 0, 0, 0, 0, 0,
+    /* log 9  */ 0x25, 0x4A, 0x73, 0x93, 0xB0, 0xCD, 0xE1, 0xF3, 0xFC, 0xFF, 0, 0, 0, 0, 0, 0,
+    /* log 10 */ 0x1F, 0x44, 0x67, 0x88, 0xA7, 0xBD, 0xD4, 0xE7, 0xF4, 0xFD, 0xFF, 0, 0, 0, 0, 0,
+    /* log 11 */ 0x1F, 0x3E, 0x5C, 0x7E, 0x98, 0xB0, 0xC9, 0xDB, 0xEA, 0xF6, 0xFD, 0xFF, 0, 0, 0, 0,
+    /* log 12 */ 0x19, 0x38, 0x56, 0x73, 0x8E, 0xA7, 0xBD, 0xD1, 0xE1, 0xEE, 0xF8, 0xFE, 0xFF, 0, 0, 0,
+    /* log 13 */ 0x19, 0x38, 0x50, 0x6D, 0x83, 0x9D, 0xB0, 0xC5, 0xD8, 0xE4, 0xF1, 0xF8, 0xFE, 0xFF, 0, 0,
+    /* log 14 */ 0x19, 0x31, 0x4A, 0x67, 0x7E, 0x93, 0xA7, 0xBD, 0xCD, 0xDB, 0xE7, 0xF3, 0xF9, 0xFE, 0xFF, 0,
+    /* log 15 */ 0x19, 0x31, 0x4A, 0x61, 0x78, 0x8E, 0xA2, 0xB5, 0xC5, 0xD4, 0xE1, 0xEC, 0xF4, 0xFB, 0xFE, 0xFF,
+};
+
+/* --- _incObj/sub PlatformObject & SlopeObject.asm --------------------------
+   Shared "stand on top of" solidity. PlatformObject does the x-range check
+   then falls into the y check; Plat_NoXCheck skips the x check and uses
+   obY-8 as the platform top; Plat_NoXCheck_AltY picks a caller-supplied top.
+   The y check makes Sonic land, then falls into Plat_NoCheck which clears
+   the previous platform's stood-on flag and records the new one.
+   Returns 1 if Sonic landed, 0 if he walked into Plat_Exit. */
+
+static void Plat_NoCheck(uint8_t *a1, uint8_t *o) {
+    if (obStatus(a1) & (1 << 3)) {               /* btst #3,obStatus(a1) / beq.s .no */
+        uint8_t *a2 = (uint8_t *)Object_GetSlot((int)standonobject(a1));
+        obStatus(a2) &= ~(1 << 3);               /* bclr #3,obStatus(a2) */
+        ob2ndRout(a2) = 0;                       /* clr.b ob2ndRout(a2) */
+        if (obRoutine(a2) == 4) {                /* cmpi.b #4,obRoutine(a2) / bne.s .no */
+            obRoutine(a2) -= 2;                  /* subq.b #2,obRoutine(a2) */
+        }
+    }
+
+    /* .no */
+    standonobject(a1) = (uint8_t)Object_GetIndex(o); /* convert address to index */
+    obAngle(a1) = 0;                             /* move.b #0,obAngle(a1) */
+    obVelY(a1) = 0;                              /* move.w #0,obVelY(a1) */
+    obInertia(a1) = obVelX(a1);                  /* move.w obVelX(a1),obInertia(a1) */
+    if (obStatus(a1) & (1 << 1)) {               /* btst #1,obStatus(a1) / beq.s .notinair */
+        Sonic_ResetOnFloor(a1);                  /* was airborne: make Sonic land */
+    }
+    /* .notinair */
+    obStatus(a1) |= (1 << 3);                    /* bset #3,obStatus(a1) */
+    obStatus(o)  |= (1 << 3);                    /* bset #3,obStatus(a0) */
+}
+
+/* Plat_NoXCheck_AltY onward: y-range check using d0 = platform top Y. */
+static int Plat_DoYCheck(uint8_t *o, int16_t d0) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+    int16_t d2 = obY(a1);                        /* move.w obY(a1),d2 */
+    int16_t d1 = (int16_t)(int8_t)obHeight(a1);  /* move.b obHeight(a1),d1 / ext.w d1 */
+    d1 = (int16_t)(d1 + d2 + 4);                 /* add.w / addq.w #4: bottom edge + 4 */
+    d0 = (int16_t)(d0 - d1);                     /* sub.w d1,d0: top vs bottom edge */
+    if (d0 > 0) return 0;                        /* bhi.w Plat_Exit: Sonic above platform */
+    if (d0 < -16) return 0;                      /* cmpi.w #-16,d0 / blo.w Plat_Exit */
+    if ((int8_t)f_playerctrl < 0) return 0;      /* tst.b (f_playerctrl) / bmi.w Plat_Exit */
+    if ((uint8_t)obRoutine(a1) >= 6) return 0;   /* cmpi.b #6,obRoutine(a1) / bhs.w Plat_Exit */
+    d2 = (int16_t)(d2 + d0 + 3);                 /* add.w d0,d2 / addq.w #3,d2 */
+    obY(a1) = d2;                                /* move.w d2,obY(a1) */
+    obRoutine(o) += 2;                           /* addq.b #2,obRoutine(a0) */
+    Plat_NoCheck(a1, o);                         /* fall through to Plat_NoCheck */
+    return 1;
+}
+
+/* PlatformObject (full x + y check). d1 = platform half-width. */
+static int PlatformObject(uint8_t *o, int16_t d1) __attribute__((unused));
+static int PlatformObject(uint8_t *o, int16_t d1) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+    if (obVelY(a1) < 0) return 0;                /* tst.w obVelY(a1) / bmi.w Plat_Exit */
+    int16_t d0 = (int16_t)(obX(a1) - obX(o) + d1);
+    if (d0 < 0) return 0;                        /* bmi.w Plat_Exit */
+    d1 = (int16_t)(d1 + d1);                     /* add.w d1,d1 */
+    if (d0 >= d1) return 0;                      /* cmp.w d1,d0 / bhs.w Plat_Exit */
+    return Plat_DoYCheck(o, (int16_t)(obY(o) - 8)); /* Plat_NoXCheck: assume 8px tall */
+}
+
+/* Plat_NoXCheck: skip the x check, assume 8px tall platform. */
+static int Plat_NoXCheck(uint8_t *o) {
+    return Plat_DoYCheck(o, (int16_t)(obY(o) - 8));
+}
+
+/* SlopeObject: like PlatformObject but the platform top follows a heightmap
+   (a2) under Sonic's x position; used by GHZ ledges and SLZ seesaws. */
+static int SlopeObject(uint8_t *o, int16_t d1, const uint8_t *a2) __attribute__((unused));
+static int SlopeObject(uint8_t *o, int16_t d1, const uint8_t *a2) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+    if (obVelY(a1) < 0) return 0;                /* bmi.w Plat_Exit */
+    int16_t d0 = (int16_t)(obX(a1) - obX(o) + d1);
+    if (d0 < 0) return 0;                        /* bmi.s Plat_Exit */
+    d1 = (int16_t)(d1 + d1);                     /* add.w d1,d1 */
+    if (d0 >= d1) return 0;                      /* bhs.s Plat_Exit */
+    if (obRender(o) & sprite_xflip) {            /* btst #sprite_xflip_bit,obRender / beq.s .noflip */
+        d0 = (int16_t)(d1 + (~(uint16_t)d0));    /* not.w d0 / add.w d1,d0 */
+    }
+    /* .noflip */
+    d0 >>= 1;                                    /* lsr.w #1,d0 */
+    int d3 = a2[(uint16_t)d0];                   /* move.b (a2,d0.w),d3 */
+    d0 = (int16_t)(obY(o) - d3);                 /* move.w obY(a0),d0 / sub.w d3,d0 */
+    return Plat_DoYCheck(o, d0);                 /* bra.w Plat_NoXCheck_AltY */
+}
+
+/* PlatformObject_CustomHeight: like PlatformObject but with a custom solidity
+   height d3 instead of the assumed 8px (used by swinging platforms). */
+static int PlatformObject_CustomHeight(uint8_t *o, int16_t d1, int16_t d3) __attribute__((unused));
+static int PlatformObject_CustomHeight(uint8_t *o, int16_t d1, int16_t d3) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+    if (obVelY(a1) < 0) return 0;                /* bmi.w Plat_Exit */
+    int16_t d0 = (int16_t)(obX(a1) - obX(o) + d1);
+    if (d0 < 0) return 0;                        /* bmi.w Plat_Exit */
+    d1 = (int16_t)(d1 + d1);                     /* add.w d1,d1 */
+    if (d0 >= d1) return 0;                      /* bhs.w Plat_Exit */
+    return Plat_DoYCheck(o, (int16_t)(obY(o) - d3)); /* use custom height in d3 */
+}
+
+/* --- _incObj/sub ExitPlatform.asm ------------------------------------------
+   Allow Sonic to walk/jump off a platform. d1 = platform width/2 (d2 already
+   set when entering at ExitPlatform2). Returns 1 ("carry set" in the ASM)
+   while Sonic remains on the platform, 0 once he left it (the ASM's carry
+   from the `blo` branch). Sonic's x-offset from the platform's left edge is
+   written to *out_d0 for the caller (used to find the log index). */
+static int ExitPlatform2(uint8_t *o, int16_t d1, int16_t d2, int16_t *out_d0) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+    d2 = (int16_t)(d2 + d2);                     /* add.w d2,d2: double input width */
+    if (obStatus(a1) & (1 << 1)) {               /* btst #1,obStatus(a1) / bne.s .exitedPlatform */
+        goto exitedPlatform;                     /* airborne: exit platform */
+    }
+    int16_t d0 = (int16_t)(obX(a1) - obX(o) + d1);
+    if (d0 < 0) {                                /* bmi.s .exitedPlatform: left of platform */
+        goto exitedPlatform;
+    }
+    if ((uint16_t)d0 < (uint16_t)d2) {           /* cmp.w d2,d0 / blo.s .return */
+        if (out_d0) *out_d0 = d0;                /* still on platform */
+        return 1;                                /* carry set */
+    }
+exitedPlatform:
+    obStatus(a1) &= ~(1 << 3);                   /* bclr #3,obStatus(a1) */
+    obRoutine(o) = 2;                            /* move.b #2,obRoutine(a0) */
+    obStatus(o)  &= ~(1 << 3);                   /* bclr #3,obStatus(a0) */
+    return 0;                                    /* carry clear */
+}
+
+/* ExitPlatform entry: width is passed in d1 only. */
+static int ExitPlatform(uint8_t *o, int16_t d1, int16_t *out_d0) __attribute__((unused));
+static int ExitPlatform(uint8_t *o, int16_t d1, int16_t *out_d0) {
+    return ExitPlatform2(o, d1, d1, out_d0);     /* move.w d1,d2 */
+}
+
+/* --- Bridge object routines ------------------------------------------------ */
+
+static void Bri_Bend(uint8_t *o);
+static void Bri_Action(uint8_t *o);
+static void Bri_StoodOn(uint8_t *o);
+static void Bri_CheckOnBridge(uint8_t *o);
+static void Bri_WalkOff(uint8_t *o);
+static void Bri_MoveSonic(uint8_t *o);
+static void Bri_ChkDel(uint8_t *o);
+
+/* Bri_ChildLog — routine $A: child logs are updated and deleted through the
+   parent object; they just display themselves every frame. */
+static void Bri_ChildLog(uint8_t *o) {
+    DisplaySprite(o);                            /* bsr.w DisplaySprite */
+}
+
+/* Bri_Delete — routine 6/8 (unused?) */
+static void Bri_Delete(uint8_t *o) {
+    DeleteObject(o);                             /* bsr.w DeleteObject */
+}
+
+/* Bri_Main — routine 0: spawn all the child logs. Falls through into
+   Bri_Action at the end, exactly like the ASM. */
+static void Bri_Main(uint8_t *o) {
+    obRoutine(o) += 2;                           /* addq.b #2,obRoutine(a0) */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Bri; /* set mappings */
+    obGfx(o)     = ArtTile_GHZ_Bridge | Tile_Pal3;
+    obRender(o)  = sprite_cam_field;             /* playfield-positioned mode */
+    obPriority(o) = 3;                           /* set sprite priority */
+    /* FixBugs=0: the display width is 256/2, way too large; it was kept so the
+       bridge could screen-wrap when Sonic is standing on it (see the ASM). */
+    obActWid(o)  = 256 / 2;
+
+    int16_t d2 = obY(o);                         /* copy Y-position from parent */
+    int16_t d3 = obX(o);                         /* center X-position of bridge */
+    uint8_t d4 = obID(o);                        /* copy parent object ID to children */
+    uint8_t *a2 = &bri_children(o);              /* load child index array (= obSubtype) */
+    uint8_t sub = *a2;                           /* get subtype for bridge */
+    *a2++ = 0;                                   /* clear subtype, array now starts at $29 */
+    d3 = (int16_t)(d3 - (((sub >> 1) << 4) & 0xFF)); /* lsr#1 * 16: X of leftmost log */
+
+    if (sub < 2) {                               /* subq.b #2 / bcs.s Bri_Action: 1 log only */
+        Bri_Action(o);
+        return;
+    }
+    uint8_t d1 = (uint8_t)(sub - 2);             /* -1 for dbf, -1 for parent log */
+
+    for (;;) {                                   /* .loopBuildBridge */
+        uint8_t *a1 = (uint8_t *)FindFreeObj();  /* bsr.w FindFreeObj */
+        if (!a1) {                               /* bne.s Bri_Action: object RAM full */
+            Bri_Action(o);
+            return;
+        }
+        bri_children(o)++;                       /* addq.b #1,bridge_children(a0) */
+
+        if (d3 == obX(o)) {                      /* cmp.w obX(a0),d3 / bne.s .setupChild */
+            d3 = (int16_t)(d3 + 16);             /* skip parent position */
+            obY(o) = d2;                         /* move.w d2,obY(a0) (redundant) */
+            bri_origY(o) = d2;                   /* remember initial Y-position */
+            *a2++ = (uint8_t)Object_GetIndex(o); /* store parent as first entry */
+            bri_children(o)++;                   /* account for parent log */
+        }
+
+        /* .setupChild */
+        *a2++ = (uint8_t)Object_GetIndex(a1);    /* store child index at array end */
+        obRoutine(a1) = 0x0A;                    /* Bri_ChildLog (display only) */
+        obID(a1) = d4;                           /* copy object ID from parent */
+        obY(a1) = d2;                            /* copy Y-position from parent */
+        bri_origY(a1) = d2;                      /* remember initial Y-position */
+        obX(a1) = d3;                            /* write current X-position */
+        obMap(a1)     = (uint32_t)(uintptr_t)Map_Bri;
+        obGfx(a1)     = ArtTile_GHZ_Bridge | Tile_Pal3;
+        obRender(a1)  = sprite_cam_field;
+        obPriority(a1) = 3;
+        obActWid(a1)  = 16 / 2;                  /* individual log width */
+        d3 = (int16_t)(d3 + 16);                 /* position next log 16px right */
+
+        if (--d1 == 0xFF) break;                 /* dbf d1 */
+    }
+
+    Bri_Action(o);                               /* fall through to Bri_Action */
+}
+
+/* Bri_Action — routine 2 */
+static void Bri_Action(uint8_t *o) {
+    Bri_CheckOnBridge(o);                        /* allow stepping on bridge */
+
+    if (bri_nudge(o) == 0) {                     /* tst.b bridge_nudge / beq.s .display */
+        goto bri_display;
+    }
+    bri_nudge(o) = (uint8_t)(bri_nudge(o) - 4);  /* subq.b #4: reduce nudging */
+    Bri_Bend(o);                                 /* bsr.w Bri_Bend */
+
+bri_display:
+    DisplaySprite(o);                            /* FixBugs=0: display main bridge */
+    Bri_ChkDel(o);                               /* bra.w Bri_ChkDel */
+}
+
+/* Bri_CheckOnBridge — check if Sonic is over the bridge and let him land. */
+static void Bri_CheckOnBridge(uint8_t *o) {
+    uint16_t d1 = (uint16_t)(bri_children(o) << 3); /* moveq #0,d1; move.b: count*8 */
+    uint16_t d2 = d1;                            /* copy for right-side check */
+    d1 = (uint16_t)(d1 + 8);                     /* d1 = left edge of bridge */
+    d2 = (uint16_t)(d2 + d2);                    /* d2 = right edge of bridge */
+    uint8_t *a1 = RAM_ADDR(v_player);
+    if (obVelY(a1) < 0) {                        /* tst.w obVelY(a1) / bmi.w Plat_Exit */
+        return;
+    }
+    int16_t d0 = (int16_t)(obX(a1) - obX(o) + (int16_t)d1);
+    if (d0 < 0) {                                /* bmi.w Plat_Exit: left of the bridge */
+        return;
+    }
+    if ((uint16_t)d0 >= (uint16_t)d2) {          /* cmp.w d2,d0 / bhs.w Plat_Exit */
+        return;
+    }
+    Plat_NoXCheck(o);                            /* bra.s Plat_NoXCheck: assume 8px */
+}
+
+/* Bri_StoodOn — routine 4 */
+static void Bri_StoodOn(uint8_t *o) {
+    Bri_WalkOff(o);                              /* allow exiting bridge */
+    DisplaySprite(o);                            /* FixBugs=0: display main bridge */
+    Bri_ChkDel(o);                               /* bra.w Bri_ChkDel */
+}
+
+/* Bri_WalkOff — bend the bridge while Sonic stands on it. */
+static void Bri_WalkOff(uint8_t *o) {
+    uint16_t d1w = (uint16_t)(bri_children(o) << 3); /* count*8 */
+    uint16_t d2w = d1w;                          /* d2 = half-width for right check */
+    d1w = (uint16_t)(d1w + 8);                   /* d1 = half-width for left check */
+    int16_t d0 = 0;
+    /* bsr.s ExitPlatform2 ; bcc.s .return: only bend while Sonic is still on */
+    if (!ExitPlatform2(o, (int16_t)d1w, (int16_t)d2w, &d0)) {
+        return;                                  /* bcc.s .return: Sonic exited, cleanup done */
+    }
+    /* .return: still on the bridge */
+    bri_curlog(o) = (uint8_t)((uint16_t)d0 >> 4); /* lsr.w #4,d0: log Sonic is on */
+    if (bri_nudge(o) != 0x40) {                  /* cmpi.b #$40,d0 / beq.s .bridgeBehavior */
+        bri_nudge(o) = (uint8_t)(bri_nudge(o) + 4); /* addq.b #4: depress the bridge */
+    }
+    /* .bridgeBehavior */
+    Bri_Bend(o);                                 /* bsr.w Bri_Bend */
+    Bri_MoveSonic(o);                            /* bsr.w Bri_MoveSonic */
+}
+
+/* Bri_MoveSonic — vertically align Sonic with the log he's standing on. */
+static void Bri_MoveSonic(uint8_t *o) {
+    uint8_t *a2 = (uint8_t *)Object_GetSlot((int)bri_children_ram(o)[bri_curlog(o)]);
+    uint8_t *a1 = RAM_ADDR(v_player);
+    int16_t d0 = (int16_t)(obY(a2) - 8);         /* subq.w #8: align 8px upwards */
+    d0 = (int16_t)(d0 - (int16_t)(int8_t)obHeight(a1)); /* sub.w obHeight: adjust by collision height */
+    obY(a1) = d0;                                /* move.w d0,obY(a1) */
+}
+
+/* Bri_Bend — bend the bridge by aligning the logs left/right of the one
+   Sonic stands on, using a sine of the nudge value (0-$40). */
+static void Bri_Bend(uint8_t *o) {
+    int16_t d0s, d1s;
+    CalcSine(bri_nudge(o), &d0s, &d1s);          /* bsr.w CalcSine */
+    int16_t d4 = d0s;                            /* move.w d0,d4: backup sine */
+
+    const uint8_t *a4 = Bri_Data_Align;
+    uint8_t count  = bri_children(o);            /* move.b bridge_children,d0 */
+    uint8_t curlog = bri_curlog(o);              /* move.b bridge_currentlog,d3 */
+    uint8_t d5 = Bri_Data_Y_Max[(uint16_t)(count * 16) + curlog]; /* max Y-bend distance */
+    int d2 = curlog;                             /* number of logs left of Sonic */
+    const uint8_t *a3 = a4 + (uint16_t)(curlog & 0x0F) * 16; /* align row for current log */
+    uint8_t *a2 = bri_children_ram(o);           /* RAM indices to log objects */
+
+    for (;;) {                                   /* .loopLeftLogs */
+        uint8_t *a1 = (uint8_t *)Object_GetSlot(*a2++);
+        uint16_t bend = (uint16_t)(*a3++ + 1);   /* move.b (a3)+,d0 / addq.w #1,d0 */
+        uint16_t prod = (uint16_t)(bend * d5);   /* mulu.w d5,d0 (low word) */
+        uint32_t total = (uint32_t)prod * (uint16_t)d4; /* mulu.w d4,d0 */
+        obY(a1) = (int16_t)((uint16_t)(total >> 16) + bri_origY(a1)); /* swap + add origY */
+        if (--d2 == -1) break;                   /* dbf d2 */
+    }
+
+    /* right side: reflected through the (count - curlog - 1) row of Align */
+    int d3b = curlog + 1 - count;                /* addq #1,d3 / sub.b d0,d3 */
+    d3b = -d3b;                                  /* neg.b d3 */
+    if (d3b < 0) return;                         /* bmi.s .return */
+    int d2b = d3b;                               /* move.w d3,d2 */
+    const uint8_t *a3b = a4 + (d3b << 4);        /* lsl.w #4,d3 / lea (a4,d3.w),a3 */
+    a3b += d2b;                                  /* adda.w d2,a3: first right-side log */
+    d2b -= 1;                                    /* subq.w #1,d2: undo +1 for dbf */
+    if (d2b < 0) return;                         /* bcs.s .return: rightmost log */
+
+    for (;;) {                                   /* .loopRightLogs */
+        uint8_t *a1 = (uint8_t *)Object_GetSlot(*a2++);
+        uint16_t bend = (uint16_t)(*(a3b - 1) + 1); a3b--; /* move.b -(a3),d0 / addq.w #1 */
+        uint16_t prod = (uint16_t)(bend * d5);   /* mulu.w d5,d0 */
+        uint32_t total = (uint32_t)prod * (uint16_t)d4; /* mulu.w d4,d0 */
+        obY(a1) = (int16_t)((uint16_t)(total >> 16) + bri_origY(a1)); /* swap + add origY */
+        if (--d2b == -1) break;                  /* dbf d2 */
+    }
+}
+
+/* Bri_ChkDel — delete the main bridge object and all child logs if offscreen. */
+static void Bri_ChkDel(uint8_t *o) {
+    if (!OutOfRange(o, -1)) {                    /* out_of_range.w .deleteBridge */
+        return;                                  /* FixBugs=0: rts (no DisplaySprite here) */
+    }
+
+    /* .deleteBridge */
+    uint8_t *a2 = bri_children_ram(o);
+    int parent_idx = Object_GetIndex(o);
+    uint8_t count = bri_children(o);             /* number of logs incl. parent */
+    for (int i = (int)count - 1; i >= 0; i--) { /* subq.b #1 for dbf / .loopDeleteLogs */
+        uint8_t *a1 = (uint8_t *)Object_GetSlot(*a2++);
+        if (Object_GetIndex(a1) != parent_idx) { /* cmp.w a0,d0 / beq.s .next */
+            DeleteObject(a1);                    /* bsr.w DeleteChild */
+        }
+    }
+
+    /* .deleteParentLog */
+    DeleteObject(o);                             /* bsr.w DeleteObject */
+}
+
+/* Bridge_Main — object entry: dispatch by obRoutine (Bri_Index) */
+static void Bridge_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                      /* Bri_Index: 0/2/4/6/8/$A */
+        case 0:     Bri_Main(o);     break;
+        case 2:     Bri_Action(o);   break;
+        case 4:     Bri_StoodOn(o);  break;
+        case 6:     Bri_Delete(o);   break;      /* unused */
+        case 8:     Bri_Delete(o);   break;      /* unused */
+        case 0x0A:  Bri_ChildLog(o); break;
+    }
+}
+
+/* --- _incObj/3B GHZ Purple Rock.asm ----------------------------------------
+   Solid green-hill rock. Uses SolidObject (sub SolidObject.asm) for solidity;
+   FixBugs=0 (obActWid too small; DisplaySprite then out-of-range delete). */
+
+static void MoveWithPlatform(uint8_t *o, int16_t d0, int16_t d2);
+static void MvSonicOnPtfm(uint8_t *o, int16_t d2, int16_t d3);
+static void Solid_NotPushing(uint8_t *a1, uint8_t *o);
+static void Solid_ResetFloor(uint8_t *o);
+static int SolidObject(uint8_t *o, int16_t d1, int16_t d2, int16_t d3,
+                       int16_t d4, int16_t *d3out, int16_t *d5out);
+
+static void Rock_Main(uint8_t *o) {
+    obRoutine(o) += 2;                          /* advance to Rock_Solid */
+    obMap(o) = (uint32_t)(uintptr_t)Map_PRock;  /* set mappings */
+    obGfx(o) = (uint16_t)(ArtTile_GHZ_Purple_Rock | Tile_Pal4);
+    obRender(o) = sprite_cam_field;             /* playfield-positioned mode */
+    obActWid(o) = 38 / 2;                       /* FixBugs=0: too small */
+    obPriority(o) = 4;
+}
+
+static void Rock_Solid(uint8_t *o) {
+    int16_t d1 = (int16_t)(32 / 2 + sonic_solid_width); /* SolidObject: width */
+    int16_t d2 = 32 / 2;                                /* SolidObject: height (initial) */
+    int16_t d3 = 32 / 2;                                /* SolidObject: height (stood-on) */
+    int16_t d4 = obX(o);                                /* SolidObject: X (stood-on) */
+    int16_t out_d3 = 0, out_d5 = 0;
+    SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5);   /* make rock solid */
+
+    /* FixBugs=0: DisplaySprite then out_of_range DeleteObject */
+    DisplaySprite(o);
+    if (OutOfRange(o, -1)) {                    /* out_of_range.w DeleteObject */
+        DeleteObject(o);
+    }
+}
+
+static void PurpleRock_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                     /* Rock_Index: 0/2 */
+        case 0:  Rock_Main(o);   break;
+        case 2:  Rock_Solid(o);  break;
+    }
+}
+
+/* --- _incObj/sub MvSonicOnPtfm.asm ------------------------------------------
+   Update Sonic's position when standing on a platform. d2 = platform X
+   position of previous frame (for the X delta). MvSonicOnPtfm takes the
+   platform height in d3; MvSonicOnPtfm2 assumes a fixed 9px height. */
+
+static void MoveWithPlatform(uint8_t *o, int16_t d0, int16_t d2) {
+    uint8_t *a1 = RAM_ADDR(v_player);           /* lea (v_player).w,a1 */
+    if ((int8_t)f_playerctrl < 0) return;       /* tst.b (f_playerctrl).w / bmi.s .return */
+    if ((uint8_t)obRoutine(a1) >= 6) return;    /* cmpi.b #6,(v_player+obRoutine).w / bhs.s .return */
+    if (v_debuguse) return;                     /* tst.w (v_debuguse).w / bne.s .return */
+
+    int16_t d1 = (int16_t)(int8_t)obHeight(a1); /* moveq #0,d1 / move.b obHeight(a1),d1 */
+    d0 = (int16_t)(d0 - d1);                    /* sub.w d1,d0: Y for feet on platform */
+    obY(a1) = d0;                               /* move.w d0,obY(a1) */
+
+    d2 = (int16_t)(d2 - (int16_t)obX(o));       /* sub.w obX(a0),d2: X-delta since last frame */
+    obX(a1) = (int16_t)((int16_t)obX(a1) - d2); /* sub.w d2,obX(a1) */
+}
+
+static void MvSonicOnPtfm(uint8_t *o, int16_t d2, int16_t d3) {
+    int16_t d0 = (int16_t)((int16_t)obY(o) - d3); /* move.w obY(a0),d0 / sub.w d3,d0 */
+    MoveWithPlatform(o, d0, d2);                /* bra.s MoveWithPlatform */
+}
+
+static void MvSonicOnPtfm2(uint8_t *o, int16_t d2) __attribute__((unused));
+static void MvSonicOnPtfm2(uint8_t *o, int16_t d2) {
+    int16_t d0 = (int16_t)((int16_t)obY(o) - 9); /* subi.w #9,d0 */
+    MoveWithPlatform(o, d0, d2);                /* bra.s MoveWithPlatform */
+}
+
+/* --- _incObj/sub SolidObject.asm (FixBugs=0) --------------------------------
+   General solid-object collision for Sonic (spikes, blocks, rocks...).
+   Inputs: d1 = half width; d2 = half height (initial); d3 = half height
+   (stood-on); d4 = object X position (stood-on).
+   Output: returns d4 collision type (0=none, 1=side, -1=top/bottom);
+   *d3out = y distance from nearest top/bottom edge (-ve if on bottom);
+   *d5out = x distance from nearest left/right edge. */
+
+static void Solid_NotPushing(uint8_t *a1, uint8_t *o) {
+    obStatus(o)  &= ~(1 << 5);                  /* bclr #5,obStatus(a0) */
+    obStatus(a1) &= ~(1 << 5);                  /* bclr #5,obStatus(a1) */
+}
+
+static void Solid_ResetFloor(uint8_t *o) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+
+    if (obStatus(a1) & (1 << 3)) {              /* btst #3,obStatus(a1) / beq.s .notonobj */
+        uint8_t *a2 = (uint8_t *)Object_GetSlot((int)standonobject(a1));
+        obStatus(a2) &= ~(1 << 3);              /* bclr #3,obStatus(a2) */
+        obSolid(a2) = 0;                        /* clr.b obSolid(a2) */
+    }
+    /* .notonobj */
+    standonobject(a1) = (uint8_t)Object_GetIndex(o); /* convert OST address to index */
+    obAngle(a1) = 0;                            /* move.b #0,obAngle(a1) */
+    obVelY(a1) = 0;                             /* move.w #0,obVelY(a1) */
+    obInertia(a1) = obVelX(a1);                 /* move.w obVelX(a1),obInertia(a1) */
+    if (obStatus(a1) & (1 << 1)) {              /* btst #1,obStatus(a1) / beq.s .notinair */
+        Sonic_ResetOnFloor(a1);                 /* reset Sonic as if on floor */
+    }
+    /* .notinair */
+    obStatus(a1) |= (1 << 3);                   /* bset #3,obStatus(a1) */
+    obStatus(o)  |= (1 << 3);                   /* bset #3,obStatus(a0) */
+}
+
+static int SolidObject(uint8_t *o, int16_t d1, int16_t d2, int16_t d3,
+                       int16_t d4, int16_t *d3out, int16_t *d5out) {
+    uint8_t *a1;
+    int16_t d0 = 0, d5 = 0;
+
+    if (obSolid(o) == 0) goto Solid_ChkCollision; /* tst.b obSolid(a0) / beq.w Solid_ChkCollision */
+
+    /* Sonic is standing on the object: keep him riding, or let him walk off. */
+    d2 = (int16_t)(d1 + d1);                    /* move.w d1,d2 / add.w d2,d2: full width */
+    a1 = RAM_ADDR(v_player);
+    if (obStatus(a1) & (1 << 1)) goto solid_leave; /* btst #1,obStatus(a1) / bne.s .leave (in air) */
+    d0 = (int16_t)((int16_t)obX(a1) - (int16_t)obX(o) + d1); /* x pos of Sonic on object */
+    if (d0 < 0) goto solid_leave;               /* bmi.s .leave */
+    if (d0 >= d2) goto solid_leave;             /* FixBugs=0: blo.s .stand (1px too soon) */
+    d2 = d4;                                    /* move.w d4,d2: platform X in previous frame */
+    MvSonicOnPtfm(o, d2, d3);                   /* bsr.w MvSonicOnPtfm */
+    goto solid_noreq;                           /* moveq #0,d4 / rts */
+
+solid_leave:
+    obStatus(a1) &= ~(1 << 3);                  /* bclr #3,obStatus(a1) */
+    obStatus(o)  &= ~(1 << 3);                  /* bclr #3,obStatus(a0) */
+    obSolid(o) = 0;                             /* clr.b obSolid(a0) */
+    goto solid_noreq;                           /* moveq #0,d4 / rts */
+
+Solid_ChkCollision:
+    if (!(obRender(o) & 0x80)) goto Solid_NoCollision; /* tst.b obRender(a0) / bpl.w Solid_NoCollision */
+
+    /* Solid_SkipRenderChk */
+    a1 = RAM_ADDR(v_player);
+    d0 = (int16_t)((int16_t)obX(a1) - (int16_t)obX(o) + d1); /* x pos of Sonic on object */
+    if (d0 < 0) goto Solid_NoCollision;         /* bmi.w Solid_NoCollision */
+    d3 = (int16_t)(d1 + d1);                    /* move.w d1,d3 / add.w d3,d3: full width */
+    if (d0 > d3) goto Solid_NoCollision;        /* cmp.w d3,d0 / bhi.w Solid_NoCollision */
+    d3 = (int16_t)(int8_t)obHeight(a1);         /* move.b obHeight(a1),d3 / ext.w d3 */
+    d2 = (int16_t)(d2 + d3);                    /* add.w d3,d2: combined half height */
+    d3 = (int16_t)((int16_t)obY(a1) - (int16_t)obY(o)); /* move.w obY(a1),d3 / sub.w obY(a0),d3 */
+    d3 = (int16_t)(d3 + 4);                     /* addq.w #4,d3 */
+    d3 = (int16_t)(d3 + d2);                    /* add.w d2,d3: feet y on object (0 = top) */
+    if (d3 < 0) goto Solid_NoCollision;         /* bmi.w Solid_NoCollision */
+    d4 = (int16_t)(d2 + d2);                    /* move.w d2,d4 / add.w d4,d4: full height */
+    if (d3 >= d4) goto Solid_NoCollision;       /* cmp.w d4,d3 / bhs.w Solid_NoCollision */
+
+    /* Solid_Collision */
+    if ((int8_t)f_playerctrl < 0) goto Solid_NoCollision; /* tst.b / bmi.w */
+    if ((uint8_t)obRoutine(a1) >= 6) goto Solid_Debug;    /* cmpi.b #6 / bhs.w Solid_Debug */
+    if (v_debuguse) goto Solid_Debug;           /* tst.w (v_debuguse).w / bne.w */
+    d5 = d0;                                    /* move.w d0,d5 */
+    if (d0 <= d1) goto solid_left;              /* cmp.w d0,d1 / bhs.s .sonic_left */
+    d1 = (int16_t)(d1 + d1);                    /* add.w d1,d1 */
+    d0 = (int16_t)(d0 - d1);                    /* sub.w d1,d0 */
+    d5 = (int16_t)(-d0);                        /* move.w d0,d5 / neg.w d5 */
+solid_left:
+    d1 = d3;                                    /* move.w d3,d1 */
+    if (d3 <= d2) goto solid_top;               /* cmp.w d3,d2 / bhs.s .sonic_top */
+    d3 = (int16_t)(d3 - 4);                     /* subq.w #4,d3 */
+    d3 = (int16_t)(d3 - d4);                    /* sub.w d4,d3 */
+    d1 = (int16_t)(-d3);                        /* move.w d3,d1 / neg.w d1 */
+solid_top:
+    if (d5 > d1) goto Solid_TopBottom;          /* cmp.w d1,d5 / bhi.w */
+    if (d1 <= 4) goto Solid_SideAir;            /* cmpi.w #4,d1 / bls.s */
+    if (d0 == 0) goto Solid_AlignToSide;        /* tst.w d0 / beq.s */
+    if (d0 < 0) goto Solid_OnRight;             /* bmi.s */
+    if (obVelX(a1) < 0) goto Solid_AlignToSide; /* tst.w obVelX(a1) / bmi.s */
+    goto Solid_StopX;                           /* bra.s Solid_StopX */
+
+    /* Solid_OnRight (Sonic nearer right edge) */
+Solid_OnRight:
+    if (obVelX(a1) >= 0) goto Solid_AlignToSide; /* tst.w obVelX(a1) / bpl.s */
+    /* Solid_StopX */
+Solid_StopX:
+    obInertia(a1) = 0;                          /* move.w #0,obInertia(a1) */
+    obVelX(a1) = 0;                             /* move.w #0,obVelX(a1) */
+
+    /* Solid_AlignToSide */
+Solid_AlignToSide:
+    obX(a1) = (int16_t)((int16_t)obX(a1) - d0); /* sub.w d0,obX(a1) */
+    if (obStatus(a1) & (1 << 1)) goto Solid_SideAir; /* btst #1,obStatus(a1) / bne.s */
+    obStatus(a1) |= (1 << 5);                   /* bset #5,obStatus(a1): push object */
+    obStatus(o)  |= (1 << 5);                   /* bset #5,obStatus(a0): be pushed */
+    goto solid_side_ret;                        /* moveq #1,d4 / rts */
+
+    /* Solid_SideAir */
+Solid_SideAir:
+    Solid_NotPushing(a1, o);                    /* bsr.s Solid_NotPushing */
+solid_side_ret:
+    if (d3out) *d3out = d3;
+    if (d5out) *d5out = d5;
+    return 1;                                   /* moveq #1,d4 / rts */
+
+    /* Solid_NoCollision */
+Solid_NoCollision:
+    if (obStatus(o) & (1 << 5)) {               /* btst #5,obStatus(a0) / beq.s Solid_Debug */
+        obAnim(a1) = id_Run;                    /* FixBugs=0 "walk-jump bug" */
+        Solid_NotPushing(a1, o);                /* fall through to Solid_NotPushing */
+    }
+    /* Solid_Debug */
+Solid_Debug:
+    goto solid_noreq;                           /* moveq #0,d4 / rts */
+
+    /* Solid_TopBottom */
+Solid_TopBottom:
+    if (d3 < 0) goto Solid_Below;               /* tst.w d3 / bmi.s */
+    if (d3 < 16) goto Solid_Landed;             /* cmpi.w #$10,d3 / blo.s */
+    goto Solid_NoCollision;                     /* bra.s Solid_NoCollision */
+
+Solid_Below:
+    if (obVelY(a1) == 0) goto Solid_Squash;     /* tst.w obVelY(a1) / beq.s */
+    if (obVelY(a1) > 0) goto Solid_TopBtmAir;   /* bpl.s: moving downwards */
+    if (d3 >= 0) goto Solid_TopBtmAir;          /* tst.w d3 / bpl.s */
+    obY(a1) = (int16_t)((int16_t)obY(a1) - d3); /* FixBugs=0: sub.w d3,obY(a1) (wrong place) */
+    obVelY(a1) = 0;                             /* move.w #0,obVelY(a1) */
+
+Solid_TopBtmAir:
+    goto solid_top_ret;                         /* moveq #-1,d4 / rts */
+
+Solid_Squash:
+    if (obStatus(a1) & (1 << 1)) goto Solid_TopBtmAir; /* btst #1,obStatus(a1) / bne.s */
+    KillSonic(a1, NULL);                        /* save a0 / movea.l a1,a0 / KillSonic */
+solid_top_ret:
+    if (d3out) *d3out = d3;
+    if (d5out) *d5out = d5;
+    return -1;                                  /* moveq #-1,d4 / rts */
+
+Solid_Landed:
+    d3 = (int16_t)(d3 - 4);                     /* subq.w #4,d3 */
+    {
+        int16_t d1l = (int16_t)(int8_t)obActWid(o); /* moveq #0,d1 / move.b obActWid(a0),d1 */
+        int16_t d1x = (int16_t)((int16_t)obX(a1) + d1l - (int16_t)obX(o)); /* x pos on object */
+        if (d1x < 0) goto Solid_Miss;           /* bmi.s Solid_Miss */
+        if (d1x >= d1l * 2) goto Solid_Miss;    /* add.w d2,d2 / cmp.w d2,d1 / bhs.s Solid_Miss */
+        if (obVelY(a1) < 0) goto Solid_Miss;    /* tst.w obVelY(a1) / bmi.s Solid_Miss */
+        obY(a1) = (int16_t)((int16_t)obY(a1) - d3); /* sub.w d3,obY(a1) */
+        obY(a1) = (int16_t)((int16_t)obY(a1) - 1);  /* subq.w #1,obY(a1) */
+        Solid_ResetFloor(o);                    /* bsr.s Solid_ResetFloor */
+        obSolid(o) = 2;                         /* move.b #2,obSolid(a0) */
+        obStatus(o) |= (1 << 3);                /* bset #3,obStatus(a0) */
+        goto solid_top_ret;                     /* moveq #-1,d4 / rts */
+    }
+Solid_Miss:
+    goto solid_noreq;                           /* moveq #0,d4 / rts */
+
+solid_noreq:
+    if (d3out) *d3out = d3;
+    if (d5out) *d5out = d5;
+    return 0;                                   /* moveq #0,d4 / rts */
 }
 
 /* ===========================================================================
