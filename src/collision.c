@@ -112,7 +112,7 @@ void FindFloor2(int16_t y, int16_t x, uint8_t d5, int16_t d6, int16_t a3,
         int16_t tmp = (int16_t)((y & 0xF) + height);
         if (tmp >= 0)
             goto isblank;
-        *out_d1 = (int16_t)(uint16_t)(~tmp);        /* not.w */
+        *out_d1 = (int16_t)(uint16_t)~(y & 0xF);    /* not.w d1 (d1=y&$F, quirk del ASM) */
         return;
     }
     *out_d1 = (int16_t)(0xF - ((y & 0xF) + height));
@@ -314,7 +314,7 @@ void FindWall2(int16_t y, int16_t x, uint8_t d5, int16_t d6, int16_t a3,
         int16_t tmp = (int16_t)((x & 0xF) + height);
         if (tmp >= 0)
             goto isblank;
-        *out_d1 = (int16_t)(uint16_t)(~tmp);        /* not.w */
+        *out_d1 = (int16_t)(uint16_t)~(x & 0xF);    /* not.w d1 (d1=x&$F, quirk del ASM) */
         return;
     }
     *out_d1 = (int16_t)(0xF - ((x & 0xF) + height));

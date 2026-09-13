@@ -2720,8 +2720,8 @@ static void Sonic_FloorLeft(void *obj) {
         return;
     }
 
-    if (obVelY(o) >= 0) {
-        return;
+    if (obVelY(o) < 0) {                     /* tst.w obVelY(a0) / bmi.s .return: */
+        return;                              /* if going up, skip the floor check */
     }
     Sonic_FindFloor(o, NULL, &d1, &d3);      /* capturar d3 */
     if (d1 >= 0) {
@@ -2783,8 +2783,8 @@ static void Sonic_FloorRight(void *obj) {
         return;
     }
 
-    if (obVelY(o) >= 0) {
-        return;
+    if (obVelY(o) < 0) {                     /* tst.w obVelY(a0) / bmi.s .return: */
+        return;                              /* if going up, skip the floor check */
     }
     Sonic_FindFloor(o, NULL, &d1, &d3);
     if (d1 >= 0) {
