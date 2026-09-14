@@ -114,6 +114,204 @@ size_t   Nem_Flicky_len = 0;
 const uint8_t *Nem_Squirrel = NULL;
 size_t   Nem_Squirrel_len = 0;
 
+/* Remaining PLC art (artnem/*.nem verbatim names) */
+const uint8_t *Nem_BallHog = NULL;
+size_t   Nem_BallHog_len = 0;
+const uint8_t *Nem_Basaran = NULL;
+size_t   Nem_Basaran_len = 0;
+const uint8_t *Nem_Bomb = NULL;
+size_t   Nem_Bomb_len = 0;
+const uint8_t *Nem_Bubbles = NULL;
+size_t   Nem_Bubbles_len = 0;
+const uint8_t *Nem_Bumper = NULL;
+size_t   Nem_Bumper_len = 0;
+const uint8_t *Nem_Burrobot = NULL;
+size_t   Nem_Burrobot_len = 0;
+const uint8_t *Nem_Cater = NULL;
+size_t   Nem_Cater_len = 0;
+const uint8_t *Nem_Cork = NULL;
+size_t   Nem_Cork_len = 0;
+const uint8_t *Nem_Cutter = NULL;
+size_t   Nem_Cutter_len = 0;
+const uint8_t *Nem_Eggman = NULL;
+size_t   Nem_Eggman_len = 0;
+const uint8_t *Nem_Electric = NULL;
+size_t   Nem_Electric_len = 0;
+const uint8_t *Nem_EndEm = NULL;
+size_t   Nem_EndEm_len = 0;
+const uint8_t *Nem_EndFlower = NULL;
+size_t   Nem_EndFlower_len = 0;
+const uint8_t *Nem_EndSonic = NULL;
+size_t   Nem_EndSonic_len = 0;
+const uint8_t *Nem_EndStH = NULL;
+size_t   Nem_EndStH_len = 0;
+const uint8_t *Nem_Exhaust = NULL;
+size_t   Nem_Exhaust_len = 0;
+const uint8_t *Nem_Fan = NULL;
+size_t   Nem_Fan_len = 0;
+const uint8_t *Nem_FlamePipe = NULL;
+size_t   Nem_FlamePipe_len = 0;
+const uint8_t *Nem_FlapDoor = NULL;
+size_t   Nem_FlapDoor_len = 0;
+const uint8_t *Nem_FzBoss = NULL;
+size_t   Nem_FzBoss_len = 0;
+const uint8_t *Nem_FzEggman = NULL;
+size_t   Nem_FzEggman_len = 0;
+const uint8_t *Nem_GameOver = NULL;
+size_t   Nem_GameOver_len = 0;
+const uint8_t *Nem_Gargoyle = NULL;
+size_t   Nem_Gargoyle_len = 0;
+const uint8_t *Nem_Girder = NULL;
+size_t   Nem_Girder_len = 0;
+const uint8_t *Nem_Harpoon = NULL;
+size_t   Nem_Harpoon_len = 0;
+const uint8_t *Nem_Jaws = NULL;
+size_t   Nem_Jaws_len = 0;
+const uint8_t *Nem_LZ = NULL;
+size_t   Nem_LZ_len = 0;
+const uint8_t *Nem_Lamp = NULL;
+size_t   Nem_Lamp_len = 0;
+const uint8_t *Nem_Lava = NULL;
+size_t   Nem_Lava_len = 0;
+const uint8_t *Nem_LzBlock1 = NULL;
+size_t   Nem_LzBlock1_len = 0;
+const uint8_t *Nem_LzBlock2 = NULL;
+size_t   Nem_LzBlock2_len = 0;
+const uint8_t *Nem_LzBlock3 = NULL;
+size_t   Nem_LzBlock3_len = 0;
+const uint8_t *Nem_LzDoor1 = NULL;
+size_t   Nem_LzDoor1_len = 0;
+const uint8_t *Nem_LzDoor2 = NULL;
+size_t   Nem_LzDoor2_len = 0;
+const uint8_t *Nem_LzPlatfm = NULL;
+size_t   Nem_LzPlatfm_len = 0;
+const uint8_t *Nem_LzPole = NULL;
+size_t   Nem_LzPole_len = 0;
+const uint8_t *Nem_LzSpikeBall = NULL;
+size_t   Nem_LzSpikeBall_len = 0;
+const uint8_t *Nem_LzSwitch = NULL;
+size_t   Nem_LzSwitch_len = 0;
+const uint8_t *Nem_LzWheel = NULL;
+size_t   Nem_LzWheel_len = 0;
+const uint8_t *Nem_MZ = NULL;
+size_t   Nem_MZ_len = 0;
+const uint8_t *Nem_MiniSonic = NULL;
+size_t   Nem_MiniSonic_len = 0;
+const uint8_t *Nem_MzBlock = NULL;
+size_t   Nem_MzBlock_len = 0;
+const uint8_t *Nem_MzFire = NULL;
+size_t   Nem_MzFire_len = 0;
+const uint8_t *Nem_MzGlass = NULL;
+size_t   Nem_MzGlass_len = 0;
+const uint8_t *Nem_MzMetal = NULL;
+size_t   Nem_MzMetal_len = 0;
+const uint8_t *Nem_MzSwitch = NULL;
+size_t   Nem_MzSwitch_len = 0;
+const uint8_t *Nem_Orbinaut = NULL;
+size_t   Nem_Orbinaut_len = 0;
+const uint8_t *Nem_Points = NULL;
+size_t   Nem_Points_len = 0;
+const uint8_t *Nem_Prison = NULL;
+size_t   Nem_Prison_len = 0;
+const uint8_t *Nem_Pylon = NULL;
+size_t   Nem_Pylon_len = 0;
+const uint8_t *Nem_ResultEm = NULL;
+size_t   Nem_ResultEm_len = 0;
+const uint8_t *Nem_Roller = NULL;
+size_t   Nem_Roller_len = 0;
+const uint8_t *Nem_SBZ = NULL;
+size_t   Nem_SBZ_len = 0;
+const uint8_t *Nem_SLZ = NULL;
+size_t   Nem_SLZ_len = 0;
+const uint8_t *Nem_SS1UpBlock = NULL;
+size_t   Nem_SS1UpBlock_len = 0;
+const uint8_t *Nem_SSBgCloud = NULL;
+size_t   Nem_SSBgCloud_len = 0;
+const uint8_t *Nem_SSBgFish = NULL;
+size_t   Nem_SSBgFish_len = 0;
+const uint8_t *Nem_SSEmStars = NULL;
+size_t   Nem_SSEmStars_len = 0;
+const uint8_t *Nem_SSEmerald = NULL;
+size_t   Nem_SSEmerald_len = 0;
+const uint8_t *Nem_SSGOAL = NULL;
+size_t   Nem_SSGOAL_len = 0;
+const uint8_t *Nem_SSGhost = NULL;
+size_t   Nem_SSGhost_len = 0;
+const uint8_t *Nem_SSGlass = NULL;
+size_t   Nem_SSGlass_len = 0;
+const uint8_t *Nem_SSRBlock = NULL;
+size_t   Nem_SSRBlock_len = 0;
+const uint8_t *Nem_SSRedWhite = NULL;
+size_t   Nem_SSRedWhite_len = 0;
+const uint8_t *Nem_SSUpDown = NULL;
+size_t   Nem_SSUpDown_len = 0;
+const uint8_t *Nem_SSWBlock = NULL;
+size_t   Nem_SSWBlock_len = 0;
+const uint8_t *Nem_SSWalls = NULL;
+size_t   Nem_SSWalls_len = 0;
+const uint8_t *Nem_SSZone1 = NULL;
+size_t   Nem_SSZone1_len = 0;
+const uint8_t *Nem_SSZone2 = NULL;
+size_t   Nem_SSZone2_len = 0;
+const uint8_t *Nem_SSZone3 = NULL;
+size_t   Nem_SSZone3_len = 0;
+const uint8_t *Nem_SSZone4 = NULL;
+size_t   Nem_SSZone4_len = 0;
+const uint8_t *Nem_SSZone5 = NULL;
+size_t   Nem_SSZone5_len = 0;
+const uint8_t *Nem_SSZone6 = NULL;
+size_t   Nem_SSZone6_len = 0;
+const uint8_t *Nem_SYZ = NULL;
+size_t   Nem_SYZ_len = 0;
+const uint8_t *Nem_Sbz2Eggman = NULL;
+size_t   Nem_Sbz2Eggman_len = 0;
+const uint8_t *Nem_SbzBlock = NULL;
+size_t   Nem_SbzBlock_len = 0;
+const uint8_t *Nem_SbzDoor1 = NULL;
+size_t   Nem_SbzDoor1_len = 0;
+const uint8_t *Nem_SbzDoor2 = NULL;
+size_t   Nem_SbzDoor2_len = 0;
+const uint8_t *Nem_SbzFloor = NULL;
+size_t   Nem_SbzFloor_len = 0;
+const uint8_t *Nem_SbzWheel1 = NULL;
+size_t   Nem_SbzWheel1_len = 0;
+const uint8_t *Nem_SbzWheel2 = NULL;
+size_t   Nem_SbzWheel2_len = 0;
+const uint8_t *Nem_Seesaw = NULL;
+size_t   Nem_Seesaw_len = 0;
+const uint8_t *Nem_SlideFloor = NULL;
+size_t   Nem_SlideFloor_len = 0;
+const uint8_t *Nem_SlzBlock = NULL;
+size_t   Nem_SlzBlock_len = 0;
+const uint8_t *Nem_SlzCannon = NULL;
+size_t   Nem_SlzCannon_len = 0;
+const uint8_t *Nem_SlzSpike = NULL;
+size_t   Nem_SlzSpike_len = 0;
+const uint8_t *Nem_SlzSwing = NULL;
+size_t   Nem_SlzSwing_len = 0;
+const uint8_t *Nem_SlzWall = NULL;
+size_t   Nem_SlzWall_len = 0;
+const uint8_t *Nem_SpinPform = NULL;
+size_t   Nem_SpinPform_len = 0;
+const uint8_t *Nem_Splash = NULL;
+size_t   Nem_Splash_len = 0;
+const uint8_t *Nem_Stomper = NULL;
+size_t   Nem_Stomper_len = 0;
+const uint8_t *Nem_SyzSpike1 = NULL;
+size_t   Nem_SyzSpike1_len = 0;
+const uint8_t *Nem_SyzSpike2 = NULL;
+size_t   Nem_SyzSpike2_len = 0;
+const uint8_t *Nem_TrapDoor = NULL;
+size_t   Nem_TrapDoor_len = 0;
+const uint8_t *Nem_TryAgain = NULL;
+size_t   Nem_TryAgain_len = 0;
+const uint8_t *Nem_Water = NULL;
+size_t   Nem_Water_len = 0;
+const uint8_t *Nem_Weapons = NULL;
+size_t   Nem_Weapons_len = 0;
+const uint8_t *Nem_Yadrin = NULL;
+size_t   Nem_Yadrin_len = 0;
+
 const uint8_t *Level_GHZ1 = NULL;
 size_t   Level_GHZ1_len = 0;
 
@@ -764,6 +962,399 @@ int Data_Init(void) {
         Nem_Squirrel_len = 0;
     }
 
+    if (load_asset("artnem/Enemy Ball Hog.nem", &Nem_BallHog, &Nem_BallHog_len) != 0) {
+        Nem_BallHog = NULL;
+        Nem_BallHog_len = 0;
+    }
+    if (load_asset("artnem/Enemy Basaran.nem", &Nem_Basaran, &Nem_Basaran_len) != 0) {
+        Nem_Basaran = NULL;
+        Nem_Basaran_len = 0;
+    }
+    if (load_asset("artnem/Enemy Bomb.nem", &Nem_Bomb, &Nem_Bomb_len) != 0) {
+        Nem_Bomb = NULL;
+        Nem_Bomb_len = 0;
+    }
+    if (load_asset("artnem/LZ Bubbles & Countdown.nem", &Nem_Bubbles, &Nem_Bubbles_len) != 0) {
+        Nem_Bubbles = NULL;
+        Nem_Bubbles_len = 0;
+    }
+    if (load_asset("artnem/SYZ Bumper.nem", &Nem_Bumper, &Nem_Bumper_len) != 0) {
+        Nem_Bumper = NULL;
+        Nem_Bumper_len = 0;
+    }
+    if (load_asset("artnem/Enemy Burrobot.nem", &Nem_Burrobot, &Nem_Burrobot_len) != 0) {
+        Nem_Burrobot = NULL;
+        Nem_Burrobot_len = 0;
+    }
+    if (load_asset("artnem/Enemy Caterkiller.nem", &Nem_Cater, &Nem_Cater_len) != 0) {
+        Nem_Cater = NULL;
+        Nem_Cater_len = 0;
+    }
+    if (load_asset("artnem/LZ Cork.nem", &Nem_Cork, &Nem_Cork_len) != 0) {
+        Nem_Cork = NULL;
+        Nem_Cork_len = 0;
+    }
+    if (load_asset("artnem/SBZ Pizza Cutter.nem", &Nem_Cutter, &Nem_Cutter_len) != 0) {
+        Nem_Cutter = NULL;
+        Nem_Cutter_len = 0;
+    }
+    if (load_asset("artnem/Boss - Main.nem", &Nem_Eggman, &Nem_Eggman_len) != 0) {
+        Nem_Eggman = NULL;
+        Nem_Eggman_len = 0;
+    }
+    if (load_asset("artnem/SBZ Electrocuter.nem", &Nem_Electric, &Nem_Electric_len) != 0) {
+        Nem_Electric = NULL;
+        Nem_Electric_len = 0;
+    }
+    if (load_asset("artnem/Ending - Emeralds.nem", &Nem_EndEm, &Nem_EndEm_len) != 0) {
+        Nem_EndEm = NULL;
+        Nem_EndEm_len = 0;
+    }
+    if (load_asset("artnem/Ending - Flowers.nem", &Nem_EndFlower, &Nem_EndFlower_len) != 0) {
+        Nem_EndFlower = NULL;
+        Nem_EndFlower_len = 0;
+    }
+    if (load_asset("artnem/Ending - Sonic.nem", &Nem_EndSonic, &Nem_EndSonic_len) != 0) {
+        Nem_EndSonic = NULL;
+        Nem_EndSonic_len = 0;
+    }
+    if (load_asset("artnem/Ending - StH Logo.nem", &Nem_EndStH, &Nem_EndStH_len) != 0) {
+        Nem_EndStH = NULL;
+        Nem_EndStH_len = 0;
+    }
+    if (load_asset("artnem/Boss - Exhaust Flame.nem", &Nem_Exhaust, &Nem_Exhaust_len) != 0) {
+        Nem_Exhaust = NULL;
+        Nem_Exhaust_len = 0;
+    }
+    if (load_asset("artnem/SLZ Fan.nem", &Nem_Fan, &Nem_Fan_len) != 0) {
+        Nem_Fan = NULL;
+        Nem_Fan_len = 0;
+    }
+    if (load_asset("artnem/SBZ Flaming Pipe.nem", &Nem_FlamePipe, &Nem_FlamePipe_len) != 0) {
+        Nem_FlamePipe = NULL;
+        Nem_FlamePipe_len = 0;
+    }
+    if (load_asset("artnem/LZ Flapping Door.nem", &Nem_FlapDoor, &Nem_FlapDoor_len) != 0) {
+        Nem_FlapDoor = NULL;
+        Nem_FlapDoor_len = 0;
+    }
+    if (load_asset("artnem/Boss - Final Zone.nem", &Nem_FzBoss, &Nem_FzBoss_len) != 0) {
+        Nem_FzBoss = NULL;
+        Nem_FzBoss_len = 0;
+    }
+    if (load_asset("artnem/Boss - Eggman after FZ Fight.nem", &Nem_FzEggman, &Nem_FzEggman_len) != 0) {
+        Nem_FzEggman = NULL;
+        Nem_FzEggman_len = 0;
+    }
+    if (load_asset("artnem/Game Over.nem", &Nem_GameOver, &Nem_GameOver_len) != 0) {
+        Nem_GameOver = NULL;
+        Nem_GameOver_len = 0;
+    }
+    if (load_asset("artnem/LZ Gargoyle & Fireball.nem", &Nem_Gargoyle, &Nem_Gargoyle_len) != 0) {
+        Nem_Gargoyle = NULL;
+        Nem_Gargoyle_len = 0;
+    }
+    if (load_asset("artnem/SBZ Crushing Girder.nem", &Nem_Girder, &Nem_Girder_len) != 0) {
+        Nem_Girder = NULL;
+        Nem_Girder_len = 0;
+    }
+    if (load_asset("artnem/LZ Harpoon.nem", &Nem_Harpoon, &Nem_Harpoon_len) != 0) {
+        Nem_Harpoon = NULL;
+        Nem_Harpoon_len = 0;
+    }
+    if (load_asset("artnem/Enemy Jaws.nem", &Nem_Jaws, &Nem_Jaws_len) != 0) {
+        Nem_Jaws = NULL;
+        Nem_Jaws_len = 0;
+    }
+    if (load_asset("artnem/8x8 - LZ.nem", &Nem_LZ, &Nem_LZ_len) != 0) {
+        Nem_LZ = NULL;
+        Nem_LZ_len = 0;
+    }
+    if (load_asset("artnem/Lamppost.nem", &Nem_Lamp, &Nem_Lamp_len) != 0) {
+        Nem_Lamp = NULL;
+        Nem_Lamp_len = 0;
+    }
+    if (load_asset("artnem/MZ Lava.nem", &Nem_Lava, &Nem_Lava_len) != 0) {
+        Nem_Lava = NULL;
+        Nem_Lava_len = 0;
+    }
+    if (load_asset("artnem/LZ 32x32 Block.nem", &Nem_LzBlock1, &Nem_LzBlock1_len) != 0) {
+        Nem_LzBlock1 = NULL;
+        Nem_LzBlock1_len = 0;
+    }
+    if (load_asset("artnem/LZ Blocks.nem", &Nem_LzBlock2, &Nem_LzBlock2_len) != 0) {
+        Nem_LzBlock2 = NULL;
+        Nem_LzBlock2_len = 0;
+    }
+    if (load_asset("artnem/LZ 32x16 Block.nem", &Nem_LzBlock3, &Nem_LzBlock3_len) != 0) {
+        Nem_LzBlock3 = NULL;
+        Nem_LzBlock3_len = 0;
+    }
+    if (load_asset("artnem/LZ Vertical Door.nem", &Nem_LzDoor1, &Nem_LzDoor1_len) != 0) {
+        Nem_LzDoor1 = NULL;
+        Nem_LzDoor1_len = 0;
+    }
+    if (load_asset("artnem/LZ Horizontal Door.nem", &Nem_LzDoor2, &Nem_LzDoor2_len) != 0) {
+        Nem_LzDoor2 = NULL;
+        Nem_LzDoor2_len = 0;
+    }
+    if (load_asset("artnem/LZ Rising Platform.nem", &Nem_LzPlatfm, &Nem_LzPlatfm_len) != 0) {
+        Nem_LzPlatfm = NULL;
+        Nem_LzPlatfm_len = 0;
+    }
+    if (load_asset("artnem/LZ Breakable Pole.nem", &Nem_LzPole, &Nem_LzPole_len) != 0) {
+        Nem_LzPole = NULL;
+        Nem_LzPole_len = 0;
+    }
+    if (load_asset("artnem/LZ Spiked Ball & Chain.nem", &Nem_LzSpikeBall, &Nem_LzSpikeBall_len) != 0) {
+        Nem_LzSpikeBall = NULL;
+        Nem_LzSpikeBall_len = 0;
+    }
+    if (load_asset("artnem/Switch.nem", &Nem_LzSwitch, &Nem_LzSwitch_len) != 0) {
+        Nem_LzSwitch = NULL;
+        Nem_LzSwitch_len = 0;
+    }
+    if (load_asset("artnem/LZ Wheel.nem", &Nem_LzWheel, &Nem_LzWheel_len) != 0) {
+        Nem_LzWheel = NULL;
+        Nem_LzWheel_len = 0;
+    }
+    if (load_asset("artnem/8x8 - MZ.nem", &Nem_MZ, &Nem_MZ_len) != 0) {
+        Nem_MZ = NULL;
+        Nem_MZ_len = 0;
+    }
+    if (load_asset("artnem/Continue Screen Stuff.nem", &Nem_MiniSonic, &Nem_MiniSonic_len) != 0) {
+        Nem_MiniSonic = NULL;
+        Nem_MiniSonic_len = 0;
+    }
+    if (load_asset("artnem/MZ Green Pushable Block.nem", &Nem_MzBlock, &Nem_MzBlock_len) != 0) {
+        Nem_MzBlock = NULL;
+        Nem_MzBlock_len = 0;
+    }
+    if (load_asset("artnem/Fireballs.nem", &Nem_MzFire, &Nem_MzFire_len) != 0) {
+        Nem_MzFire = NULL;
+        Nem_MzFire_len = 0;
+    }
+    if (load_asset("artnem/MZ Green Glass Block.nem", &Nem_MzGlass, &Nem_MzGlass_len) != 0) {
+        Nem_MzGlass = NULL;
+        Nem_MzGlass_len = 0;
+    }
+    if (load_asset("artnem/MZ Metal Blocks.nem", &Nem_MzMetal, &Nem_MzMetal_len) != 0) {
+        Nem_MzMetal = NULL;
+        Nem_MzMetal_len = 0;
+    }
+    if (load_asset("artnem/MZ Switch.nem", &Nem_MzSwitch, &Nem_MzSwitch_len) != 0) {
+        Nem_MzSwitch = NULL;
+        Nem_MzSwitch_len = 0;
+    }
+    if (load_asset("artnem/Enemy Orbinaut.nem", &Nem_Orbinaut, &Nem_Orbinaut_len) != 0) {
+        Nem_Orbinaut = NULL;
+        Nem_Orbinaut_len = 0;
+    }
+    if (load_asset("artnem/Points.nem", &Nem_Points, &Nem_Points_len) != 0) {
+        Nem_Points = NULL;
+        Nem_Points_len = 0;
+    }
+    if (load_asset("artnem/Prison Capsule.nem", &Nem_Prison, &Nem_Prison_len) != 0) {
+        Nem_Prison = NULL;
+        Nem_Prison_len = 0;
+    }
+    if (load_asset("artnem/SLZ Pylon.nem", &Nem_Pylon, &Nem_Pylon_len) != 0) {
+        Nem_Pylon = NULL;
+        Nem_Pylon_len = 0;
+    }
+    if (load_asset("artnem/Special Result Emeralds.nem", &Nem_ResultEm, &Nem_ResultEm_len) != 0) {
+        Nem_ResultEm = NULL;
+        Nem_ResultEm_len = 0;
+    }
+    if (load_asset("artnem/Enemy Roller.nem", &Nem_Roller, &Nem_Roller_len) != 0) {
+        Nem_Roller = NULL;
+        Nem_Roller_len = 0;
+    }
+    if (load_asset("artnem/8x8 - SBZ.nem", &Nem_SBZ, &Nem_SBZ_len) != 0) {
+        Nem_SBZ = NULL;
+        Nem_SBZ_len = 0;
+    }
+    if (load_asset("artnem/8x8 - SLZ.nem", &Nem_SLZ, &Nem_SLZ_len) != 0) {
+        Nem_SLZ = NULL;
+        Nem_SLZ_len = 0;
+    }
+    if (load_asset("artnem/Special 1UP.nem", &Nem_SS1UpBlock, &Nem_SS1UpBlock_len) != 0) {
+        Nem_SS1UpBlock = NULL;
+        Nem_SS1UpBlock_len = 0;
+    }
+    if (load_asset("artnem/Special Clouds.nem", &Nem_SSBgCloud, &Nem_SSBgCloud_len) != 0) {
+        Nem_SSBgCloud = NULL;
+        Nem_SSBgCloud_len = 0;
+    }
+    if (load_asset("artnem/Special Birds & Fish.nem", &Nem_SSBgFish, &Nem_SSBgFish_len) != 0) {
+        Nem_SSBgFish = NULL;
+        Nem_SSBgFish_len = 0;
+    }
+    if (load_asset("artnem/Special Emerald Twinkle.nem", &Nem_SSEmStars, &Nem_SSEmStars_len) != 0) {
+        Nem_SSEmStars = NULL;
+        Nem_SSEmStars_len = 0;
+    }
+    if (load_asset("artnem/Special Emeralds.nem", &Nem_SSEmerald, &Nem_SSEmerald_len) != 0) {
+        Nem_SSEmerald = NULL;
+        Nem_SSEmerald_len = 0;
+    }
+    if (load_asset("artnem/Special GOAL.nem", &Nem_SSGOAL, &Nem_SSGOAL_len) != 0) {
+        Nem_SSGOAL = NULL;
+        Nem_SSGOAL_len = 0;
+    }
+    if (load_asset("artnem/Special Ghost.nem", &Nem_SSGhost, &Nem_SSGhost_len) != 0) {
+        Nem_SSGhost = NULL;
+        Nem_SSGhost_len = 0;
+    }
+    if (load_asset("artnem/Special Glass.nem", &Nem_SSGlass, &Nem_SSGlass_len) != 0) {
+        Nem_SSGlass = NULL;
+        Nem_SSGlass_len = 0;
+    }
+    if (load_asset("artnem/Special R.nem", &Nem_SSRBlock, &Nem_SSRBlock_len) != 0) {
+        Nem_SSRBlock = NULL;
+        Nem_SSRBlock_len = 0;
+    }
+    if (load_asset("artnem/Special Red-White.nem", &Nem_SSRedWhite, &Nem_SSRedWhite_len) != 0) {
+        Nem_SSRedWhite = NULL;
+        Nem_SSRedWhite_len = 0;
+    }
+    if (load_asset("artnem/Special UP-DOWN.nem", &Nem_SSUpDown, &Nem_SSUpDown_len) != 0) {
+        Nem_SSUpDown = NULL;
+        Nem_SSUpDown_len = 0;
+    }
+    if (load_asset("artnem/Special W.nem", &Nem_SSWBlock, &Nem_SSWBlock_len) != 0) {
+        Nem_SSWBlock = NULL;
+        Nem_SSWBlock_len = 0;
+    }
+    if (load_asset("artnem/Special Walls.nem", &Nem_SSWalls, &Nem_SSWalls_len) != 0) {
+        Nem_SSWalls = NULL;
+        Nem_SSWalls_len = 0;
+    }
+    if (load_asset("artnem/Special ZONE1.nem", &Nem_SSZone1, &Nem_SSZone1_len) != 0) {
+        Nem_SSZone1 = NULL;
+        Nem_SSZone1_len = 0;
+    }
+    if (load_asset("artnem/Special ZONE2.nem", &Nem_SSZone2, &Nem_SSZone2_len) != 0) {
+        Nem_SSZone2 = NULL;
+        Nem_SSZone2_len = 0;
+    }
+    if (load_asset("artnem/Special ZONE3.nem", &Nem_SSZone3, &Nem_SSZone3_len) != 0) {
+        Nem_SSZone3 = NULL;
+        Nem_SSZone3_len = 0;
+    }
+    if (load_asset("artnem/Special ZONE4.nem", &Nem_SSZone4, &Nem_SSZone4_len) != 0) {
+        Nem_SSZone4 = NULL;
+        Nem_SSZone4_len = 0;
+    }
+    if (load_asset("artnem/Special ZONE5.nem", &Nem_SSZone5, &Nem_SSZone5_len) != 0) {
+        Nem_SSZone5 = NULL;
+        Nem_SSZone5_len = 0;
+    }
+    if (load_asset("artnem/Special ZONE6.nem", &Nem_SSZone6, &Nem_SSZone6_len) != 0) {
+        Nem_SSZone6 = NULL;
+        Nem_SSZone6_len = 0;
+    }
+    if (load_asset("artnem/8x8 - SYZ.nem", &Nem_SYZ, &Nem_SYZ_len) != 0) {
+        Nem_SYZ = NULL;
+        Nem_SYZ_len = 0;
+    }
+    if (load_asset("artnem/Boss - Eggman in SBZ2 & FZ.nem", &Nem_Sbz2Eggman, &Nem_Sbz2Eggman_len) != 0) {
+        Nem_Sbz2Eggman = NULL;
+        Nem_Sbz2Eggman_len = 0;
+    }
+    if (load_asset("artnem/SBZ Vanishing Block.nem", &Nem_SbzBlock, &Nem_SbzBlock_len) != 0) {
+        Nem_SbzBlock = NULL;
+        Nem_SbzBlock_len = 0;
+    }
+    if (load_asset("artnem/SBZ Small Vertical Door.nem", &Nem_SbzDoor1, &Nem_SbzDoor1_len) != 0) {
+        Nem_SbzDoor1 = NULL;
+        Nem_SbzDoor1_len = 0;
+    }
+    if (load_asset("artnem/SBZ Large Horizontal Door.nem", &Nem_SbzDoor2, &Nem_SbzDoor2_len) != 0) {
+        Nem_SbzDoor2 = NULL;
+        Nem_SbzDoor2_len = 0;
+    }
+    if (load_asset("artnem/SBZ Collapsing Floor.nem", &Nem_SbzFloor, &Nem_SbzFloor_len) != 0) {
+        Nem_SbzFloor = NULL;
+        Nem_SbzFloor_len = 0;
+    }
+    if (load_asset("artnem/SBZ Running Disc.nem", &Nem_SbzWheel1, &Nem_SbzWheel1_len) != 0) {
+        Nem_SbzWheel1 = NULL;
+        Nem_SbzWheel1_len = 0;
+    }
+    if (load_asset("artnem/SBZ Junction Wheel.nem", &Nem_SbzWheel2, &Nem_SbzWheel2_len) != 0) {
+        Nem_SbzWheel2 = NULL;
+        Nem_SbzWheel2_len = 0;
+    }
+    if (load_asset("artnem/SLZ Seesaw.nem", &Nem_Seesaw, &Nem_Seesaw_len) != 0) {
+        Nem_Seesaw = NULL;
+        Nem_Seesaw_len = 0;
+    }
+    if (load_asset("artnem/SBZ Sliding Floor Trap.nem", &Nem_SlideFloor, &Nem_SlideFloor_len) != 0) {
+        Nem_SlideFloor = NULL;
+        Nem_SlideFloor_len = 0;
+    }
+    if (load_asset("artnem/SLZ 32x32 Block.nem", &Nem_SlzBlock, &Nem_SlzBlock_len) != 0) {
+        Nem_SlzBlock = NULL;
+        Nem_SlzBlock_len = 0;
+    }
+    if (load_asset("artnem/SLZ Cannon.nem", &Nem_SlzCannon, &Nem_SlzCannon_len) != 0) {
+        Nem_SlzCannon = NULL;
+        Nem_SlzCannon_len = 0;
+    }
+    if (load_asset("artnem/SLZ Little Spikeball.nem", &Nem_SlzSpike, &Nem_SlzSpike_len) != 0) {
+        Nem_SlzSpike = NULL;
+        Nem_SlzSpike_len = 0;
+    }
+    if (load_asset("artnem/SLZ Swinging Platform.nem", &Nem_SlzSwing, &Nem_SlzSwing_len) != 0) {
+        Nem_SlzSwing = NULL;
+        Nem_SlzSwing_len = 0;
+    }
+    if (load_asset("artnem/SLZ Breakable Wall.nem", &Nem_SlzWall, &Nem_SlzWall_len) != 0) {
+        Nem_SlzWall = NULL;
+        Nem_SlzWall_len = 0;
+    }
+    if (load_asset("artnem/SBZ Spinning Platform.nem", &Nem_SpinPform, &Nem_SpinPform_len) != 0) {
+        Nem_SpinPform = NULL;
+        Nem_SpinPform_len = 0;
+    }
+    if (load_asset("artnem/LZ Water & Splashes.nem", &Nem_Splash, &Nem_Splash_len) != 0) {
+        Nem_Splash = NULL;
+        Nem_Splash_len = 0;
+    }
+    if (load_asset("artnem/SBZ Stomper.nem", &Nem_Stomper, &Nem_Stomper_len) != 0) {
+        Nem_Stomper = NULL;
+        Nem_Stomper_len = 0;
+    }
+    if (load_asset("artnem/SYZ Large Spikeball.nem", &Nem_SyzSpike1, &Nem_SyzSpike1_len) != 0) {
+        Nem_SyzSpike1 = NULL;
+        Nem_SyzSpike1_len = 0;
+    }
+    if (load_asset("artnem/SYZ Small Spikeball.nem", &Nem_SyzSpike2, &Nem_SyzSpike2_len) != 0) {
+        Nem_SyzSpike2 = NULL;
+        Nem_SyzSpike2_len = 0;
+    }
+    if (load_asset("artnem/SBZ Trapdoor.nem", &Nem_TrapDoor, &Nem_TrapDoor_len) != 0) {
+        Nem_TrapDoor = NULL;
+        Nem_TrapDoor_len = 0;
+    }
+    if (load_asset("artnem/Ending - Try Again.nem", &Nem_TryAgain, &Nem_TryAgain_len) != 0) {
+        Nem_TryAgain = NULL;
+        Nem_TryAgain_len = 0;
+    }
+    if (load_asset("artnem/LZ Water Surface.nem", &Nem_Water, &Nem_Water_len) != 0) {
+        Nem_Water = NULL;
+        Nem_Water_len = 0;
+    }
+    if (load_asset("artnem/Boss - Weapons.nem", &Nem_Weapons, &Nem_Weapons_len) != 0) {
+        Nem_Weapons = NULL;
+        Nem_Weapons_len = 0;
+    }
+    if (load_asset("artnem/Enemy Yadrin.nem", &Nem_Yadrin, &Nem_Yadrin_len) != 0) {
+        Nem_Yadrin = NULL;
+        Nem_Yadrin_len = 0;
+    }
+
     if (load_asm_asset("anim/psbtm.asm", &Ani_PSBTM, &Ani_PSBTM_len, 0) != 0) {
         Ani_PSBTM = NULL;
         Ani_PSBTM_len = 0;
@@ -1235,6 +1826,104 @@ void Data_Quit(void) {
     FREE_ASSET(Nem_Pig);
     FREE_ASSET(Nem_Flicky);
     FREE_ASSET(Nem_Squirrel);
+    FREE_ASSET(Nem_BallHog);
+    FREE_ASSET(Nem_Basaran);
+    FREE_ASSET(Nem_Bomb);
+    FREE_ASSET(Nem_Bubbles);
+    FREE_ASSET(Nem_Bumper);
+    FREE_ASSET(Nem_Burrobot);
+    FREE_ASSET(Nem_Cater);
+    FREE_ASSET(Nem_Cork);
+    FREE_ASSET(Nem_Cutter);
+    FREE_ASSET(Nem_Eggman);
+    FREE_ASSET(Nem_Electric);
+    FREE_ASSET(Nem_EndEm);
+    FREE_ASSET(Nem_EndFlower);
+    FREE_ASSET(Nem_EndSonic);
+    FREE_ASSET(Nem_EndStH);
+    FREE_ASSET(Nem_Exhaust);
+    FREE_ASSET(Nem_Fan);
+    FREE_ASSET(Nem_FlamePipe);
+    FREE_ASSET(Nem_FlapDoor);
+    FREE_ASSET(Nem_FzBoss);
+    FREE_ASSET(Nem_FzEggman);
+    FREE_ASSET(Nem_GameOver);
+    FREE_ASSET(Nem_Gargoyle);
+    FREE_ASSET(Nem_Girder);
+    FREE_ASSET(Nem_Harpoon);
+    FREE_ASSET(Nem_Jaws);
+    FREE_ASSET(Nem_LZ);
+    FREE_ASSET(Nem_Lamp);
+    FREE_ASSET(Nem_Lava);
+    FREE_ASSET(Nem_LzBlock1);
+    FREE_ASSET(Nem_LzBlock2);
+    FREE_ASSET(Nem_LzBlock3);
+    FREE_ASSET(Nem_LzDoor1);
+    FREE_ASSET(Nem_LzDoor2);
+    FREE_ASSET(Nem_LzPlatfm);
+    FREE_ASSET(Nem_LzPole);
+    FREE_ASSET(Nem_LzSpikeBall);
+    FREE_ASSET(Nem_LzSwitch);
+    FREE_ASSET(Nem_LzWheel);
+    FREE_ASSET(Nem_MZ);
+    FREE_ASSET(Nem_MiniSonic);
+    FREE_ASSET(Nem_MzBlock);
+    FREE_ASSET(Nem_MzFire);
+    FREE_ASSET(Nem_MzGlass);
+    FREE_ASSET(Nem_MzMetal);
+    FREE_ASSET(Nem_MzSwitch);
+    FREE_ASSET(Nem_Orbinaut);
+    FREE_ASSET(Nem_Points);
+    FREE_ASSET(Nem_Prison);
+    FREE_ASSET(Nem_Pylon);
+    FREE_ASSET(Nem_ResultEm);
+    FREE_ASSET(Nem_Roller);
+    FREE_ASSET(Nem_SBZ);
+    FREE_ASSET(Nem_SLZ);
+    FREE_ASSET(Nem_SS1UpBlock);
+    FREE_ASSET(Nem_SSBgCloud);
+    FREE_ASSET(Nem_SSBgFish);
+    FREE_ASSET(Nem_SSEmStars);
+    FREE_ASSET(Nem_SSEmerald);
+    FREE_ASSET(Nem_SSGOAL);
+    FREE_ASSET(Nem_SSGhost);
+    FREE_ASSET(Nem_SSGlass);
+    FREE_ASSET(Nem_SSRBlock);
+    FREE_ASSET(Nem_SSRedWhite);
+    FREE_ASSET(Nem_SSUpDown);
+    FREE_ASSET(Nem_SSWBlock);
+    FREE_ASSET(Nem_SSWalls);
+    FREE_ASSET(Nem_SSZone1);
+    FREE_ASSET(Nem_SSZone2);
+    FREE_ASSET(Nem_SSZone3);
+    FREE_ASSET(Nem_SSZone4);
+    FREE_ASSET(Nem_SSZone5);
+    FREE_ASSET(Nem_SSZone6);
+    FREE_ASSET(Nem_SYZ);
+    FREE_ASSET(Nem_Sbz2Eggman);
+    FREE_ASSET(Nem_SbzBlock);
+    FREE_ASSET(Nem_SbzDoor1);
+    FREE_ASSET(Nem_SbzDoor2);
+    FREE_ASSET(Nem_SbzFloor);
+    FREE_ASSET(Nem_SbzWheel1);
+    FREE_ASSET(Nem_SbzWheel2);
+    FREE_ASSET(Nem_Seesaw);
+    FREE_ASSET(Nem_SlideFloor);
+    FREE_ASSET(Nem_SlzBlock);
+    FREE_ASSET(Nem_SlzCannon);
+    FREE_ASSET(Nem_SlzSpike);
+    FREE_ASSET(Nem_SlzSwing);
+    FREE_ASSET(Nem_SlzWall);
+    FREE_ASSET(Nem_SpinPform);
+    FREE_ASSET(Nem_Splash);
+    FREE_ASSET(Nem_Stomper);
+    FREE_ASSET(Nem_SyzSpike1);
+    FREE_ASSET(Nem_SyzSpike2);
+    FREE_ASSET(Nem_TrapDoor);
+    FREE_ASSET(Nem_TryAgain);
+    FREE_ASSET(Nem_Water);
+    FREE_ASSET(Nem_Weapons);
+    FREE_ASSET(Nem_Yadrin);
     FREE_ASSET(Nem_TitleCard);
     MUNMAP_ASSET(Map_Card);
     MUNMAP_ASSET(Map_Got);
