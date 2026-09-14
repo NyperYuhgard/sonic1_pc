@@ -67,6 +67,11 @@ static const plc_entry plc_GHZ2[] = {
     plc_decl(Nem_GhzWall2, ArtTile_GHZ_Edge_Wall),
 };
 
+static const plc_entry plc_Explode[] = {
+    plc_decl(Nem_Explode, ArtTile_Explosion),
+};
+
+
 /* Static asset list sentinels (the value of a pointer is not a constant) */
 static const plc_entry plc_Empty[] = { { 0, 0 } };
 
@@ -91,7 +96,7 @@ typedef struct {
 static const plc_list plc_index[] = {
     /* 0: */           { plc_Main,  (int)(sizeof(plc_Main) / sizeof(plc_Main[0])) - 1 },
     /* 1: */           { plc_Main2, (int)(sizeof(plc_Main2) / sizeof(plc_Main2[0])) - 1 },
-    /* 2..3: */        PLC_NONE, PLC_NONE,
+    /* 2..3: */        { plc_Explode, (int)(sizeof(plc_Explode) / sizeof(plc_Explode[0])) - 1 }, PLC_NONE,
     /* 4: */           { plc_GHZ,   (int)(sizeof(plc_GHZ) / sizeof(plc_GHZ[0])) - 1 },
     /* 5..7: */        { plc_GHZ2,   (int)(sizeof(plc_GHZ2) / sizeof(plc_GHZ2[0])) - 1 }, PLC_NONE, PLC_NONE,
     /* 8..11: */       PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,

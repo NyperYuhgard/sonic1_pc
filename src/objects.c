@@ -610,14 +610,17 @@ static void TitleCard_Main(void *obj) {
 
         /* Card_MoveOut: 32 px/frame back toward cardFinalX (the start). */
         if (!(obRender(o) & 0x80)) {
-            DeleteObject(obj);      /* Card_ChangeArt extra loads skipped in PC */
+            DeleteObject(obj);      
             return;
         }
         int16_t d1 = 0x20;
         int16_t cur = obX(o);
         int16_t target = cardFinalX(o);
         if (cur == target) {
-            DeleteObject(obj);      /* Card_ChangeArt extra loads skipped in PC */
+            AddPLC(plcid_Explode); /* Card_ChangeArt */
+            int d0 = (uint8_t)v_zone + plcid_GHZAnimals;
+            AddPLC(d0);
+            DeleteObject(obj);      
             return;
         }
         if (target < cur) d1 = -d1;
