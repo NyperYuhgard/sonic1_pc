@@ -280,7 +280,10 @@ static void DLE_FZ(void) {
         if (cam_int(0xF700) >= boss_fz_x) v_dle_routine += 2;
         DLE_SBZ2_SetBoundary();
         return;
-    default:                                     /* DLE_FZ_Wait / End */
+    case 0x06:                                     /* DLE_FZ_Wait */
+        return;
+    default:                                       /* DLE_FZ_End */
+        DLE_SBZ2_SetBoundary();
         return;
     }
 }
@@ -449,10 +452,13 @@ static void DLE_MZ(void) {
             if (sx < 0xB80) {                    /* REV01 mid-section block */
                 if (RAM_WORD(0xF72C) != 0x340)
                     RAM_WORD(0xF72C) -= 2;       /* move top boundary up 2px */
-            } else {
-                if (RAM_WORD(0xF72C) != 0x500 && sy >= 0x500)
-                    RAM_WORD(0xF72C) = 0x500;
+                return;                          /* subq + rts -> no E70 block */
             }
+            /* .skip_mid */
+            if (RAM_WORD(0xF72C) != 0x500) {
+                if (sy < 0x500) return;          /* blo -> .exit */
+                RAM_WORD(0xF72C) = 0x500;
+            }                                    /* .skip_btm */
             if (sx >= 0xE70) {
                 RAM_WORD(0xF72C) = 0;            /* v_limittop2 cleared */
                 RAM_WORD(0xF726) = 0x500;        /* v_limitbtm1 */
@@ -472,19 +478,19 @@ static void DLE_MZ(void) {
         switch (v_dle_routine) {
         case 0x00: {                             /* DLE_MZ3_Boss */
             int16_t sx = cam_int(0xF700);
-            RAM_WORD(0xF726) = (uint16_t)(sx >= boss_mz_x - 0x10 ? boss_mz_y : 0x720);
-            if (sx >= boss_mz_x - 0x10) {
-                if (FindFreeObj()) {
-                    uint8_t *boss = FindFreeObj();
-                    obID(boss) = id_BossMarble;
-                    obX(boss) = (int16_t)(boss_mz_x + 0x1F0);
-                    obY(boss) = (int16_t)(boss_mz_y + 0x1C);
-                }
-                Sound_Queue(bgm_Boss, true);
-                f_lockscreen = 1;
-                v_dle_routine += 2;
-                dle_AddPLC(plcid_Boss);
+            if (sx < boss_mz_x - 0x2A0) { RAM_WORD(0xF726) = 0x720; return; }
+            RAM_WORD(0xF726) = boss_mz_y;        /* from $2A0 on, btm = boss */
+            if (sx < boss_mz_x - 0x10) return;   /* second threshold for spawn */
+            if (FindFreeObj()) {
+                uint8_t *boss = FindFreeObj();
+                obID(boss) = id_BossMarble;
+                obX(boss) = (int16_t)(boss_mz_x + 0x1F0);
+                obY(boss) = (int16_t)(boss_mz_y + 0x1C);
             }
+            Sound_Queue(bgm_Boss, true);
+            f_lockscreen = 1;
+            v_dle_routine += 2;
+            dle_AddPLC(plcid_Boss);
             return;
         }
         default:                                 /* DLE_MZ3_End */
@@ -554,9 +560,9 @@ static void DLE_GHZ(void) {
             int16_t sy = cam_int(0xF704);
             if (sx < 0x380) { RAM_WORD(0xF726) = 0x300; return; }
             if (sx < 0x960) { RAM_WORD(0xF726) = 0x310; return; }
-            if (sy < 0x280) {
-                RAM_WORD(0xF726) = 0x400;
-                if (sx >= 0x1700) v_dle_routine += 2;
+            if (sy < 0x280) {                    /* blo -> .final_section */
+                RAM_WORD(0xF726) = boss_ghz_y;   /* v_limitbtm1 (final_section) */
+                v_dle_routine += 2;              /* goto DLE_GHZ3_Boss next */
                 return;
             }
             /* underground section */
@@ -564,6 +570,10 @@ static void DLE_GHZ(void) {
             if (sx < 0x1380) {
                 RAM_WORD(0xF726) = 0x4C0;
                 RAM_WORD(0xF72E) = 0x4C0;        /* v_limitbtm2 */
+            }                                    /* .skip_underground */
+            if (sx >= 0x1700) {                  /* bhs -> .final_section */
+                RAM_WORD(0xF726) = boss_ghz_y;   /* v_limitbtm1 (final_section) */
+                v_dle_routine += 2;              /* goto DLE_GHZ3_Boss next */
             }
             return;
         }
@@ -717,23 +727,35 @@ static void BGScroll_YAbsolute(int16_t d0int) {
     uint8_t yb = RAM_BYTE(0xF74D);                /* v_bg1_yblock */
     if ((uint8_t)(d1 ^ yb) != 0) return;
     RAM_BYTE(0xF74D) = (uint8_t)(yb ^ 0x10);
-    if ((int32_t)(int16_t)d0int - d3 < 0)         /* sub.w d3,d0 ; bpl */
+    if ((int16_t)((uint16_t)d0int - (uint16_t)d3) < 0)  /* sub.w d3,d0 ; bpl (16-bit wrap) */
         RAM_WORD(0xF756) |= (1u << 0);
     else
         RAM_WORD(0xF756) |= (1u << 1);
 }
 
 /* BGScroll_X: copy the shared buffer's values into the hscroll table for all
-   256 rows (skipping the bg-y-nybble aligned offset). d2-nybble rotates. */
+   256 rows. First block writes (16 - skip) rows of buf[b] (jmp .skip_rows);
+   then 15 blocks of 16 rows each from buf[b+1..b+15]. d2 = bg y (low nybble
+   selects how many leading rows of the first block are skipped). */
 static void BGScroll_X(int16_t d2, uint16_t buf_byte_off) {
-    uint16_t skip = ((uint16_t)d2 & 0x0Fu) >> 1;  /* (nybble*2 bytes) / 4-byte entry */
+    uint16_t skip = (uint16_t)d2 & 0x0Fu;         /* andi.w #$F,d2 (rows skipped) */
     int16_t fg = (int16_t)(-cam_int(0xF700));     /* fg x = -screenposx */
     uint16_t a1 = v_hscrolltablebuffer;
+    uint16_t b = buf_byte_off / 2;
 
-    for (int g = 0; g < 16; g++) {
-        int16_t bg = (int16_t)DEFORM_BUFW(buf_byte_off / 2 + g);
-        int first = (g == 0) ? (int)skip : 0;
-        for (int r = first; r < 16; r++) {
+    /* first block: buf[b], (16 - skip) rows (jmp into .skip_rows) */
+    {
+        int16_t bg = (int16_t)DEFORM_BUFW(b);
+        for (int r = (int)skip; r < 16; r++) {
+            RAM_WORD(a1)     = (uint16_t)fg;      /* high word (fg) */
+            RAM_WORD(a1 + 2) = (uint16_t)bg;      /* low word (bg) */
+            a1 += 4;
+        }
+    }
+    /* remaining 15 blocks: 16 rows each of buf[b+1..b+15] */
+    for (int g = 1; g <= 15; g++) {
+        int16_t bg = (int16_t)DEFORM_BUFW(b + g);
+        for (int r = 0; r < 16; r++) {
             RAM_WORD(a1)     = (uint16_t)fg;      /* high word (fg) */
             RAM_WORD(a1 + 2) = (uint16_t)bg;      /* low word (bg) */
             a1 += 4;
@@ -826,12 +848,12 @@ static void Deform_LZ(void) {
     RAM_WORD(0xF618) = (uint16_t)cam_int(0xF70C); /* v_bgscrposy_vdp */
 
     /* REV01 water ripples */
-    uint8_t d2 = (uint8_t)v_lz_deform;
+    uint8_t d2 = (uint8_t)(v_lz_deform >> 8);   /* move.b (v_lz_deform).w,d2 (high byte) */
     uint8_t d3 = d2;
     v_lz_deform = (uint16_t)(v_lz_deform + 0x80);
 
-    uint16_t d2i = (uint16_t)(d2 + (uint16_t)cam_int(0xF70C)) & 0xFFu;  /* +bgy, &$FF */
-    uint16_t d3i = (uint16_t)(d3 + (uint16_t)cam_int(0xF704)) & 0xFFu;  /* +screenposy, &$FF */
+    uint8_t d2i = (uint8_t)(d2 + (uint16_t)cam_int(0xF70C));  /* +bgy  (addq.b wraps at 256) */
+    uint8_t d3i = (uint8_t)(d3 + (uint16_t)cam_int(0xF704));  /* +screenposy */
 
     int16_t bgx = (int16_t)cam_int(0xF708);       /* v_bgscreenposx */
     uint16_t d4w = RAM_WORD(0xF646);              /* v_waterpos1 */
@@ -877,20 +899,18 @@ static void Deform_MZ(void) {
     BGScroll_Block(0xF710, 0xF758, 0xF74E, (int32_t)sh * 128, 4);
 
     /* Y position */
-    {
-        int32_t d0 = 512;
-        int16_t d1 = cam_int(0xF704);
-        if ((uint16_t)d1 >= 456u) {                /* subi.w #456 ; bcs -> no scroll */
-            int16_t dd = (int16_t)(d1 - 456);      /* d1 in signed */
-            int32_t d2 = dd;                       /* d2 = d1 */
-            dd = (int16_t)(dd + dd);               /* d1 += d1 */
-            dd = (int16_t)(dd + (int16_t)d2);      /* d1 += d2  -> 3*d1 */
-            d0 += (dd >> 2);                       /* asr.w #2 (arith) */
-        }
-        RAM_WORD(0xF714) = (uint16_t)d0;           /* v_bg2screenposy */
-        RAM_WORD(0xF71C) = (uint16_t)d0;           /* v_bg3screenposy */
+    int32_t d0 = 512;
+    int16_t d1 = cam_int(0xF704);
+    if ((uint16_t)d1 >= 456u) {                /* subi.w #456 ; bcs -> no scroll */
+        int16_t dd = (int16_t)(d1 - 456);      /* d1 in signed */
+        int32_t d2 = dd;                       /* d2 = d1 */
+        dd = (int16_t)(dd + dd);               /* d1 += d1 */
+        dd = (int16_t)(dd + (int16_t)d2);      /* d1 += d2  -> 3*d1 */
+        d0 += (dd >> 2);                       /* asr.w #2 (arith) */
     }
-    BGScroll_YAbsolute((int16_t)cam_int(0xF70C));  /* uses v_bgscreenposy */
+    RAM_WORD(0xF714) = (uint16_t)d0;           /* v_bg2screenposy */
+    RAM_WORD(0xF71C) = (uint16_t)d0;           /* v_bg3screenposy */
+    BGScroll_YAbsolute((int16_t)d0);   /* .noYscroll -> v_bgscreenposy = computed d0 */
     RAM_WORD(0xF618) = (uint16_t)cam_int(0xF70C);
 
     /* merge redraw flags: bg3 |= bg1|bg2 ; clear bg1/bg2 low byte */
