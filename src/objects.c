@@ -541,7 +541,7 @@ static void TitleCard_Main(void *obj) {
     if (routine == 0) {
         uint8_t *a1 = o;
         int d0 = v_zone;
-        uint16_t zact = (uint16_t)v_zone_act;
+        uint16_t zact = RAM_U16(0xFE10);
 
         if (zact == id_LZ_act4) {
             d0 = 5;                 /* SBZ3: use SBZ title card */
@@ -828,7 +828,7 @@ chk_invincible:
                 if (!f_lockscreen) {
                     if (v_air >= 12) {
                         uint8_t zone = v_zone;
-                        if (v_zone_act != id_LZ_act4) {
+                        if (RAM_U16(0xFE10) != id_LZ_act4) {
                             Sound_Queue(music_list[zone], false);
                         } else {
                             Sound_Queue(bgm_SBZ, false);
@@ -881,7 +881,7 @@ static void Sonic_RecordPosition(void *obj) {
 static void ResumeMusic(void) {
     if (v_air > 12) {
         uint16_t bgm = bgm_LZ;
-        if (v_zone_act == id_LZ_act4) {
+        if (RAM_U16(0xFE10) == id_LZ_act4) {
             bgm = bgm_SBZ;
         }
         if (v_invinc) {
@@ -1688,7 +1688,7 @@ static void Got_Bonus(uint8_t *o) {
     /* .finished */
     Sound_Queue(sfx_Cash, false);                /* move.w #sfx_Cash,d0 / jsr (QueueSound2).l */
     obRoutine(o) += 2;                           /* addq.b #2 -> Got_Wait (8) */
-    if (v_zone_act == id_SBZ_act2) {             /* cmpi.w #id_SBZ_act2,(v_zone_act).w / bne.s .setPostDelay */
+    if (RAM_U16(0xFE10) == id_SBZ_act2) {        /* cmpi.w #id_SBZ_act2,(v_zone_act).w / bne.s .setPostDelay */
         obRoutine(o) += 4;                       /* addq.b #4 -> Got_Wait ($C, pre-SBZ2 cutscene) */
     }
     got_timeframe(o) = 3 * 60;                   /* move.w #3*60,obTimeFrame(a0) */
@@ -1698,7 +1698,7 @@ static void Got_Bonus(uint8_t *o) {
 static void Got_NextLevel(uint8_t *o) {
     int d0 = (v_zone & 7) * 4 + (v_act & 3);     /* andi #7 / lsl #3 + andi #3 / add (word index) */
     uint16_t nl = LevelOrder[d0];                /* move.w LevelOrder(pc,d0.w),d0 */
-    v_zone_act = nl;                             /* move.w d0,(v_zone_act).w */
+    RAM_SET_U16(0xFE10, nl);                     /* move.w d0,(v_zone_act).w */
 
     if (nl == 0) {                               /* tst.w d0 / bne.s .validLevelNumber */
         v_gamemode = 0x00;                       /* move.b #id_Sega,(v_gamemode).w */
@@ -2485,11 +2485,11 @@ chkbottom:
     return;
 
 bottom:
-    if (v_zone_act == id_SBZ_act2) {
+    if (RAM_U16(0xFE10) == id_SBZ_act2) {
         if ((int16_t)obX(o) >= 0x2000) {
             RAM_BYTE(v_lastlamp) = 0;
             f_restart = 1;
-            v_zone_act = id_LZ_act4;
+            RAM_SET_U16(0xFE10, id_LZ_act4);
             return;
         }
     }

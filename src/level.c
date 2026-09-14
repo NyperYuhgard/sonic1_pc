@@ -73,6 +73,16 @@ typedef struct {
     const uint8_t *left;  /* leftover/unused */
 } level_index_entry;
 
+/* ObjPos_Index (sonic.asm:5052-5088): one pair of words per (zone*4 + act).
+   .main is the objpos list for the zone/act; .null is always ObjPos_Null
+   (the 6-byte $FF,$FF,0,0,0,0 terminator), so the port stores it as NULL. */
+typedef struct {
+    const uint8_t *main;
+    const uint8_t *null;
+} objpos_index_entry;
+
+static objpos_index_entry objpos_index[28];
+
 /* Level_Index rows (defined below LevelLayoutLoad); filled at runtime. */
 static level_index_entry level_index[28];
 
@@ -83,17 +93,95 @@ void LevelHeaders_Init(void) {
     level_headers[0].map16  = Blk16_GHZ;
     level_headers[0].map256 = Blk256_GHZ;
 
+    level_headers[1].gfx    = Nem_LZ;
+    level_headers[1].map16  = Blk16_LZ;
+    level_headers[1].map256 = Blk256_LZ;
+
+    level_headers[2].gfx    = Nem_MZ;
+    level_headers[2].map16  = Blk16_MZ;
+    level_headers[2].map256 = Blk256_MZ;
+
+    level_headers[3].gfx    = Nem_SLZ;
+    level_headers[3].map16  = Blk16_SLZ;
+    level_headers[3].map256 = Blk256_SLZ;
+
+    level_headers[4].gfx    = Nem_SYZ;
+    level_headers[4].map16  = Blk16_SYZ;
+    level_headers[4].map256 = Blk256_SYZ;
+
+    level_headers[5].gfx    = Nem_SBZ;
+    level_headers[5].map16  = Blk16_SBZ;
+    level_headers[5].map256 = Blk256_SBZ;
+
     level_headers[6].gfx    = Nem_GHZ_2nd;
     level_headers[6].map16  = Blk16_GHZ;
     level_headers[6].map256 = Blk256_GHZ;
 
     /* Layout pointers (level_index); rows for other zones stay NULL. */
+    /* GHZ */
     level_index[0].fg = Level_GHZ1;   level_index[0].bg = Level_GHZbg;
-    level_index[1].fg = Level_GHZ1;   level_index[1].bg = Level_GHZbg;
-    level_index[2].fg = Level_GHZ1;   level_index[2].bg = Level_GHZbg;
-    level_index[3].fg = Level_GHZbg;  level_index[3].bg = Level_GHZbg;
-    level_index[24].bg = Level_GHZbg; /* Ending rows 1-2 */
-    level_index[25].bg = Level_GHZbg;
+    level_index[1].fg = Level_GHZ2;   level_index[1].bg = Level_GHZbg;
+    level_index[2].fg = Level_GHZ3;   level_index[2].bg = Level_GHZbg;
+    /* GHZ act4: all NULL (level_index[3] stays zeroed) */
+    /* LZ */
+    level_index[4].fg = Level_LZ1;    level_index[4].bg = Level_LZbg;
+    level_index[5].fg = Level_LZ2;    level_index[5].bg = Level_LZbg;
+    level_index[6].fg = Level_LZ3;    level_index[6].bg = Level_LZbg;
+    level_index[7].fg = Level_SBZ3;   level_index[7].bg = Level_LZbg;
+    /* MZ */
+    level_index[8].fg = Level_MZ1;    level_index[8].bg = Level_MZ1bg;
+    level_index[9].fg = Level_MZ2;    level_index[9].bg = Level_MZ2bg;
+    level_index[10].fg = Level_MZ3;   level_index[10].bg = Level_MZ3bg;
+    /* MZ act4: NULL */
+    /* SLZ */
+    level_index[12].fg = Level_SLZ1;  level_index[12].bg = Level_SLZbg;
+    level_index[13].fg = Level_SLZ2;  level_index[13].bg = Level_SLZbg;
+    level_index[14].fg = Level_SLZ3;  level_index[14].bg = Level_SLZbg;
+    /* SLZ act4: NULL */
+    /* SYZ */
+    level_index[16].fg = Level_SYZ1;  level_index[16].bg = Level_SYZbg;
+    level_index[17].fg = Level_SYZ2;  level_index[17].bg = Level_SYZbg;
+    level_index[18].fg = Level_SYZ3;  level_index[18].bg = Level_SYZbg;
+    /* SYZ act4: NULL */
+    /* SBZ */
+    level_index[20].fg = Level_SBZ1;  level_index[20].bg = Level_SBZ1bg;
+    level_index[21].fg = Level_SBZ2;  level_index[21].bg = Level_SBZ2bg;
+    level_index[22].fg = Level_SBZ2;  level_index[22].bg = Level_SBZ2bg;
+    /* SBZ act4: NULL */
+    /* Ending */
+    level_index[24].fg = Level_End;   level_index[24].bg = Level_GHZbg;
+    level_index[25].fg = Level_End;   level_index[25].bg = Level_GHZbg;
+
+    /* ObjPos_Index (sonic.asm:5052-5088); rows beyond stay NULL. The
+       "null" slot is ObjPos_Null in the ASM, ported as NULL. */
+    objpos_index[0].main  = ObjPos_GHZ1;
+    objpos_index[1].main  = ObjPos_GHZ2;
+    objpos_index[2].main  = ObjPos_GHZ3;
+    objpos_index[3].main  = ObjPos_GHZ1;
+    objpos_index[4].main  = ObjPos_LZ1;
+    objpos_index[5].main  = ObjPos_LZ2;
+    objpos_index[6].main  = ObjPos_LZ3;
+    objpos_index[7].main  = ObjPos_SBZ3;
+    objpos_index[8].main  = ObjPos_MZ1;
+    objpos_index[9].main  = ObjPos_MZ2;
+    objpos_index[10].main = ObjPos_MZ3;
+    objpos_index[11].main = ObjPos_MZ1;
+    objpos_index[12].main = ObjPos_SLZ1;
+    objpos_index[13].main = ObjPos_SLZ2;
+    objpos_index[14].main = ObjPos_SLZ3;
+    objpos_index[15].main = ObjPos_SLZ1;
+    objpos_index[16].main = ObjPos_SYZ1;
+    objpos_index[17].main = ObjPos_SYZ2;
+    objpos_index[18].main = ObjPos_SYZ3;
+    objpos_index[19].main = ObjPos_SYZ1;
+    objpos_index[20].main = ObjPos_SBZ1;
+    objpos_index[21].main = ObjPos_SBZ2;
+    objpos_index[22].main = ObjPos_FZ;
+    objpos_index[23].main = ObjPos_SBZ1;
+    objpos_index[24].main = ObjPos_End;
+    objpos_index[25].main = ObjPos_End;
+    objpos_index[26].main = ObjPos_End;
+    objpos_index[27].main = ObjPos_End;
 }
 
 /* ===================================================================
@@ -163,8 +251,8 @@ static void BgScrollSpeed(int16_t y, int16_t x);
 static void Lamp_LoadInfo(void) {}
 
 void LevelSizeLoad(void) {
-    uint8_t zone = (uint8_t)(v_zone_act >> 8);
-    uint8_t act  = (uint8_t)(v_zone_act & 0xFF);
+    uint8_t zone = (uint8_t)v_zone;
+    uint8_t act  = (uint8_t)v_act;
     uint16_t d0, d1;
     const uint16_t *a0;
     const uint8_t *a1;
@@ -352,51 +440,13 @@ static void level_layout_load2(const uint8_t *src, uint8_t *dst) {
 /* ------------------------------------------------------------------
    Level_Index (sonic.asm:4906-4945)
    One row per (zone*4 + act); LevelLayoutLoad2 selects FG (d1 offset 0)
-   or BG (d1 offset 2); the third slot is never read. Rows with NULL
-   layouts (assets not staged yet) are skipped. GHZ acts 2/3 share the
-   staged GHZ1 layout until their blobs land.
+   or BG (d1 offset 2); the third slot (Unk, dc.l 0 in the ASM) is NULL.
+   Populated at runtime by LevelHeaders_Init().
    ------------------------------------------------------------------ */
-static level_index_entry level_index[] = {
-    /* GHZ */
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    /* LZ */
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    /* MZ */
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    /* SLZ */
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    /* SYZ */
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    /* SBZ */
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    /* Ending (FG = Level_End, unstaged) */
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-    { NULL, NULL, NULL },
-};
 
 void LevelLayoutLoad(void) {
-    uint8_t zone = (uint8_t)(v_zone_act >> 8);
-    uint8_t act  = (uint8_t)(v_zone_act & 0xFF);
+    uint8_t zone = (uint8_t)v_zone;
+    uint8_t act  = (uint8_t)v_act;
 
     /* Clear the entire layout buffer (FixBugs) */
     memset(RAM_ADDR(v_lvllayout), 0, v_lvllayout_end - v_lvllayout);
@@ -790,8 +840,8 @@ static void Level_Enter(void) {
             bgm_FZ,    /* 6: Final */
         };
         int d0 = v_zone;
-        if (v_zone_act == id_LZ_act4) d0 = 5;  /* SBZ3 uses Scrap Brain */
-        else if (v_zone_act == id_FZ) d0 = 6;  /* Final Zone */
+        if (RAM_U16(0xFE10) == id_LZ_act4) d0 = 5;  /* SBZ3 uses Scrap Brain */
+        else if (RAM_U16(0xFE10) == id_FZ) d0 = 6;  /* Final Zone */
         Sound_Queue(music_list[d0], false);
     }
 
@@ -946,7 +996,7 @@ void LoadTilesFromStart(void) {
    mappings, FG/BG layout, and the zone palette into the fade buffer.
    =================================================================== */
 void LevelDataLoad(void) {
-    uint8_t zone = (uint8_t)(v_zone_act >> 8);
+    uint8_t zone = (uint8_t)v_zone;
 
     /* --- Level Header ---
        ASM: lea LevelHeaders.l, a2; lea (a2,d0.w), a2 with d0 = v_zone*$10
@@ -977,9 +1027,9 @@ void LevelDataLoad(void) {
     {
         uint16_t pal = lp->pal & 0xFF;
 
-        if (v_zone_act == id_LZ_act4) {          /* SBZ3 (LZ4)? */
+        if (RAM_U16(0xFE10) == id_LZ_act4) {        /* SBZ3 (LZ4)? */
             pal = palid_SBZ3;
-        } else if (v_zone_act == id_SBZ_act2 || v_zone_act == id_FZ) {
+        } else if (RAM_U16(0xFE10) == id_SBZ_act2 || RAM_U16(0xFE10) == id_FZ) {
             pal = palid_SBZ2;                    /* SBZ2 / FZ */
         }
         PalLoad_Fade(pal);
@@ -1291,14 +1341,21 @@ static void OPL_Main(void) {
     uint8_t *a2 = RAM_ADDR(v_objstate);
     uint8_t *a0, *start;
     uint16_t d6;
+    uint8_t zone = (uint8_t)v_zone;
+    uint8_t act  = (uint8_t)v_act;
 
-    if (ObjPos_GHZ1 == NULL) return;            /* no objpos data mapped */
+    /* move.w (v_zone_act).w,d0; lsl.b #6,d0; lsr.w #4,d0:
+       d0 = zone*16 + act*4 == (zone*4+act)*4, the 4-byte ObjPos_Index row. */
+    unsigned row = zone * 4 + act;
+    if (row >= sizeof(objpos_index) / sizeof(objpos_index[0]) ||
+        objpos_index[row].main == NULL) {
+        v_opl_routine = 0;                      /* no objpos data mapped */
+        return;
+    }
 
     v_opl_routine = (uint8_t)(v_opl_routine + 2); /* goto OPL_Next next */
 
-    /* d0 = (v_zone_act << 2) & 0xFFF indexes ObjPos_Index; the only mapped
-       entry (GHZ1) points at ObjPos_GHZ1, so a0 is that list directly. */
-    a0 = ObjPos_GHZ1;
+    a0 = (uint8_t *)objpos_index[row].main;     /* adda.w (a0,d0.w),a0 */
     opl_ptr_right = a0;                         /* move.l a0,(v_opl_data)   */
     opl_ptr_left  = a0;                         /* move.l a0,(v_opl_data+4) */
     opl_ptr_sec   = NULL;                       /* move.l a1,(v_opl_data+8/+C) */

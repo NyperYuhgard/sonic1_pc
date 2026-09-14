@@ -31,8 +31,15 @@ extern size_t   Eni_SegaLogo_len;
 #define palid_SLZ       7
 #define palid_SYZ       8
 #define palid_SBZ1      9
+#define palid_Special   10
+#define palid_LZWater   11
 #define palid_SBZ3      12
+#define palid_SBZ3Water 13
 #define palid_SBZ2      14
+#define palid_LZSonWater 15
+#define palid_SBZ3SonWat 16
+#define palid_SSResult  17
+#define palid_Continue  18
 #define palid_Ending    19
 
 /* Title Screen assets */
@@ -55,6 +62,37 @@ extern size_t   Pal_Sonic_len;
 
 extern const uint8_t *Pal_GHZ;
 extern size_t   Pal_GHZ_len;
+
+extern const uint8_t *Pal_LZ;
+extern size_t   Pal_LZ_len;
+extern const uint8_t *Pal_LZWater;
+extern size_t   Pal_LZWater_len;
+extern const uint8_t *Pal_LZSonWater;
+extern size_t   Pal_LZSonWater_len;
+extern const uint8_t *Pal_MZ;
+extern size_t   Pal_MZ_len;
+extern const uint8_t *Pal_SLZ;
+extern size_t   Pal_SLZ_len;
+extern const uint8_t *Pal_SYZ;
+extern size_t   Pal_SYZ_len;
+extern const uint8_t *Pal_SBZ1;
+extern size_t   Pal_SBZ1_len;
+extern const uint8_t *Pal_SBZ2;
+extern size_t   Pal_SBZ2_len;
+extern const uint8_t *Pal_SBZ3;
+extern size_t   Pal_SBZ3_len;
+extern const uint8_t *Pal_SBZ3Water;
+extern size_t   Pal_SBZ3Water_len;
+extern const uint8_t *Pal_SBZ3SonWat;
+extern size_t   Pal_SBZ3SonWat_len;
+extern const uint8_t *Pal_Special;
+extern size_t   Pal_Special_len;
+extern const uint8_t *Pal_SSResult;
+extern size_t   Pal_SSResult_len;
+extern const uint8_t *Pal_Continue;
+extern size_t   Pal_Continue_len;
+extern const uint8_t *Pal_Ending;
+extern size_t   Pal_Ending_len;
 
 extern const uint8_t *Nem_JapNames;
 extern size_t   Nem_JapNames_len;
@@ -83,6 +121,36 @@ extern size_t   Blk16_GHZ_len;
 extern const uint8_t *Blk256_GHZ;
 extern size_t   Blk256_GHZ_len;
 
+extern const uint8_t *Blk16_LZ;
+extern size_t   Blk16_LZ_len;
+
+extern const uint8_t *Blk256_LZ;
+extern size_t   Blk256_LZ_len;
+
+extern const uint8_t *Blk16_MZ;
+extern size_t   Blk16_MZ_len;
+
+extern const uint8_t *Blk256_MZ;
+extern size_t   Blk256_MZ_len;
+
+extern const uint8_t *Blk16_SLZ;
+extern size_t   Blk16_SLZ_len;
+
+extern const uint8_t *Blk256_SLZ;
+extern size_t   Blk256_SLZ_len;
+
+extern const uint8_t *Blk16_SYZ;
+extern size_t   Blk16_SYZ_len;
+
+extern const uint8_t *Blk256_SYZ;
+extern size_t   Blk256_SYZ_len;
+
+extern const uint8_t *Blk16_SBZ;
+extern size_t   Blk16_SBZ_len;
+
+extern const uint8_t *Blk256_SBZ;
+extern size_t   Blk256_SBZ_len;
+
 extern const uint8_t *Eni_Title;
 extern size_t   Eni_Title_len;
 
@@ -94,6 +162,58 @@ extern size_t   Level_GHZ1_len;
 
 extern const uint8_t *Level_GHZbg;
 extern size_t   Level_GHZbg_len;
+extern const uint8_t *Level_GHZ2;
+extern size_t   Level_GHZ2_len;
+extern const uint8_t *Level_GHZ3;
+extern size_t   Level_GHZ3_len;
+extern const uint8_t *Level_LZ1;
+extern size_t   Level_LZ1_len;
+extern const uint8_t *Level_LZ2;
+extern size_t   Level_LZ2_len;
+extern const uint8_t *Level_LZ3;
+extern size_t   Level_LZ3_len;
+extern const uint8_t *Level_LZbg;
+extern size_t   Level_LZbg_len;
+extern const uint8_t *Level_SBZ3;
+extern size_t   Level_SBZ3_len;
+extern const uint8_t *Level_MZ1;
+extern size_t   Level_MZ1_len;
+extern const uint8_t *Level_MZ1bg;
+extern size_t   Level_MZ1bg_len;
+extern const uint8_t *Level_MZ2;
+extern size_t   Level_MZ2_len;
+extern const uint8_t *Level_MZ2bg;
+extern size_t   Level_MZ2bg_len;
+extern const uint8_t *Level_MZ3;
+extern size_t   Level_MZ3_len;
+extern const uint8_t *Level_MZ3bg;
+extern size_t   Level_MZ3bg_len;
+extern const uint8_t *Level_SLZ1;
+extern size_t   Level_SLZ1_len;
+extern const uint8_t *Level_SLZ2;
+extern size_t   Level_SLZ2_len;
+extern const uint8_t *Level_SLZ3;
+extern size_t   Level_SLZ3_len;
+extern const uint8_t *Level_SLZbg;
+extern size_t   Level_SLZbg_len;
+extern const uint8_t *Level_SYZ1;
+extern size_t   Level_SYZ1_len;
+extern const uint8_t *Level_SYZ2;
+extern size_t   Level_SYZ2_len;
+extern const uint8_t *Level_SYZ3;
+extern size_t   Level_SYZ3_len;
+extern const uint8_t *Level_SYZbg;
+extern size_t   Level_SYZbg_len;
+extern const uint8_t *Level_SBZ1;
+extern size_t   Level_SBZ1_len;
+extern const uint8_t *Level_SBZ1bg;
+extern size_t   Level_SBZ1bg_len;
+extern const uint8_t *Level_SBZ2;
+extern size_t   Level_SBZ2_len;
+extern const uint8_t *Level_SBZ2bg;
+extern size_t   Level_SBZ2bg_len;
+extern const uint8_t *Level_End;
+extern size_t   Level_End_len;
 
 /* Level PLC graphics (PLC_GHZ + PLC_Main2). Only Nem_GHZ_1st is staged so
    far; the rest are NULL and skipped by AddPLC until their assets land. */
@@ -555,6 +675,44 @@ extern size_t   Map_Points_len;
 /* Object placement data (objpos binaries) */
 extern const uint8_t *ObjPos_GHZ1;
 extern size_t   ObjPos_GHZ1_len;
+extern const uint8_t *ObjPos_GHZ2;
+extern size_t   ObjPos_GHZ2_len;
+extern const uint8_t *ObjPos_GHZ3;
+extern size_t   ObjPos_GHZ3_len;
+extern const uint8_t *ObjPos_LZ1;
+extern size_t   ObjPos_LZ1_len;
+extern const uint8_t *ObjPos_LZ2;
+extern size_t   ObjPos_LZ2_len;
+extern const uint8_t *ObjPos_LZ3;
+extern size_t   ObjPos_LZ3_len;
+extern const uint8_t *ObjPos_SBZ3;
+extern size_t   ObjPos_SBZ3_len;
+extern const uint8_t *ObjPos_MZ1;
+extern size_t   ObjPos_MZ1_len;
+extern const uint8_t *ObjPos_MZ2;
+extern size_t   ObjPos_MZ2_len;
+extern const uint8_t *ObjPos_MZ3;
+extern size_t   ObjPos_MZ3_len;
+extern const uint8_t *ObjPos_SLZ1;
+extern size_t   ObjPos_SLZ1_len;
+extern const uint8_t *ObjPos_SLZ2;
+extern size_t   ObjPos_SLZ2_len;
+extern const uint8_t *ObjPos_SLZ3;
+extern size_t   ObjPos_SLZ3_len;
+extern const uint8_t *ObjPos_SYZ1;
+extern size_t   ObjPos_SYZ1_len;
+extern const uint8_t *ObjPos_SYZ2;
+extern size_t   ObjPos_SYZ2_len;
+extern const uint8_t *ObjPos_SYZ3;
+extern size_t   ObjPos_SYZ3_len;
+extern const uint8_t *ObjPos_SBZ1;
+extern size_t   ObjPos_SBZ1_len;
+extern const uint8_t *ObjPos_SBZ2;
+extern size_t   ObjPos_SBZ2_len;
+extern const uint8_t *ObjPos_FZ;
+extern size_t   ObjPos_FZ_len;
+extern const uint8_t *ObjPos_End;
+extern size_t   ObjPos_End_len;
 
 /* Per-zone collision indexes (ColPointers, sonic.asm:3116-3121).
    Only GHZ is staged; the rest are NULL until their collide/*.bin lands. */

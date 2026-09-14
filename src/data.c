@@ -65,6 +65,37 @@ size_t   Pal_Sonic_len = 0;
 const uint8_t *Pal_GHZ = NULL;
 size_t   Pal_GHZ_len = 0;
 
+const uint8_t *Pal_LZ = NULL;
+size_t   Pal_LZ_len = 0;
+const uint8_t *Pal_LZWater = NULL;
+size_t   Pal_LZWater_len = 0;
+const uint8_t *Pal_LZSonWater = NULL;
+size_t   Pal_LZSonWater_len = 0;
+const uint8_t *Pal_MZ = NULL;
+size_t   Pal_MZ_len = 0;
+const uint8_t *Pal_SLZ = NULL;
+size_t   Pal_SLZ_len = 0;
+const uint8_t *Pal_SYZ = NULL;
+size_t   Pal_SYZ_len = 0;
+const uint8_t *Pal_SBZ1 = NULL;
+size_t   Pal_SBZ1_len = 0;
+const uint8_t *Pal_SBZ2 = NULL;
+size_t   Pal_SBZ2_len = 0;
+const uint8_t *Pal_SBZ3 = NULL;
+size_t   Pal_SBZ3_len = 0;
+const uint8_t *Pal_SBZ3Water = NULL;
+size_t   Pal_SBZ3Water_len = 0;
+const uint8_t *Pal_SBZ3SonWat = NULL;
+size_t   Pal_SBZ3SonWat_len = 0;
+const uint8_t *Pal_Special = NULL;
+size_t   Pal_Special_len = 0;
+const uint8_t *Pal_SSResult = NULL;
+size_t   Pal_SSResult_len = 0;
+const uint8_t *Pal_Continue = NULL;
+size_t   Pal_Continue_len = 0;
+const uint8_t *Pal_Ending = NULL;
+size_t   Pal_Ending_len = 0;
+
 const uint8_t *Nem_JapNames = NULL;
 size_t   Nem_JapNames_len = 0;
 
@@ -91,6 +122,36 @@ size_t   Blk16_GHZ_len = 0;
 
 const uint8_t *Blk256_GHZ = NULL;
 size_t   Blk256_GHZ_len = 0;
+
+const uint8_t *Blk16_LZ = NULL;
+size_t   Blk16_LZ_len = 0;
+
+const uint8_t *Blk256_LZ = NULL;
+size_t   Blk256_LZ_len = 0;
+
+const uint8_t *Blk16_MZ = NULL;
+size_t   Blk16_MZ_len = 0;
+
+const uint8_t *Blk256_MZ = NULL;
+size_t   Blk256_MZ_len = 0;
+
+const uint8_t *Blk16_SLZ = NULL;
+size_t   Blk16_SLZ_len = 0;
+
+const uint8_t *Blk256_SLZ = NULL;
+size_t   Blk256_SLZ_len = 0;
+
+const uint8_t *Blk16_SYZ = NULL;
+size_t   Blk16_SYZ_len = 0;
+
+const uint8_t *Blk256_SYZ = NULL;
+size_t   Blk256_SYZ_len = 0;
+
+const uint8_t *Blk16_SBZ = NULL;
+size_t   Blk16_SBZ_len = 0;
+
+const uint8_t *Blk256_SBZ = NULL;
+size_t   Blk256_SBZ_len = 0;
 
 const uint8_t *Eni_Title = NULL;
 size_t   Eni_Title_len = 0;
@@ -318,6 +379,59 @@ size_t   Level_GHZ1_len = 0;
 const uint8_t *Level_GHZbg = NULL;
 size_t   Level_GHZbg_len = 0;
 
+const uint8_t *Level_GHZ2 = NULL;
+size_t   Level_GHZ2_len = 0;
+const uint8_t *Level_GHZ3 = NULL;
+size_t   Level_GHZ3_len = 0;
+const uint8_t *Level_LZ1 = NULL;
+size_t   Level_LZ1_len = 0;
+const uint8_t *Level_LZ2 = NULL;
+size_t   Level_LZ2_len = 0;
+const uint8_t *Level_LZ3 = NULL;
+size_t   Level_LZ3_len = 0;
+const uint8_t *Level_LZbg = NULL;
+size_t   Level_LZbg_len = 0;
+const uint8_t *Level_SBZ3 = NULL;
+size_t   Level_SBZ3_len = 0;
+const uint8_t *Level_MZ1 = NULL;
+size_t   Level_MZ1_len = 0;
+const uint8_t *Level_MZ1bg = NULL;
+size_t   Level_MZ1bg_len = 0;
+const uint8_t *Level_MZ2 = NULL;
+size_t   Level_MZ2_len = 0;
+const uint8_t *Level_MZ2bg = NULL;
+size_t   Level_MZ2bg_len = 0;
+const uint8_t *Level_MZ3 = NULL;
+size_t   Level_MZ3_len = 0;
+const uint8_t *Level_MZ3bg = NULL;
+size_t   Level_MZ3bg_len = 0;
+const uint8_t *Level_SLZ1 = NULL;
+size_t   Level_SLZ1_len = 0;
+const uint8_t *Level_SLZ2 = NULL;
+size_t   Level_SLZ2_len = 0;
+const uint8_t *Level_SLZ3 = NULL;
+size_t   Level_SLZ3_len = 0;
+const uint8_t *Level_SLZbg = NULL;
+size_t   Level_SLZbg_len = 0;
+const uint8_t *Level_SYZ1 = NULL;
+size_t   Level_SYZ1_len = 0;
+const uint8_t *Level_SYZ2 = NULL;
+size_t   Level_SYZ2_len = 0;
+const uint8_t *Level_SYZ3 = NULL;
+size_t   Level_SYZ3_len = 0;
+const uint8_t *Level_SYZbg = NULL;
+size_t   Level_SYZbg_len = 0;
+const uint8_t *Level_SBZ1 = NULL;
+size_t   Level_SBZ1_len = 0;
+const uint8_t *Level_SBZ1bg = NULL;
+size_t   Level_SBZ1bg_len = 0;
+const uint8_t *Level_SBZ2 = NULL;
+size_t   Level_SBZ2_len = 0;
+const uint8_t *Level_SBZ2bg = NULL;
+size_t   Level_SBZ2bg_len = 0;
+const uint8_t *Level_End = NULL;
+size_t   Level_End_len = 0;
+
 /* Level PLC graphics (PLC_GHZ + PLC_Main2). Only Nem_GHZ_1st is staged so
    far; these stay NULL (AddPLC skips them) until their assets land. */
 const uint8_t *Nem_GHZ_2nd = NULL;
@@ -383,6 +497,44 @@ size_t   Ani_Sonic_len = 0;
 
 const uint8_t *ObjPos_GHZ1 = NULL;
 size_t   ObjPos_GHZ1_len = 0;
+const uint8_t *ObjPos_GHZ2 = NULL;
+size_t   ObjPos_GHZ2_len = 0;
+const uint8_t *ObjPos_GHZ3 = NULL;
+size_t   ObjPos_GHZ3_len = 0;
+const uint8_t *ObjPos_LZ1 = NULL;
+size_t   ObjPos_LZ1_len = 0;
+const uint8_t *ObjPos_LZ2 = NULL;
+size_t   ObjPos_LZ2_len = 0;
+const uint8_t *ObjPos_LZ3 = NULL;
+size_t   ObjPos_LZ3_len = 0;
+const uint8_t *ObjPos_SBZ3 = NULL;
+size_t   ObjPos_SBZ3_len = 0;
+const uint8_t *ObjPos_MZ1 = NULL;
+size_t   ObjPos_MZ1_len = 0;
+const uint8_t *ObjPos_MZ2 = NULL;
+size_t   ObjPos_MZ2_len = 0;
+const uint8_t *ObjPos_MZ3 = NULL;
+size_t   ObjPos_MZ3_len = 0;
+const uint8_t *ObjPos_SLZ1 = NULL;
+size_t   ObjPos_SLZ1_len = 0;
+const uint8_t *ObjPos_SLZ2 = NULL;
+size_t   ObjPos_SLZ2_len = 0;
+const uint8_t *ObjPos_SLZ3 = NULL;
+size_t   ObjPos_SLZ3_len = 0;
+const uint8_t *ObjPos_SYZ1 = NULL;
+size_t   ObjPos_SYZ1_len = 0;
+const uint8_t *ObjPos_SYZ2 = NULL;
+size_t   ObjPos_SYZ2_len = 0;
+const uint8_t *ObjPos_SYZ3 = NULL;
+size_t   ObjPos_SYZ3_len = 0;
+const uint8_t *ObjPos_SBZ1 = NULL;
+size_t   ObjPos_SBZ1_len = 0;
+const uint8_t *ObjPos_SBZ2 = NULL;
+size_t   ObjPos_SBZ2_len = 0;
+const uint8_t *ObjPos_FZ = NULL;
+size_t   ObjPos_FZ_len = 0;
+const uint8_t *ObjPos_End = NULL;
+size_t   ObjPos_End_len = 0;
 
 const uint8_t *Nem_Ring = NULL;
 size_t   Nem_Ring_len = 0;
@@ -708,6 +860,58 @@ int Data_Init(void) {
     Level_GHZ1_len = 0;
     Level_GHZbg = NULL;
     Level_GHZbg_len = 0;
+    Level_GHZ2 = NULL;
+    Level_GHZ2_len = 0;
+    Level_GHZ3 = NULL;
+    Level_GHZ3_len = 0;
+    Level_LZ1 = NULL;
+    Level_LZ1_len = 0;
+    Level_LZ2 = NULL;
+    Level_LZ2_len = 0;
+    Level_LZ3 = NULL;
+    Level_LZ3_len = 0;
+    Level_LZbg = NULL;
+    Level_LZbg_len = 0;
+    Level_SBZ3 = NULL;
+    Level_SBZ3_len = 0;
+    Level_MZ1 = NULL;
+    Level_MZ1_len = 0;
+    Level_MZ1bg = NULL;
+    Level_MZ1bg_len = 0;
+    Level_MZ2 = NULL;
+    Level_MZ2_len = 0;
+    Level_MZ2bg = NULL;
+    Level_MZ2bg_len = 0;
+    Level_MZ3 = NULL;
+    Level_MZ3_len = 0;
+    Level_MZ3bg = NULL;
+    Level_MZ3bg_len = 0;
+    Level_SLZ1 = NULL;
+    Level_SLZ1_len = 0;
+    Level_SLZ2 = NULL;
+    Level_SLZ2_len = 0;
+    Level_SLZ3 = NULL;
+    Level_SLZ3_len = 0;
+    Level_SLZbg = NULL;
+    Level_SLZbg_len = 0;
+    Level_SYZ1 = NULL;
+    Level_SYZ1_len = 0;
+    Level_SYZ2 = NULL;
+    Level_SYZ2_len = 0;
+    Level_SYZ3 = NULL;
+    Level_SYZ3_len = 0;
+    Level_SYZbg = NULL;
+    Level_SYZbg_len = 0;
+    Level_SBZ1 = NULL;
+    Level_SBZ1_len = 0;
+    Level_SBZ1bg = NULL;
+    Level_SBZ1bg_len = 0;
+    Level_SBZ2 = NULL;
+    Level_SBZ2_len = 0;
+    Level_SBZ2bg = NULL;
+    Level_SBZ2bg_len = 0;
+    Level_End = NULL;
+    Level_End_len = 0;
     Nem_TitleCard = NULL;
     Nem_TitleCard_len = 0;
     Map_Card = NULL;
@@ -785,6 +989,67 @@ int Data_Init(void) {
     if (load_asset("palette/ghz.bin", &Pal_GHZ, &Pal_GHZ_len) != 0) {
         Pal_GHZ = NULL;
         Pal_GHZ_len = 0;
+    }
+
+    if (load_asset("palette/lz.bin", &Pal_LZ, &Pal_LZ_len) != 0) {
+        Pal_LZ = NULL;
+        Pal_LZ_len = 0;
+    }
+    if (load_asset("palette/lz_underwater.bin", &Pal_LZWater, &Pal_LZWater_len) != 0) {
+        Pal_LZWater = NULL;
+        Pal_LZWater_len = 0;
+    }
+    if (load_asset("palette/sonic_lz_underwater.bin", &Pal_LZSonWater, &Pal_LZSonWater_len) != 0) {
+        Pal_LZSonWater = NULL;
+        Pal_LZSonWater_len = 0;
+    }
+    if (load_asset("palette/mz.bin", &Pal_MZ, &Pal_MZ_len) != 0) {
+        Pal_MZ = NULL;
+        Pal_MZ_len = 0;
+    }
+    if (load_asset("palette/slz.bin", &Pal_SLZ, &Pal_SLZ_len) != 0) {
+        Pal_SLZ = NULL;
+        Pal_SLZ_len = 0;
+    }
+    if (load_asset("palette/syz.bin", &Pal_SYZ, &Pal_SYZ_len) != 0) {
+        Pal_SYZ = NULL;
+        Pal_SYZ_len = 0;
+    }
+    if (load_asset("palette/sbz1.bin", &Pal_SBZ1, &Pal_SBZ1_len) != 0) {
+        Pal_SBZ1 = NULL;
+        Pal_SBZ1_len = 0;
+    }
+    if (load_asset("palette/sbz2.bin", &Pal_SBZ2, &Pal_SBZ2_len) != 0) {
+        Pal_SBZ2 = NULL;
+        Pal_SBZ2_len = 0;
+    }
+    if (load_asset("palette/sbz3.bin", &Pal_SBZ3, &Pal_SBZ3_len) != 0) {
+        Pal_SBZ3 = NULL;
+        Pal_SBZ3_len = 0;
+    }
+    if (load_asset("palette/sbz3_underwater.bin", &Pal_SBZ3Water, &Pal_SBZ3Water_len) != 0) {
+        Pal_SBZ3Water = NULL;
+        Pal_SBZ3Water_len = 0;
+    }
+    if (load_asset("palette/sonic_sbz3_underwater.bin", &Pal_SBZ3SonWat, &Pal_SBZ3SonWat_len) != 0) {
+        Pal_SBZ3SonWat = NULL;
+        Pal_SBZ3SonWat_len = 0;
+    }
+    if (load_asset("palette/special.bin", &Pal_Special, &Pal_Special_len) != 0) {
+        Pal_Special = NULL;
+        Pal_Special_len = 0;
+    }
+    if (load_asset("palette/ss_result.bin", &Pal_SSResult, &Pal_SSResult_len) != 0) {
+        Pal_SSResult = NULL;
+        Pal_SSResult_len = 0;
+    }
+    if (load_asset("palette/continue.bin", &Pal_Continue, &Pal_Continue_len) != 0) {
+        Pal_Continue = NULL;
+        Pal_Continue_len = 0;
+    }
+    if (load_asset("palette/ending.bin", &Pal_Ending, &Pal_Ending_len) != 0) {
+        Pal_Ending = NULL;
+        Pal_Ending_len = 0;
     }
 
     if (load_asset("artnem/title_fg.nem", &Nem_TitleFg, &Nem_TitleFg_len) != 0) {
@@ -1492,6 +1757,56 @@ int Data_Init(void) {
         Blk256_GHZ_len = 0;
     }
 
+    if (load_asset("map16/lz.eni", &Blk16_LZ, &Blk16_LZ_len) != 0) {
+        Blk16_LZ = NULL;
+        Blk16_LZ_len = 0;
+    }
+
+    if (load_asset("map256/lz.kos", &Blk256_LZ, &Blk256_LZ_len) != 0) {
+        Blk256_LZ = NULL;
+        Blk256_LZ_len = 0;
+    }
+
+    if (load_asset("map16/mz.eni", &Blk16_MZ, &Blk16_MZ_len) != 0) {
+        Blk16_MZ = NULL;
+        Blk16_MZ_len = 0;
+    }
+
+    if (load_asset("map256/mz.kos", &Blk256_MZ, &Blk256_MZ_len) != 0) {
+        Blk256_MZ = NULL;
+        Blk256_MZ_len = 0;
+    }
+
+    if (load_asset("map16/slz.eni", &Blk16_SLZ, &Blk16_SLZ_len) != 0) {
+        Blk16_SLZ = NULL;
+        Blk16_SLZ_len = 0;
+    }
+
+    if (load_asset("map256/slz.kos", &Blk256_SLZ, &Blk256_SLZ_len) != 0) {
+        Blk256_SLZ = NULL;
+        Blk256_SLZ_len = 0;
+    }
+
+    if (load_asset("map16/syz.eni", &Blk16_SYZ, &Blk16_SYZ_len) != 0) {
+        Blk16_SYZ = NULL;
+        Blk16_SYZ_len = 0;
+    }
+
+    if (load_asset("map256/syz.kos", &Blk256_SYZ, &Blk256_SYZ_len) != 0) {
+        Blk256_SYZ = NULL;
+        Blk256_SYZ_len = 0;
+    }
+
+    if (load_asset("map16/sbz.eni", &Blk16_SBZ, &Blk16_SBZ_len) != 0) {
+        Blk16_SBZ = NULL;
+        Blk16_SBZ_len = 0;
+    }
+
+    if (load_asset("map256/sbz.kos", &Blk256_SBZ, &Blk256_SBZ_len) != 0) {
+        Blk256_SBZ = NULL;
+        Blk256_SBZ_len = 0;
+    }
+
     if (load_asset("levels/ghz1.bin", &Level_GHZ1, &Level_GHZ1_len) != 0) {
         Level_GHZ1 = NULL;
         Level_GHZ1_len = 0;
@@ -1500,6 +1815,111 @@ int Data_Init(void) {
     if (load_asset("levels/ghzbg.bin", &Level_GHZbg, &Level_GHZbg_len) != 0) {
         Level_GHZbg = NULL;
         Level_GHZbg_len = 0;
+    }
+
+    if (load_asset("levels/ghz2.bin", &Level_GHZ2, &Level_GHZ2_len) != 0) {
+        Level_GHZ2 = NULL;
+        Level_GHZ2_len = 0;
+    }
+    if (load_asset("levels/ghz3.bin", &Level_GHZ3, &Level_GHZ3_len) != 0) {
+        Level_GHZ3 = NULL;
+        Level_GHZ3_len = 0;
+    }
+    if (load_asset("levels/lz1.bin", &Level_LZ1, &Level_LZ1_len) != 0) {
+        Level_LZ1 = NULL;
+        Level_LZ1_len = 0;
+    }
+    if (load_asset("levels/lz2.bin", &Level_LZ2, &Level_LZ2_len) != 0) {
+        Level_LZ2 = NULL;
+        Level_LZ2_len = 0;
+    }
+    if (load_asset("levels/lz3.bin", &Level_LZ3, &Level_LZ3_len) != 0) {
+        Level_LZ3 = NULL;
+        Level_LZ3_len = 0;
+    }
+    if (load_asset("levels/lzbg.bin", &Level_LZbg, &Level_LZbg_len) != 0) {
+        Level_LZbg = NULL;
+        Level_LZbg_len = 0;
+    }
+    if (load_asset("levels/sbz3.bin", &Level_SBZ3, &Level_SBZ3_len) != 0) {
+        Level_SBZ3 = NULL;
+        Level_SBZ3_len = 0;
+    }
+    if (load_asset("levels/mz1.bin", &Level_MZ1, &Level_MZ1_len) != 0) {
+        Level_MZ1 = NULL;
+        Level_MZ1_len = 0;
+    }
+    if (load_asset("levels/mz1bg.bin", &Level_MZ1bg, &Level_MZ1bg_len) != 0) {
+        Level_MZ1bg = NULL;
+        Level_MZ1bg_len = 0;
+    }
+    if (load_asset("levels/mz2.bin", &Level_MZ2, &Level_MZ2_len) != 0) {
+        Level_MZ2 = NULL;
+        Level_MZ2_len = 0;
+    }
+    if (load_asset("levels/mz2bg.bin", &Level_MZ2bg, &Level_MZ2bg_len) != 0) {
+        Level_MZ2bg = NULL;
+        Level_MZ2bg_len = 0;
+    }
+    if (load_asset("levels/mz3.bin", &Level_MZ3, &Level_MZ3_len) != 0) {
+        Level_MZ3 = NULL;
+        Level_MZ3_len = 0;
+    }
+    if (load_asset("levels/mz3bg.bin", &Level_MZ3bg, &Level_MZ3bg_len) != 0) {
+        Level_MZ3bg = NULL;
+        Level_MZ3bg_len = 0;
+    }
+    if (load_asset("levels/slz1.bin", &Level_SLZ1, &Level_SLZ1_len) != 0) {
+        Level_SLZ1 = NULL;
+        Level_SLZ1_len = 0;
+    }
+    if (load_asset("levels/slz2.bin", &Level_SLZ2, &Level_SLZ2_len) != 0) {
+        Level_SLZ2 = NULL;
+        Level_SLZ2_len = 0;
+    }
+    if (load_asset("levels/slz3.bin", &Level_SLZ3, &Level_SLZ3_len) != 0) {
+        Level_SLZ3 = NULL;
+        Level_SLZ3_len = 0;
+    }
+    if (load_asset("levels/slzbg.bin", &Level_SLZbg, &Level_SLZbg_len) != 0) {
+        Level_SLZbg = NULL;
+        Level_SLZbg_len = 0;
+    }
+    if (load_asset("levels/syz1.bin", &Level_SYZ1, &Level_SYZ1_len) != 0) {
+        Level_SYZ1 = NULL;
+        Level_SYZ1_len = 0;
+    }
+    if (load_asset("levels/syz2.bin", &Level_SYZ2, &Level_SYZ2_len) != 0) {
+        Level_SYZ2 = NULL;
+        Level_SYZ2_len = 0;
+    }
+    if (load_asset("levels/syz3.bin", &Level_SYZ3, &Level_SYZ3_len) != 0) {
+        Level_SYZ3 = NULL;
+        Level_SYZ3_len = 0;
+    }
+    if (load_asset("levels/syzbg.bin", &Level_SYZbg, &Level_SYZbg_len) != 0) {
+        Level_SYZbg = NULL;
+        Level_SYZbg_len = 0;
+    }
+    if (load_asset("levels/sbz1.bin", &Level_SBZ1, &Level_SBZ1_len) != 0) {
+        Level_SBZ1 = NULL;
+        Level_SBZ1_len = 0;
+    }
+    if (load_asset("levels/sbz1bg.bin", &Level_SBZ1bg, &Level_SBZ1bg_len) != 0) {
+        Level_SBZ1bg = NULL;
+        Level_SBZ1bg_len = 0;
+    }
+    if (load_asset("levels/sbz2.bin", &Level_SBZ2, &Level_SBZ2_len) != 0) {
+        Level_SBZ2 = NULL;
+        Level_SBZ2_len = 0;
+    }
+    if (load_asset("levels/sbz2bg.bin", &Level_SBZ2bg, &Level_SBZ2bg_len) != 0) {
+        Level_SBZ2bg = NULL;
+        Level_SBZ2bg_len = 0;
+    }
+    if (load_asset("levels/ending.bin", &Level_End, &Level_End_len) != 0) {
+        Level_End = NULL;
+        Level_End_len = 0;
     }
 
     if (load_asset("artnem/hud.nem", &Nem_Hud, &Nem_Hud_len) != 0) {
@@ -1612,9 +2032,106 @@ int Data_Init(void) {
         ObjPos_GHZ1_len = 0;
     }
 
+    if (load_asset("objpos/ghz2.bin", &ObjPos_GHZ2, &ObjPos_GHZ2_len) != 0) {
+        ObjPos_GHZ2 = NULL;
+        ObjPos_GHZ2_len = 0;
+    }
+    if (load_asset("objpos/ghz3.bin", &ObjPos_GHZ3, &ObjPos_GHZ3_len) != 0) {
+        ObjPos_GHZ3 = NULL;
+        ObjPos_GHZ3_len = 0;
+    }
+    if (load_asset("objpos/lz1.bin", &ObjPos_LZ1, &ObjPos_LZ1_len) != 0) {
+        ObjPos_LZ1 = NULL;
+        ObjPos_LZ1_len = 0;
+    }
+    if (load_asset("objpos/lz2.bin", &ObjPos_LZ2, &ObjPos_LZ2_len) != 0) {
+        ObjPos_LZ2 = NULL;
+        ObjPos_LZ2_len = 0;
+    }
+    if (load_asset("objpos/lz3.bin", &ObjPos_LZ3, &ObjPos_LZ3_len) != 0) {
+        ObjPos_LZ3 = NULL;
+        ObjPos_LZ3_len = 0;
+    }
+    if (load_asset("objpos/sbz3.bin", &ObjPos_SBZ3, &ObjPos_SBZ3_len) != 0) {
+        ObjPos_SBZ3 = NULL;
+        ObjPos_SBZ3_len = 0;
+    }
+    if (load_asset("objpos/mz1.bin", &ObjPos_MZ1, &ObjPos_MZ1_len) != 0) {
+        ObjPos_MZ1 = NULL;
+        ObjPos_MZ1_len = 0;
+    }
+    if (load_asset("objpos/mz2.bin", &ObjPos_MZ2, &ObjPos_MZ2_len) != 0) {
+        ObjPos_MZ2 = NULL;
+        ObjPos_MZ2_len = 0;
+    }
+    if (load_asset("objpos/mz3.bin", &ObjPos_MZ3, &ObjPos_MZ3_len) != 0) {
+        ObjPos_MZ3 = NULL;
+        ObjPos_MZ3_len = 0;
+    }
+    if (load_asset("objpos/slz1.bin", &ObjPos_SLZ1, &ObjPos_SLZ1_len) != 0) {
+        ObjPos_SLZ1 = NULL;
+        ObjPos_SLZ1_len = 0;
+    }
+    if (load_asset("objpos/slz2.bin", &ObjPos_SLZ2, &ObjPos_SLZ2_len) != 0) {
+        ObjPos_SLZ2 = NULL;
+        ObjPos_SLZ2_len = 0;
+    }
+    if (load_asset("objpos/slz3.bin", &ObjPos_SLZ3, &ObjPos_SLZ3_len) != 0) {
+        ObjPos_SLZ3 = NULL;
+        ObjPos_SLZ3_len = 0;
+    }
+    if (load_asset("objpos/syz1.bin", &ObjPos_SYZ1, &ObjPos_SYZ1_len) != 0) {
+        ObjPos_SYZ1 = NULL;
+        ObjPos_SYZ1_len = 0;
+    }
+    if (load_asset("objpos/syz2.bin", &ObjPos_SYZ2, &ObjPos_SYZ2_len) != 0) {
+        ObjPos_SYZ2 = NULL;
+        ObjPos_SYZ2_len = 0;
+    }
+    if (load_asset("objpos/syz3.bin", &ObjPos_SYZ3, &ObjPos_SYZ3_len) != 0) {
+        ObjPos_SYZ3 = NULL;
+        ObjPos_SYZ3_len = 0;
+    }
+    if (load_asset("objpos/sbz1.bin", &ObjPos_SBZ1, &ObjPos_SBZ1_len) != 0) {
+        ObjPos_SBZ1 = NULL;
+        ObjPos_SBZ1_len = 0;
+    }
+    if (load_asset("objpos/sbz2.bin", &ObjPos_SBZ2, &ObjPos_SBZ2_len) != 0) {
+        ObjPos_SBZ2 = NULL;
+        ObjPos_SBZ2_len = 0;
+    }
+    if (load_asset("objpos/fz.bin", &ObjPos_FZ, &ObjPos_FZ_len) != 0) {
+        ObjPos_FZ = NULL;
+        ObjPos_FZ_len = 0;
+    }
+    if (load_asset("objpos/ending.bin", &ObjPos_End, &ObjPos_End_len) != 0) {
+        ObjPos_End = NULL;
+        ObjPos_End_len = 0;
+    }
+
     if (load_asset("collide/GHZ.bin", &Col_GHZ, &Col_GHZ_len) != 0) {
         Col_GHZ = NULL;
         Col_GHZ_len = 0;
+    }
+    if (load_asset("collide/LZ.bin", &Col_LZ, &Col_LZ_len) != 0) {
+        Col_LZ = NULL;
+        Col_LZ_len = 0;
+    }
+    if (load_asset("collide/MZ.bin", &Col_MZ, &Col_MZ_len) != 0) {
+        Col_MZ = NULL;
+        Col_MZ_len = 0;
+    }
+    if (load_asset("collide/SLZ.bin", &Col_SLZ, &Col_SLZ_len) != 0) {
+        Col_SLZ = NULL;
+        Col_SLZ_len = 0;
+    }
+    if (load_asset("collide/SYZ.bin", &Col_SYZ, &Col_SYZ_len) != 0) {
+        Col_SYZ = NULL;
+        Col_SYZ_len = 0;
+    }
+    if (load_asset("collide/SBZ.bin", &Col_SBZ, &Col_SBZ_len) != 0) {
+        Col_SBZ = NULL;
+        Col_SBZ_len = 0;
     }
 
     if (load_asset("artunc/GHZ Waterfall.unc", &Art_GhzWater, &Art_GhzWater_len) != 0) {
@@ -1691,7 +2208,6 @@ int Data_Init(void) {
             "startpos/slz1.bin", "startpos/slz2.bin", "startpos/slz3.bin", NULL,
             "startpos/syz1.bin", "startpos/syz2.bin", "startpos/syz3.bin", NULL,
             "startpos/sbz1.bin", "startpos/sbz2.bin", "startpos/fz.bin", NULL,
-            NULL, NULL, NULL, NULL,
             "startpos/end1.bin", "startpos/end2.bin", NULL, NULL,
         };
         size_t total = 28 * 4;
@@ -1710,7 +2226,9 @@ int Data_Init(void) {
                     buf[off++] = 0xA8;
                 } else {
                     size_t len;
-                    const uint8_t *tmp = Assets_Load(startloc_files[i], &len);
+                    char fullpath[PATH_MAX + 512];
+                    snprintf(fullpath, sizeof(fullpath), "%s/%s", assets_base_path(), startloc_files[i]);
+                    const uint8_t *tmp = Assets_Load(fullpath, &len);
                     if (!tmp || len < 4) { ok = 0; break; }
                     memcpy(buf + off, tmp, 4);
                     free((void *)tmp);
@@ -1731,13 +2249,13 @@ int Data_Init(void) {
     {
         static const char * const ending_files[] = {
             "startpos/Credits Demos/ghz1 (Credits demo 1).bin",
-            "startpos/Credits Demos/ghz1 (Credits demo 2).bin",
-            "startpos/Credits Demos/lz3 (Credits demo).bin",
             "startpos/Credits Demos/mz2 (Credits demo).bin",
+            "startpos/Credits Demos/syz3 (Credits demo).bin",
+            "startpos/Credits Demos/lz3 (Credits demo).bin",
+            "startpos/Credits Demos/slz3 (Credits demo).bin",
             "startpos/Credits Demos/sbz1 (Credits demo).bin",
             "startpos/Credits Demos/sbz2 (Credits demo).bin",
-            "startpos/Credits Demos/slz3 (Credits demo).bin",
-            "startpos/Credits Demos/syz3 (Credits demo).bin",
+            "startpos/Credits Demos/ghz1 (Credits demo 2).bin",
         };
         size_t total = 8 * 4;
         uint8_t *buf = (uint8_t *)malloc(total);
@@ -1749,7 +2267,9 @@ int Data_Init(void) {
             int ok = 1;
             for (int i = 0; i < 8; i++) {
                 size_t len;
-                const uint8_t *tmp = Assets_Load(ending_files[i], &len);
+                char fullpath[PATH_MAX + 512];
+                snprintf(fullpath, sizeof(fullpath), "%s/%s", assets_base_path(), ending_files[i]);
+                const uint8_t *tmp = Assets_Load(fullpath, &len);
                 if (!tmp || len < 4) { ok = 0; break; }
                 memcpy(buf + off, tmp, 4);
                 free((void *)tmp);
@@ -1785,6 +2305,21 @@ void Data_Quit(void) {
     FREE_ASSET(Pal_LevelSel);
     FREE_ASSET(Pal_Sonic);
     FREE_ASSET(Pal_GHZ);
+    FREE_ASSET(Pal_LZ);
+    FREE_ASSET(Pal_LZWater);
+    FREE_ASSET(Pal_LZSonWater);
+    FREE_ASSET(Pal_MZ);
+    FREE_ASSET(Pal_SLZ);
+    FREE_ASSET(Pal_SYZ);
+    FREE_ASSET(Pal_SBZ1);
+    FREE_ASSET(Pal_SBZ2);
+    FREE_ASSET(Pal_SBZ3);
+    FREE_ASSET(Pal_SBZ3Water);
+    FREE_ASSET(Pal_SBZ3SonWat);
+    FREE_ASSET(Pal_Special);
+    FREE_ASSET(Pal_SSResult);
+    FREE_ASSET(Pal_Continue);
+    FREE_ASSET(Pal_Ending);
     FREE_ASSET(Nem_JapNames);
     FREE_ASSET(Eni_JapNames);
     FREE_ASSET(Nem_CreditText);
@@ -1794,6 +2329,16 @@ void Data_Quit(void) {
     FREE_ASSET(Art_Text);
     FREE_ASSET(Blk16_GHZ);
     FREE_ASSET(Blk256_GHZ);
+    FREE_ASSET(Blk16_LZ);
+    FREE_ASSET(Blk256_LZ);
+    FREE_ASSET(Blk16_MZ);
+    FREE_ASSET(Blk256_MZ);
+    FREE_ASSET(Blk16_SLZ);
+    FREE_ASSET(Blk256_SLZ);
+    FREE_ASSET(Blk16_SYZ);
+    FREE_ASSET(Blk256_SYZ);
+    FREE_ASSET(Blk16_SBZ);
+    FREE_ASSET(Blk256_SBZ);
     FREE_ASSET(Eni_Title);
     FREE_ASSET(Nem_GHZ_1st);
     FREE_ASSET(Nem_GHZ_2nd);
@@ -1959,7 +2504,59 @@ void Data_Quit(void) {
     MUNMAP_ASSET(Map_Animal3);
     MUNMAP_ASSET(Map_Points);
     FREE_ASSET(ObjPos_GHZ1);
+    FREE_ASSET(ObjPos_GHZ2);
+    FREE_ASSET(ObjPos_GHZ3);
+    FREE_ASSET(ObjPos_LZ1);
+    FREE_ASSET(ObjPos_LZ2);
+    FREE_ASSET(ObjPos_LZ3);
+    FREE_ASSET(ObjPos_SBZ3);
+    FREE_ASSET(ObjPos_MZ1);
+    FREE_ASSET(ObjPos_MZ2);
+    FREE_ASSET(ObjPos_MZ3);
+    FREE_ASSET(ObjPos_SLZ1);
+    FREE_ASSET(ObjPos_SLZ2);
+    FREE_ASSET(ObjPos_SLZ3);
+    FREE_ASSET(ObjPos_SYZ1);
+    FREE_ASSET(ObjPos_SYZ2);
+    FREE_ASSET(ObjPos_SYZ3);
+    FREE_ASSET(ObjPos_SBZ1);
+    FREE_ASSET(ObjPos_SBZ2);
+    FREE_ASSET(ObjPos_FZ);
+    FREE_ASSET(ObjPos_End);
     FREE_ASSET(Col_GHZ);
+    FREE_ASSET(Col_LZ);
+    FREE_ASSET(Col_MZ);
+    FREE_ASSET(Col_SLZ);
+    FREE_ASSET(Col_SYZ);
+    FREE_ASSET(Col_SBZ);
+    FREE_ASSET(Level_GHZ1);
+    FREE_ASSET(Level_GHZ2);
+    FREE_ASSET(Level_GHZ3);
+    FREE_ASSET(Level_GHZbg);
+    FREE_ASSET(Level_LZ1);
+    FREE_ASSET(Level_LZ2);
+    FREE_ASSET(Level_LZ3);
+    FREE_ASSET(Level_LZbg);
+    FREE_ASSET(Level_SBZ3);
+    FREE_ASSET(Level_MZ1);
+    FREE_ASSET(Level_MZ1bg);
+    FREE_ASSET(Level_MZ2);
+    FREE_ASSET(Level_MZ2bg);
+    FREE_ASSET(Level_MZ3);
+    FREE_ASSET(Level_MZ3bg);
+    FREE_ASSET(Level_SLZ1);
+    FREE_ASSET(Level_SLZ2);
+    FREE_ASSET(Level_SLZ3);
+    FREE_ASSET(Level_SLZbg);
+    FREE_ASSET(Level_SYZ1);
+    FREE_ASSET(Level_SYZ2);
+    FREE_ASSET(Level_SYZ3);
+    FREE_ASSET(Level_SYZbg);
+    FREE_ASSET(Level_SBZ1);
+    FREE_ASSET(Level_SBZ1bg);
+    FREE_ASSET(Level_SBZ2);
+    FREE_ASSET(Level_SBZ2bg);
+    FREE_ASSET(Level_End);
     FREE_ASSET(Art_GhzWater);
     FREE_ASSET(Art_GhzFlower1);
     FREE_ASSET(Art_GhzFlower2);
@@ -1984,23 +2581,27 @@ const uint8_t LevSelCode_J[] = {btnUp, btnDn, btnL, btnR, 0, 0xFF};
 const uint32_t LevSelCode_J_len = 6;
 
 const uint16_t LevSel_Ptrs[] = {
-  0x0000, 0x0100, 0x0200, 0x0300, 0x0400, 0x0500, 0x0600, 0x0700,
-  0x0800, 0x0900, 0x0A00, 0x0B00, 0x0C00, 0x0D00, 0x0E00, 0x0F00,
-  0x1000, 0x1100, 0x1200, 0x1300, 0x1400, 0x1500, 0x1600, 0x1700,
-  0x1800, 0x1900, 0x1A00, 0x1B00, 0x1C00, 0x1D00, 0x1E00, 0x1F00,
-  0x2000, 0x2100, 0x2200, 0x2300, 0x2400, 0x2500, 0x2600, 0x2700,
-  0x2800, 0x2900, 0x2A00, 0x2B00, 0x2C00, 0x2D00, 0x2E00, 0x2F00,
-  0x3000, 0x3100, 0x3200, 0x3300, 0x3400, 0x3500, 0x3600, 0x3700,
-  0x3800, 0x3900, 0x3A00, 0x3B00, 0x3C00, 0x3D00, 0x3E00, 0x3F00,
-  0x4000, 0x4100, 0x4200, 0x4300, 0x4400, 0x4500, 0x4600, 0x4700,
-  0x4800, 0x4900, 0x4A00, 0x4B00, 0x4C00, 0x4D00, 0x4E00, 0x4F00,
-  0x5000, 0x5100, 0x5200, 0x5300, 0x5400, 0x5500, 0x5600, 0x5700,
-  0x5800, 0x5900, 0x5A00, 0x5B00, 0x5C00, 0x5D00, 0x5E00, 0x5F00,
-  0x6000, 0x6100, 0x6200, 0x6300, 0x6400, 0x6500, 0x6600, 0x6700,
-  0x6800, 0x6900, 0x6A00, 0x6B00, 0x6C00, 0x6D00, 0x6E00, 0x6F00,
-  0x7000, 0x7100, 0x7200, 0x7300, 0x7400, 0x7500, 0x7600, 0x7700,
-  0x7800, 0x7900, 0x7A00, 0x7B00, 0x7C00, 0x7D00, 0x7E00, 0x7F00,
-  0x8000 | id_SS, 0x8100 | id_SS
+    id_GHZ_act1,
+    id_GHZ_act2,
+    id_GHZ_act3,
+    id_MZ_act1,
+    id_MZ_act2,
+    id_MZ_act3,
+    id_SYZ_act1,
+    id_SYZ_act2,
+    id_SYZ_act3,
+    id_LZ_act1,
+    id_LZ_act2,
+    id_LZ_act3,
+    id_SLZ_act1,
+    id_SLZ_act2,
+    id_SLZ_act3,
+    id_SBZ_act1,
+    id_SBZ_act2,
+    id_LZ_act4,            /* Scrap Brain Zone 3 */
+    id_FZ,                 /* Final Zone */
+    (uint16_t)(id_SS << 8), /* Special Stage (dummy value) */
+    0x8000                 /* Sound Test */
 };
 const uint32_t LevSel_Ptrs_len = sizeof(LevSel_Ptrs);
 

@@ -23,7 +23,7 @@ typedef struct {
     uint16_t       count;             /* longwords - 1 */
 } PalEntry;
 
-static PalEntry pal_index[8];
+static PalEntry pal_index[20];
 
 /* Number of longwords minus 1 for a palette buffer of `len` bytes, exactly
    like the ASM (makePalEntry: "(end-start)/4-1"). 0 for empty data. */
@@ -32,6 +32,7 @@ static uint16_t pal_count(size_t len) {
 }
 
 void Palette_Init(void) {
+    /* Pal_Index — 1:1 with disasm/_inc/Palette Index.asm */
     pal_index[0].data = Pal_SegaBG;
     pal_index[0].target_ram_offset = v_palette_line_1;
     pal_index[0].count = pal_count(Pal_SegaBG_len);
@@ -48,9 +49,69 @@ void Palette_Init(void) {
     pal_index[3].target_ram_offset = v_palette_line_1;
     pal_index[3].count = pal_count(Pal_Sonic_len);
 
-    pal_index[4].data = Pal_GHZ;            /* palid_GHZ */
+    pal_index[4].data = Pal_GHZ;
     pal_index[4].target_ram_offset = v_palette_line_2;
     pal_index[4].count = pal_count(Pal_GHZ_len);
+
+    pal_index[5].data = Pal_LZ;
+    pal_index[5].target_ram_offset = v_palette_line_2;
+    pal_index[5].count = pal_count(Pal_LZ_len);
+
+    pal_index[6].data = Pal_MZ;
+    pal_index[6].target_ram_offset = v_palette_line_2;
+    pal_index[6].count = pal_count(Pal_MZ_len);
+
+    pal_index[7].data = Pal_SLZ;
+    pal_index[7].target_ram_offset = v_palette_line_2;
+    pal_index[7].count = pal_count(Pal_SLZ_len);
+
+    pal_index[8].data = Pal_SYZ;
+    pal_index[8].target_ram_offset = v_palette_line_2;
+    pal_index[8].count = pal_count(Pal_SYZ_len);
+
+    pal_index[9].data = Pal_SBZ1;
+    pal_index[9].target_ram_offset = v_palette_line_2;
+    pal_index[9].count = pal_count(Pal_SBZ1_len);
+
+    pal_index[10].data = Pal_Special;
+    pal_index[10].target_ram_offset = v_palette_line_1;
+    pal_index[10].count = pal_count(Pal_Special_len);
+
+    pal_index[11].data = Pal_LZWater;
+    pal_index[11].target_ram_offset = v_palette_line_1;
+    pal_index[11].count = pal_count(Pal_LZWater_len);
+
+    pal_index[12].data = Pal_SBZ3;
+    pal_index[12].target_ram_offset = v_palette_line_2;
+    pal_index[12].count = pal_count(Pal_SBZ3_len);
+
+    pal_index[13].data = Pal_SBZ3Water;
+    pal_index[13].target_ram_offset = v_palette_line_1;
+    pal_index[13].count = pal_count(Pal_SBZ3Water_len);
+
+    pal_index[14].data = Pal_SBZ2;
+    pal_index[14].target_ram_offset = v_palette_line_2;
+    pal_index[14].count = pal_count(Pal_SBZ2_len);
+
+    pal_index[15].data = Pal_LZSonWater;
+    pal_index[15].target_ram_offset = v_palette_line_1;
+    pal_index[15].count = pal_count(Pal_LZSonWater_len);
+
+    pal_index[16].data = Pal_SBZ3SonWat;
+    pal_index[16].target_ram_offset = v_palette_line_1;
+    pal_index[16].count = pal_count(Pal_SBZ3SonWat_len);
+
+    pal_index[17].data = Pal_SSResult;
+    pal_index[17].target_ram_offset = v_palette_line_1;
+    pal_index[17].count = pal_count(Pal_SSResult_len);
+
+    pal_index[18].data = Pal_Continue;
+    pal_index[18].target_ram_offset = v_palette_line_1;
+    pal_index[18].count = pal_count(Pal_Continue_len);
+
+    pal_index[19].data = Pal_Ending;
+    pal_index[19].target_ram_offset = v_palette_line_1;
+    pal_index[19].count = pal_count(Pal_Ending_len);
 }
 
 void PalLoad(int index) {

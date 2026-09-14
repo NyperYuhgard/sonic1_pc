@@ -524,7 +524,7 @@ static void DLE_LZ(void) {
         if (cam_int(0xF700) >= 0xD00 && obY(&ram[v_player]) < 0x18) {
             RAM_BYTE(v_lastlamp) = 0;
             f_restart = 1;
-            v_zone_act = id_FZ;
+            RAM_SET_U16(0xFE10, id_FZ);
             f_playerctrl = 1;
         }
         return;

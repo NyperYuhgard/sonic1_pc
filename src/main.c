@@ -427,7 +427,7 @@ static void GM_Title_Screen(void) {
         v_debuguse = 0;
         f_demo = 0;
         v_unused2 = 0;
-        v_zone_act = id_GHZ_act1;
+        RAM_SET_U16(0xFE10, id_GHZ_act1);
         v_pcyc_time = 0;
 
         LevelSizeLoad();
@@ -625,7 +625,7 @@ static void GM_Title_Screen(void) {
                         int sound = v_levselsound + 0x80;
                         if (f_creditscheat && sound == 0x9F) {
                             v_gamemode = GM_Ending;
-                            v_zone_act = id_EndZ_good;
+                            RAM_SET_U16(0xFE10, id_EndZ_good);
                             return;
                         }
                         if (f_creditscheat && sound == 0x9E) {
@@ -639,9 +639,9 @@ static void GM_Title_Screen(void) {
                         uint16_t sel = v_levselitem;
                         if (sel < LevSel_Ptrs_len / 2) {
                             uint16_t ptr = LevSel_Ptrs[sel];
-                            if (ptr == (0x8000 | id_SS)) {
+                            if (ptr == (id_SS << 8)) {
                                 v_gamemode = GM_Special;
-                                v_zone_act = 0;
+                                RAM_SET_U16(0xFE10, 0);
                                 v_lives = 3;
                                 v_rings = 0;
                                 v_time = 0;
@@ -649,7 +649,7 @@ static void GM_Title_Screen(void) {
                                 v_scorelife = 5000;   /* Revision<>0 */
                                 return;
                             }
-                            v_zone_act = ptr & 0x3FFF;
+                            RAM_SET_U16(0xFE10, ptr & 0x3FFF);
                             break;
                         }
                     }
@@ -781,16 +781,16 @@ static const char *level_texts[levsel_line_count] = {
     "GREEN HILL ZONE  STAGE 1",
     "                 STAGE 2",
     "                 STAGE 3",
-    "LABYRINTH ZONE   STAGE 1",
-    "                 STAGE 2",
-    "                 STAGE 3",
     "MARBLE ZONE      STAGE 1",
     "                 STAGE 2",
     "                 STAGE 3",
-    "STAR LIGHT ZONE  STAGE 1",
+    "SPRING YARD ZONE STAGE 1",
     "                 STAGE 2",
     "                 STAGE 3",
-    "SPRING YARD ZONE STAGE 1",
+    "LABYRINTH ZONE   STAGE 1",
+    "                 STAGE 2",
+    "                 STAGE 3",
+    "STAR LIGHT ZONE  STAGE 1",
     "                 STAGE 2",
     "                 STAGE 3",
     "SCRAP BRAIN ZONE STAGE 1",
