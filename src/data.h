@@ -131,6 +131,32 @@ extern size_t   Nem_BigFlash_len;
 
 extern const uint8_t *Nem_GhzWall2;
 extern size_t   Nem_GhzWall2_len;
+extern const uint8_t *Nem_Swing;
+extern size_t   Nem_Swing_len;
+extern const uint8_t *Nem_Bridge;
+extern size_t   Nem_Bridge_len;
+extern const uint8_t *Nem_SpikePole;
+extern size_t   Nem_SpikePole_len;
+extern const uint8_t *Nem_Ball;
+extern size_t   Nem_Ball_len;
+extern const uint8_t *Nem_GhzWall1;
+extern size_t   Nem_GhzWall1_len;
+
+/* Animal art (artnem/Animal *.nem) — used by PLC_*Animals */
+extern const uint8_t *Nem_Rabbit;
+extern size_t   Nem_Rabbit_len;
+extern const uint8_t *Nem_Chicken;
+extern size_t   Nem_Chicken_len;
+extern const uint8_t *Nem_Penguin;
+extern size_t   Nem_Penguin_len;
+extern const uint8_t *Nem_Seal;
+extern size_t   Nem_Seal_len;
+extern const uint8_t *Nem_Pig;
+extern size_t   Nem_Pig_len;
+extern const uint8_t *Nem_Flicky;
+extern size_t   Nem_Flicky_len;
+extern const uint8_t *Nem_Squirrel;
+extern size_t   Nem_Squirrel_len;
 
 /* Cheat codes */
 extern const uint8_t LevSelCode_US[];

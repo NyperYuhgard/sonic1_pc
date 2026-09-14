@@ -63,12 +63,59 @@ static const plc_entry plc_GHZ[] = {
     plc_decl(Nem_VSpring, ArtTile_Spring_Vertical),
 };
 
+/* PLC_GHZ2 (plcid_GHZ2) — _inc/Pattern Load Cues.asm lines 122-129 */
 static const plc_entry plc_GHZ2[] = {
-    plc_decl(Nem_GhzWall2, ArtTile_GHZ_Edge_Wall),
+    plc_decl(Nem_Swing,     ArtTile_GHZ_MZ_Swing),
+    plc_decl(Nem_Bridge,    ArtTile_GHZ_Bridge),
+    plc_decl(Nem_SpikePole, ArtTile_GHZ_Spike_Pole),
+    plc_decl(Nem_Ball,      ArtTile_GHZ_Giant_Ball),
+    plc_decl(Nem_GhzWall1,  ArtTile_GHZ_SLZ_Smashable_Wall),
+    plc_decl(Nem_GhzWall2,  ArtTile_GHZ_Edge_Wall),
 };
 
 static const plc_entry plc_Explode[] = {
     plc_decl(Nem_Explode, ArtTile_Explosion),
+};
+
+/* PLC_GHZAnimals (plcid_GHZAnimals) — _inc/Pattern Load Cues.asm lines 343-346 */
+static const plc_entry plc_GHZAnimals[] = {
+    plc_decl(Nem_Rabbit,  ArtTile_Animal_1),
+    plc_decl(Nem_Flicky,  ArtTile_Animal_2),
+};
+
+/* PLC_LZAnimals (plcid_LZAnimals) — _inc/Pattern Load Cues.asm lines 351-354 */
+static const plc_entry plc_LZAnimals[] = {
+    plc_decl(Nem_Penguin, ArtTile_Animal_1),
+    plc_decl(Nem_Seal,    ArtTile_Animal_2),
+};
+
+/* PLC_MZAnimals (plcid_MZAnimals) — _inc/Pattern Load Cues.asm lines 359-362 */
+static const plc_entry plc_MZAnimals[] = {
+    plc_decl(Nem_Squirrel, ArtTile_Animal_1),
+    plc_decl(Nem_Seal,     ArtTile_Animal_2),
+};
+
+/* PLC_SLZAnimals (plcid_SLZAnimals) — _inc/Pattern Load Cues.asm lines 367-370 */
+static const plc_entry plc_SLZAnimals[] = {
+    plc_decl(Nem_Pig,    ArtTile_Animal_1),
+    plc_decl(Nem_Flicky, ArtTile_Animal_2),
+};
+
+/* PLC_SYZAnimals (plcid_SYZAnimals) — _inc/Pattern Load Cues.asm lines 375-378 */
+static const plc_entry plc_SYZAnimals[] = {
+    plc_decl(Nem_Pig,     ArtTile_Animal_1),
+    plc_decl(Nem_Chicken, ArtTile_Animal_2),
+};
+
+/* PLC_SBZAnimals (plcid_SBZAnimals) — _inc/Pattern Load Cues.asm lines 383-386 */
+static const plc_entry plc_SBZAnimals[] = {
+    plc_decl(Nem_Rabbit,  ArtTile_Animal_1),
+    plc_decl(Nem_Chicken, ArtTile_Animal_2),
+};
+
+/* PLC_TitleCard (plcid_TitleCard) — _inc/Pattern Load Cues.asm lines 277-279 */
+static const plc_entry plc_TitleCard[] = {
+    plc_decl(Nem_TitleCard, ArtTile_Title_Card),
 };
 
 
@@ -101,11 +148,18 @@ static const plc_list plc_index[] = {
     /* 5..7: */        { plc_GHZ2,   (int)(sizeof(plc_GHZ2) / sizeof(plc_GHZ2[0])) - 1 }, PLC_NONE, PLC_NONE,
     /* 8..11: */       PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
     /* 12..15: */      PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
-    /* 16..17: */      PLC_NONE, PLC_NONE,
+    /* 16: */          { plc_TitleCard, (int)(sizeof(plc_TitleCard) / sizeof(plc_TitleCard[0])) - 1 },
+    /* 17: */          PLC_NONE,
     /* 18: */          { plc_Signpost, (int)(sizeof(plc_Signpost) / sizeof(plc_Signpost[0])) - 1 },
     /* 19: */          PLC_NONE,
-    /* 20..23: */      PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
-    /* 24..27: */      PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
+    /* 20: */          PLC_NONE,
+    /* 21..26: */      { plc_GHZAnimals,  (int)(sizeof(plc_GHZAnimals) / sizeof(plc_GHZAnimals[0])) - 1 },
+                       { plc_LZAnimals,   (int)(sizeof(plc_LZAnimals) / sizeof(plc_LZAnimals[0])) - 1 },
+                       { plc_MZAnimals,   (int)(sizeof(plc_MZAnimals) / sizeof(plc_MZAnimals[0])) - 1 },
+                       { plc_SLZAnimals,  (int)(sizeof(plc_SLZAnimals) / sizeof(plc_SLZAnimals[0])) - 1 },
+                       { plc_SYZAnimals,  (int)(sizeof(plc_SYZAnimals) / sizeof(plc_SYZAnimals[0])) - 1 },
+                       { plc_SBZAnimals,  (int)(sizeof(plc_SBZAnimals) / sizeof(plc_SBZAnimals[0])) - 1 },
+    /* 27: */          PLC_NONE,
     /* 28..31: */      PLC_NONE, PLC_NONE, PLC_NONE, PLC_NONE,
 };
 

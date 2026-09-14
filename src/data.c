@@ -98,6 +98,22 @@ size_t   Eni_Title_len = 0;
 const uint8_t *Nem_GHZ_1st = NULL;
 size_t   Nem_GHZ_1st_len = 0;
 
+/* Animal art (artnem/Animal *.nem) — used by PLC_*Animals */
+const uint8_t *Nem_Rabbit = NULL;
+size_t   Nem_Rabbit_len = 0;
+const uint8_t *Nem_Chicken = NULL;
+size_t   Nem_Chicken_len = 0;
+const uint8_t *Nem_Penguin = NULL;
+size_t   Nem_Penguin_len = 0;
+const uint8_t *Nem_Seal = NULL;
+size_t   Nem_Seal_len = 0;
+const uint8_t *Nem_Pig = NULL;
+size_t   Nem_Pig_len = 0;
+const uint8_t *Nem_Flicky = NULL;
+size_t   Nem_Flicky_len = 0;
+const uint8_t *Nem_Squirrel = NULL;
+size_t   Nem_Squirrel_len = 0;
+
 const uint8_t *Level_GHZ1 = NULL;
 size_t   Level_GHZ1_len = 0;
 
@@ -221,6 +237,19 @@ static size_t Map_PRock_len = 0;
 /* GHZ edge walls (id_EdgeWalls)  */
 const uint8_t *Nem_GhzWall2 = NULL;
 size_t   Nem_GhzWall2_len = 0;
+
+/* GHZ2 PLC graphics (PLC_GHZ2) — swinging platform, bridge, spiked log,
+   giant ball and breakable wall */
+const uint8_t *Nem_Swing = NULL;
+size_t   Nem_Swing_len = 0;
+const uint8_t *Nem_Bridge = NULL;
+size_t   Nem_Bridge_len = 0;
+const uint8_t *Nem_SpikePole = NULL;
+size_t   Nem_SpikePole_len = 0;
+const uint8_t *Nem_Ball = NULL;
+size_t   Nem_Ball_len = 0;
+const uint8_t *Nem_GhzWall1 = NULL;
+size_t   Nem_GhzWall1_len = 0;
 
 /* Object mappings referenced by the DebugMode item lists.
    Most are unstaged (NULL) until their maps/*.asm assets are ported. */
@@ -675,6 +704,66 @@ int Data_Init(void) {
         Nem_GhzWall2_len = 0;
     }
 
+    if (load_asset("artnem/GHZ Swinging Platform.nem", &Nem_Swing, &Nem_Swing_len) != 0) {
+        Nem_Swing = NULL;
+        Nem_Swing_len = 0;
+    }
+
+    if (load_asset("artnem/GHZ Bridge.nem", &Nem_Bridge, &Nem_Bridge_len) != 0) {
+        Nem_Bridge = NULL;
+        Nem_Bridge_len = 0;
+    }
+
+    if (load_asset("artnem/GHZ Spiked Log.nem", &Nem_SpikePole, &Nem_SpikePole_len) != 0) {
+        Nem_SpikePole = NULL;
+        Nem_SpikePole_len = 0;
+    }
+
+    if (load_asset("artnem/GHZ Giant Ball.nem", &Nem_Ball, &Nem_Ball_len) != 0) {
+        Nem_Ball = NULL;
+        Nem_Ball_len = 0;
+    }
+
+    if (load_asset("artnem/GHZ Breakable Wall.nem", &Nem_GhzWall1, &Nem_GhzWall1_len) != 0) {
+        Nem_GhzWall1 = NULL;
+        Nem_GhzWall1_len = 0;
+    }
+
+    if (load_asset("artnem/rabbit.nem", &Nem_Rabbit, &Nem_Rabbit_len) != 0) {
+        Nem_Rabbit = NULL;
+        Nem_Rabbit_len = 0;
+    }
+
+    if (load_asset("artnem/chicken.nem", &Nem_Chicken, &Nem_Chicken_len) != 0) {
+        Nem_Chicken = NULL;
+        Nem_Chicken_len = 0;
+    }
+
+    if (load_asset("artnem/penguin.nem", &Nem_Penguin, &Nem_Penguin_len) != 0) {
+        Nem_Penguin = NULL;
+        Nem_Penguin_len = 0;
+    }
+
+    if (load_asset("artnem/seal.nem", &Nem_Seal, &Nem_Seal_len) != 0) {
+        Nem_Seal = NULL;
+        Nem_Seal_len = 0;
+    }
+
+    if (load_asset("artnem/pig.nem", &Nem_Pig, &Nem_Pig_len) != 0) {
+        Nem_Pig = NULL;
+        Nem_Pig_len = 0;
+    }
+
+    if (load_asset("artnem/flicky.nem", &Nem_Flicky, &Nem_Flicky_len) != 0) {
+        Nem_Flicky = NULL;
+        Nem_Flicky_len = 0;
+    }
+
+    if (load_asset("artnem/squirrel.nem", &Nem_Squirrel, &Nem_Squirrel_len) != 0) {
+        Nem_Squirrel = NULL;
+        Nem_Squirrel_len = 0;
+    }
+
     if (load_asm_asset("anim/psbtm.asm", &Ani_PSBTM, &Ani_PSBTM_len, 0) != 0) {
         Ani_PSBTM = NULL;
         Ani_PSBTM_len = 0;
@@ -1119,6 +1208,12 @@ void Data_Quit(void) {
     FREE_ASSET(Nem_GHZ_2nd);
     FREE_ASSET(Nem_Stalk);
     FREE_ASSET(Nem_PplRock);
+    FREE_ASSET(Nem_GhzWall2);
+    FREE_ASSET(Nem_Swing);
+    FREE_ASSET(Nem_Bridge);
+    FREE_ASSET(Nem_SpikePole);
+    FREE_ASSET(Nem_Ball);
+    FREE_ASSET(Nem_GhzWall1);
     FREE_ASSET(Nem_Crabmeat);
     FREE_ASSET(Nem_Buzz);
     FREE_ASSET(Nem_Chopper);
@@ -1133,6 +1228,13 @@ void Data_Quit(void) {
     FREE_ASSET(Nem_SignPost);
     FREE_ASSET(Nem_Bonus);
     FREE_ASSET(Nem_BigFlash);
+    FREE_ASSET(Nem_Rabbit);
+    FREE_ASSET(Nem_Chicken);
+    FREE_ASSET(Nem_Penguin);
+    FREE_ASSET(Nem_Seal);
+    FREE_ASSET(Nem_Pig);
+    FREE_ASSET(Nem_Flicky);
+    FREE_ASSET(Nem_Squirrel);
     FREE_ASSET(Nem_TitleCard);
     MUNMAP_ASSET(Map_Card);
     MUNMAP_ASSET(Map_Got);
