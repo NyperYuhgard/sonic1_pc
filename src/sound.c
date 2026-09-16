@@ -9,8 +9,8 @@
 /* Paths are relative to the working directory (data.c uses "./assets/%s"). */
 
 /* ---------------------------------------------------------------------------
-   Music table: bgm id -> assets/Music ogg files
-   ------------------------------------------------------------------------ */
+ *  Music table: bgm id -> assets/Music ogg files
+ *  ------------------------------------------------------------------------ */
 
 typedef struct { int id; const char *path; } snd_map_t;
 
@@ -37,8 +37,8 @@ static const snd_map_t bgm_map[] = {
 };
 
 /* ---------------------------------------------------------------------------
-   SFX table: sfx id -> assets/SoundFX/...wav
-   ------------------------------------------------------------------------ */
+ *  SFX table: sfx id -> assets/SoundFX/...wav
+ *  ------------------------------------------------------------------------ */
 
 static const snd_map_t sfx_map[] = {
     { sfx_Jump,         "assets/SoundFX/Global/Jump.wav" },
@@ -94,8 +94,8 @@ static const snd_map_t sfx_map[] = {
 static const int snd_looping_sfx[] = { sfx_Waterfall, sfx_Rumbling };
 
 /* ---------------------------------------------------------------------------
-   State
-   ------------------------------------------------------------------------ */
+ *  State
+ *  ------------------------------------------------------------------------ */
 
 #define SND_SFX_TABLE_MAX  0x100   /* one slot per sfx id (0xA0-0xE1) */
 #define SND_CHANNELS       16
@@ -105,12 +105,30 @@ static Mix_Music *snd_music     = NULL;
 static char       snd_music_path[256];
 static int        snd_music_bgm = 0;   /* bgm id of current track (0=none) */
 static int        snd_music_loop = 1;  /* loop flag of current track */
+
+/* Custom loop points read from <music>.txt (milisegundos -> segundos). */
+static double snd_music_loop_start = 0.0;
+static double snd_music_loop_end   = 0.0;
+static int    snd_music_loop_enabled = 0;
+
+/* Flags de control del loop personalizado:
+ *    snd_music_fading        = 1 mientras Mix_FadeOutMusic está en curso.
+ *                              Bloquea el hook finished (si no, el fade
+ *                              dispara el callback al terminar y revive
+ *                              la música que acabamos de apagar).
+ *    snd_music_needs_restart = el hook finished lo levanta, Sound_Update
+ *                              lo consume desde el main thread. Evita
+ *                              llamar a Mix_PlayMusic dentro del propio
+ *                              callback de SDL_mixer (riesgo de deadlock). */
+static volatile int snd_music_fading        = 0;
+static volatile int snd_music_needs_restart = 0;
+
 static Mix_Chunk *snd_chunk[SND_SFX_TABLE_MAX];
 static int        snd_ambient_channel = -1;
 
 /* ---------------------------------------------------------------------------
-   Lookup helpers
-   ------------------------------------------------------------------------ */
+ *  Lookup helpers
+ *  ------------------------------------------------------------------------ */
 
 static const char *snd_map_find(const snd_map_t *map, size_t n, int id) {
     for (size_t i = 0; i < n; i++) {
@@ -136,11 +154,64 @@ static void snd_make_fast_path(char *out, size_t n, const char *path) {
 }
 
 /* ---------------------------------------------------------------------------
-   Music
-   ------------------------------------------------------------------------ */
+ *  Music — custom loop points
+ *  ------------------------------------------------------------------------ */
+
+/* Deriva la ruta del .txt a partir de la del .ogg/.wav. */
+static void snd_derive_txt_path(char *out, size_t n, const char *music_path) {
+    snprintf(out, n, "%s", music_path);
+    char *dot = strrchr(out, '.');
+    if (dot) snprintf(dot, n - (size_t)(dot - out), ".txt");
+    else     snprintf(out + strlen(out), n - strlen(out), ".txt");
+}
+
+/* Lee loop_start_ms / loop_end_ms de <music_path>.txt.
+ *  Si no existe o está mal, deja el loop personalizado desactivado
+ *  y la música cae al loop nativo de SDL_mixer (archivo completo). */
+static void snd_load_loop_points(const char *music_path) {
+    snd_music_loop_start   = 0.0;
+    snd_music_loop_end     = 0.0;
+    snd_music_loop_enabled = 0;
+
+    char txt_path[512];
+    snd_derive_txt_path(txt_path, sizeof(txt_path), music_path);
+
+    FILE *f = fopen(txt_path, "r");
+    if (!f) return;
+
+    long long start_ms = -1, end_ms = -1;
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        long long v;
+        if (sscanf(line, "loop_start_ms=%lld", &v) == 1)      start_ms = v;
+        else if (sscanf(line, "loop_end_ms=%lld", &v) == 1)   end_ms   = v;
+    }
+    fclose(f);
+
+    if (start_ms >= 0 && end_ms > start_ms) {
+        snd_music_loop_start   = (double)start_ms / 1000.0;
+        snd_music_loop_end     = (double)end_ms   / 1000.0;
+        snd_music_loop_enabled = 1;
+        fprintf(stderr, "[Sound] Loop points for '%s': %.3f .. %.3f s\n",
+                music_path, snd_music_loop_start, snd_music_loop_end);
+    }
+}
+
+/* Hook de SDL_mixer: la música llegó al final natural del archivo.
+ *  Sólo levantamos un flag; el restart real lo hace Sound_Update desde
+ *  el main thread. Llamar a Mix_PlayMusic aquí dentro puede provocar
+ *  deadlocks en algunas versiones de SDL_mixer. */
+static void snd_music_finished_cb(void) {
+    if (snd_music_fading)        return;   /* fade en curso: no revivir */
+        if (!snd_music)              return;
+        if (!snd_music_loop)         return;
+        if (!snd_music_loop_enabled) return;
+
+        snd_music_needs_restart = 1;
+}
 
 /* Start playing a music file. Returns 0 on success, -1 on failure.
-   Does not touch the current track on failure; skips if already playing. */
+ *  Does not touch the current track on failure; skips if already playing. */
 static int snd_play_music_file(const char *path, bool loop) {
     Mix_Music *m;
 
@@ -156,7 +227,24 @@ static int snd_play_music_file(const char *path, bool loop) {
         return -1;
     }
 
-    if (Mix_PlayMusic(m, loop ? -1 : 0) == -1) {
+    /* Cargar loop points del .txt acompañante (si existe). */
+    snd_load_loop_points(path);
+
+    /* Reset de flags: al cambiar de pista cualquier fade/restart pendiente
+     *      pertenece al tema anterior y ya no aplica. */
+    snd_music_fading        = 0;
+    snd_music_needs_restart = 0;
+
+    /* Con loop personalizado, Mix_PlayMusic debe ser 0 loops:
+     *      nosotros hacemos el loop desde Sound_Update / hook.
+     *      Con loop nativo (sin .txt), dejamos que SDL_mixer loope.
+     *      Con loop=false (one-shot), siempre 0. */
+    int play_loops = 0;
+    if (loop && !snd_music_loop_enabled) {
+        play_loops = -1;
+    }
+
+    if (Mix_PlayMusic(m, play_loops) == -1) {
         fprintf(stderr, "[Sound] Failed to play '%s': %s\n", path, Mix_GetError());
         Mix_FreeMusic(m);
         return -1;
@@ -202,8 +290,8 @@ static void snd_bgm_slowdown(void) {
 }
 
 /* ---------------------------------------------------------------------------
-   SFX
-   ------------------------------------------------------------------------ */
+ *  SFX
+ *  ------------------------------------------------------------------------ */
 
 static void snd_play_sfx(int id, int loop) {
     Mix_Chunk *ch;
@@ -243,8 +331,8 @@ static void snd_play_sfx(int id, int loop) {
 }
 
 /* ---------------------------------------------------------------------------
-   Public API
-   ------------------------------------------------------------------------ */
+ *  Public API
+ *  ------------------------------------------------------------------------ */
 
 void Sound_Init(void) {
     if (snd_inited) return;
@@ -257,6 +345,7 @@ void Sound_Init(void) {
     }
 
     Mix_AllocateChannels(SND_CHANNELS);
+    Mix_HookMusicFinished(snd_music_finished_cb);
     memset(snd_chunk, 0, sizeof(snd_chunk));
     snd_inited = 1;
 }
@@ -285,7 +374,41 @@ void Sound_Quit(void) {
 }
 
 void Sound_Update(void) {
-    /* SDL_mixer runs on its own thread; nothing to do per frame. */
+    if (!snd_inited) return;
+
+    /* 1) Consumir el flag diferido del hook finished.
+     *         Hacemos el restart desde aquí (main thread, sin lock de audio). */
+    if (snd_music_needs_restart && snd_music && snd_music_loop &&
+        snd_music_loop_enabled) {
+        snd_music_needs_restart = 0;
+    if (Mix_PlayMusic(snd_music, 0) == 0) {
+        if (snd_music_loop_start > 0.001) {
+            Mix_SetMusicPosition(snd_music_loop_start);
+        }
+    }
+    return;
+        }
+
+        /* 2) Loop por polling: si pasamos el punto de loop, saltamos atrás.
+         *         Sólo aplica si hay loop personalizado activo y la música corre. */
+        if (!snd_music) return;
+        if (!snd_music_loop) return;
+        if (!snd_music_loop_enabled) return;
+        if (!Mix_PlayingMusic()) return;
+        if (Mix_FadingMusic() != MIX_NO_FADING) return;
+        if (snd_music_loop_end <= 0.0) return;
+
+        double pos = Mix_GetMusicPosition(snd_music);
+    if (pos < 0.0) return;   /* formato sin soporte de posición */
+
+        /* Margen ≈ un buffer de audio, para no llegar tarde al punto de
+         *      loop (SDL_mixer bufferiza ~4096 samples ≈ 93 ms a 44100 Hz).
+         *      Si el loop se oye corto, sube el margen; si se oye largo, bájalo. */
+        double margin = 4096.0 / 44100.0;
+
+    if (pos >= snd_music_loop_end - margin) {
+        Mix_SetMusicPosition(snd_music_loop_start);
+    }
 }
 
 void Sound_Queue(int id, bool loop) {
@@ -293,19 +416,32 @@ void Sound_Queue(int id, bool loop) {
 
     switch (id) {
         case bgm_Fade:
+            /* Marcar fade: bloquea el hook finished mientras dure.
+             *              Sin esto, al terminar el fade el callback reviviría la
+             *              música que acabamos de apagar. */
+            snd_music_fading = 1;
             Mix_FadeOutMusic(2000);
             return;
+
         case bgm_Speedup:
             snd_bgm_speedup();
             return;
+
         case bgm_Slowdown:
             snd_bgm_slowdown();
             return;
+
         case bgm_Stop:
             Mix_HaltMusic();
             snd_music_bgm = 0;
             snd_music_path[0] = 0;
+            snd_music_loop_enabled = 0;
+            snd_music_loop_start = 0.0;
+            snd_music_loop_end   = 0.0;
+            snd_music_needs_restart = 0;
+            snd_music_fading = 0;
             return;
+
         default:
             break;
     }
@@ -313,9 +449,9 @@ void Sound_Queue(int id, bool loop) {
     if (id >= bgm__First && id <= bgm__Last) {
         snd_play_bgm(id, loop);
     } else if ((id >= sfx__First && id <= sfx__Last) || id == sfx_Waterfall
-               || id == sfx_Sega) {
+        || id == sfx_Sega) {
         snd_play_sfx(id, loop ? 1 : 0);
-    } else {
-        /* 0x80, 0x94-0x9F, etc. = unused slots */
-    }
+        } else {
+            /* 0x80, 0x94-0x9F, etc. = unused slots */
+        }
 }

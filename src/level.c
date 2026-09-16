@@ -842,7 +842,7 @@ static void Level_Enter(void) {
         int d0 = v_zone;
         if (RAM_U16(0xFE10) == id_LZ_act4) d0 = 5;  /* SBZ3 uses Scrap Brain */
         else if (RAM_U16(0xFE10) == id_FZ) d0 = 6;  /* Final Zone */
-        Sound_Queue(music_list[d0], false);
+        Sound_Queue(music_list[d0], true);
     }
 
     /* Load zone title cards (move.b #id_TitleCard,(v_titlecard).w) */
