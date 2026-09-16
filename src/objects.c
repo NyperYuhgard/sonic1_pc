@@ -43,6 +43,8 @@ static void ExplosionItem_Main(void *obj);
 static void Explosion_Main(void *obj);
 static void Animals_Main(void *obj);
 static void Points_Main(void *obj);
+static void Monitor_Main(void *obj);
+static void PowerUp_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -83,6 +85,9 @@ void Objects_Init(void) {
     obj_dispatch[id_Explosion]     = Explosion_Main;
     obj_dispatch[id_Animals]       = Animals_Main;
     obj_dispatch[id_Points]        = Points_Main;
+    /* Register monitors and power-ups */
+    obj_dispatch[id_Monitor] = Monitor_Main;
+    obj_dispatch[id_PowerUp] = PowerUp_Main;
 
     /* Clear all object RAM */
     memset(ObjRAM, 0, NUM_OBJECTS * OBJECT_SIZE);
@@ -6069,4 +6074,533 @@ static void Points_Main(void *obj) {
         case 2: Poi_Slower(o); break;
     }
     DisplaySprite(o);                       /* FixBugs=0: bra.w DisplaySprite after jsr */
+}
+
+/* ===========================================================================
+   Object 26 — Monitors (id_Monitor = $26)
+   Object 2E — Monitor contents / Power-ups (id_PowerUp = $2E)
+   Ported from _incObj/26, 2E Monitors and Power-Ups.asm
+   (REV01, FixBugs=0).
+   =========================================================================== */
+
+/* Mon_SolidSides — make the sides of a monitor solid.
+   Input:  d1 = width/2, d2 = height/2
+   Output: *d0out = distance from side of monitor
+           *d3out = distance from top of monitor
+   Returns collision type: 0 = none, 1 = side, -1 = top/bottom. */
+static int16_t Mon_SolidSides(uint8_t *o, int16_t d1, int16_t d2,
+                              int16_t *d0out, int16_t *d3out) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+    int16_t d0 = (int16_t)((int16_t)obX(a1) - (int16_t)obX(o) + d1);
+    int16_t d3;
+
+    if (d0 < 0) goto no_collision;               /* bmi.s .no_collision */
+
+    d3 = (int16_t)(d1 + d1);                     /* move.w d1,d3 / add.w d3,d3 */
+    if ((uint16_t)d0 > (uint16_t)d3) goto no_collision; /* bhi.s */
+
+    d3 = (int16_t)(int8_t)obHeight(a1);          /* move.b obHeight(a1),d3 / ext.w */
+    d2 = (int16_t)(d2 + d3);                     /* add.w d3,d2 */
+    d3 = (int16_t)((int16_t)obY(a1) - (int16_t)obY(o) + d2); /* sub + add */
+    if (d3 < 0) goto no_collision;               /* bmi.s */
+    d2 = (int16_t)(d2 + d2);                     /* add.w d2,d2 */
+    if ((uint16_t)d3 >= (uint16_t)d2) goto no_collision; /* bcc.s */
+
+    if ((int8_t)f_playerctrl < 0) goto no_collision; /* tst.b / bmi.s */
+    if ((uint8_t)obRoutine(a1) >= 6) goto no_collision; /* cmpi.b #6 / bhs.s */
+    if (v_debuguse) goto no_collision;           /* tst.w / bne.s */
+
+    if ((uint16_t)d0 < (uint16_t)d1) {
+        /* .left_hit: Sonic between left side and middle */
+    } else {
+        /* .right_hit */
+        d1 = (int16_t)(d1 + d1);                 /* add.w d1,d1 */
+        d0 = (int16_t)(d0 - d1);                 /* sub.w d1,d0 */
+    }
+    /* .left_hit */
+    if ((uint16_t)d3 < 0x10) {
+        /* .top_hit */
+        int16_t d1b = (int16_t)((int8_t)obActWid(o) + 4); /* moveq #0,d1 / move.b / addq #4 */
+        int16_t d2b = (int16_t)(d1b + d1b);      /* move.w d1,d2 / add.w d2,d2 */
+        d1b = (int16_t)(d1b + (int16_t)obX(a1) - (int16_t)obX(o)); /* add obX(a1) / sub obX(a0) */
+        if (d1b < 0) goto side_hit;              /* bmi.s .side_hit */
+        if ((uint16_t)d1b >= (uint16_t)d2b) goto side_hit; /* cmp.w d2,d1 / bhs.s */
+        if (d0out) *d0out = d0;
+        if (d3out) *d3out = d3;
+        return -1;                               /* moveq #-1,d1 */
+    }
+side_hit:
+    if (d0out) *d0out = d0;
+    if (d3out) *d3out = d3;
+    return 1;                                    /* moveq #1,d1 */
+
+no_collision:
+    if (d0out) *d0out = d0;
+    if (d3out) *d3out = 0;
+    return 0;                                    /* moveq #0,d1 */
+}
+
+/* Mon_Main — Routine 0 */
+static void Mon_Main(uint8_t *o) {
+    /* FixBugs=0: no conversion of invalid subtypes to invisibarriers. */
+
+    obRoutine(o) += 2;                           /* addq.b #2 */
+    obHeight(o)  = 28 / 2;                       /* move.b #28/2,obHeight */
+    obWidth(o)   = 28 / 2;                       /* move.b #28/2,obWidth */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Monitor; /* move.l #Map_Monitor */
+    obGfx(o)     = ArtTile_Monitor;              /* move.w #ArtTile_Monitor */
+    obRender(o)  = sprite_cam_field;             /* move.b #sprite_cam_field */
+    obPriority(o)= 3;                            /* move.b #3 */
+    obActWid(o)  = 30 / 2;                       /* move.b #30/2 */
+
+    {
+        uint8_t *a2 = RAM_ADDR(v_objstate);
+        uint8_t d0 = obRespawnNo(o);             /* moveq #0,d0 / move.b obRespawnNo */
+        /* FixBugs=0: bclr #7 relocated to RememberState; skipped here. */
+        if (a2[2 + d0] & 1) {                    /* btst #0,2(a2,d0.w) / beq.s .notbroken */
+            obRoutine(o) = 8;                    /* move.b #8,obRoutine */
+            obFrame(o)   = 0x0B;                 /* move.b #$B,obFrame */
+            return;                              /* rts */
+        }
+    }
+
+    obColType(o) = (uint8_t)(col_32x32 | col_item); /* move.b #col_32x32|col_item */
+    obAnim(o)    = obSubtype(o);                 /* move.b obSubtype,obAnim */
+    /* fall through into Mon_Solid */
+    /* (ASM: falls through to Mon_Solid) */
+    /* We call it here explicitly. */
+    /* Note: Mon_Solid is declared below; forward-declared above. */
+    {
+        /* Inline tail-call: Mon_Solid(o) */
+        /* --- Mon_Solid body begins here --- */
+        uint8_t *a1 = RAM_ADDR(v_player);
+        uint8_t d0 = ob2ndRout(o);
+        int16_t d0_out = 0, d3_out = 0;
+        int16_t coltype;
+        int16_t d1, d2;
+
+        if (d0 != 0) {
+            uint8_t d0b = (uint8_t)(d0 - 2);     /* subq.b #2 */
+            if (d0b != 0) {
+                /* .fall: 2nd Routine 4 */
+                ObjectFall(o);                   /* bsr.w ObjectFall */
+                {
+                    int16_t dist, angle;
+                    ObjFloorDist(o, &dist, &angle); /* jsr ObjFloorDist */
+                    if (dist >= 0) {             /* tst.w d1 / bpl.w Mon_Animate */
+                        goto mon_animate;
+                    }
+                    obY(o) = (int16_t)(obY(o) + dist); /* add.w d1,obY */
+                }
+                obVelY(o) = 0;                   /* clr.w obVelY */
+                ob2ndRout(o) = 0;                /* clr.b ob2ndRout */
+                goto mon_animate;                /* bra.w Mon_Animate */
+            }
+            /* 2nd Routine 2: .ontop */
+            d1 = (int16_t)((int16_t)obActWid(o) + sonic_solid_width); /* moveq #0,d1 / move.b / addi.w */
+            {
+                int16_t dummy;
+                ExitPlatform(o, d1, &dummy);     /* bsr.w ExitPlatform */
+            }
+            if (obStatus(a1) & (1 << 3)) {       /* btst #3,obStatus(a1) / bne.w .ontop */
+                int16_t d3 = 32 / 2;             /* move.w #32/2,d3 */
+                int16_t d2x = obX(o);            /* move.w obX(a0),d2 */
+                MvSonicOnPtfm(o, d2x, d3);       /* bsr.w MvSonicOnPtfm */
+                goto mon_animate;
+            }
+            ob2ndRout(o) = 0;                    /* clr.b ob2ndRout */
+            goto mon_animate;                    /* bra.w Mon_Animate */
+        }
+
+        /* .normal: 2nd Routine 0 */
+        d1 = (int16_t)(30 / 2 + sonic_solid_width); /* move.w #30/2+sonic_solid_width,d1 */
+        d2 = 30 / 2;                             /* move.w #30/2,d2 */
+        coltype = Mon_SolidSides(o, d1, d2, &d0_out, &d3_out); /* bsr.w Mon_SolidSides */
+        if (coltype == 0) goto checkpush;        /* beq.w .checkpush */
+
+        if ((int16_t)obVelY(a1) < 0) goto dontbreak; /* tst.w obVelY / bmi.s .dontbreak */
+        if (obAnim(a1) == id_Roll) goto checkpush;   /* cmpi.b #id_Roll / beq.s .checkpush */
+
+dontbreak:
+        if (coltype >= 0) goto sidetouch;        /* tst.w d1 / bpl.s .sidetouch */
+        /* Top/bottom collision */
+        obY(a1) = (int16_t)(obY(a1) - d3_out);   /* sub.w d3,obY(a1) */
+        Plat_NoCheck(a1, o);                     /* bsr.w Plat_NoCheck */
+        ob2ndRout(o) = 2;                        /* move.b #2,ob2ndRout */
+        goto mon_animate;                        /* bra.w Mon_Animate */
+
+sidetouch:
+        if (d0_out == 0) goto push;              /* tst.w d0 / beq.w .push */
+        if (d0_out < 0) goto sonicleft;          /* bmi.s .sonicleft */
+
+sonicright:
+        if ((int16_t)obVelX(a1) < 0) goto push;  /* tst.w obVelX / bmi.s .push */
+        goto stopsonic;                          /* bra.s .stopsonic */
+
+sonicleft:
+        if ((int16_t)obVelX(a1) >= 0) goto push; /* tst.w obVelX / bpl.s .push */
+
+stopsonic:
+        obX(a1) = (int16_t)(obX(a1) - d0_out);   /* sub.w d0,obX(a1) */
+        obInertia(a1) = 0;                       /* move.w #0,obInertia */
+        obVelX(a1) = 0;                          /* move.w #0,obVelX */
+
+push:
+        if (obStatus(a1) & (1 << 1)) goto stoppushing; /* btst #1,obStatus / bne.s */
+        obStatus(a1) |= (1 << 5);                /* bset #5,obStatus(a1) */
+        obStatus(o)  |= (1 << 5);                /* bset #5,obStatus(a0) */
+        goto mon_animate;                        /* bra.s Mon_Animate */
+
+checkpush:
+        if (!(obStatus(o) & (1 << 5))) {         /* btst #5,obStatus(a0) / beq.s Mon_Animate */
+            goto mon_animate;
+        }
+        /* FixBugs=0: walk-jump bug */
+        obAnim(a1) = id_Run;                     /* move.w #id_Run,obAnim(a1) */
+
+stoppushing:
+        obStatus(o)  &= ~(1 << 5);               /* bclr #5,obStatus(a0) */
+        obStatus(a1) &= ~(1 << 5);               /* bclr #5,obStatus(a1) */
+
+mon_animate:
+        if (Ani_Monitor) {
+            AnimateSprite(o, Ani_Monitor);       /* lea Ani_Monitor / bsr.w AnimateSprite */
+        }
+        /* Mon_Display (falls through) */
+        DisplaySprite(o);                        /* bsr.w DisplaySprite */
+        if (OutOfRange(o, -1)) {                 /* out_of_range.w DeleteObject */
+            DeleteObject(o);
+        }
+        /* rts */
+    }
+}
+
+/* Mon_BreakOpen — Routine 4 (set from ReactToItem) */
+static void Mon_BreakOpen(uint8_t *o) {
+    obRoutine(o) += 2;                           /* addq.b #2,obRoutine -> Mon_Animate */
+    obColType(o) = col_none;                     /* move.b #col_none,obColType */
+
+    {
+        uint8_t *a1 = (uint8_t *)FindFreeObj();  /* bsr.w FindFreeObj */
+        if (a1) {                                /* bne.s Mon_Explode (in C, success) */
+            obID(a1) = id_PowerUp;               /* _move.b #id_PowerUp,obID(a1) */
+            obX(a1)  = obX(o);                   /* move.w obX(a0),obX(a1) */
+            obY(a1)  = obY(o);                   /* move.w obY(a0),obY(a1) */
+            obAnim(a1) = obAnim(o);              /* move.b obAnim(a0),obAnim(a1) */
+        }
+    }
+    /* Mon_Explode: */
+    {
+        uint8_t *a1 = (uint8_t *)FindFreeObj();  /* bsr.w FindFreeObj */
+        if (a1) {                                /* bne.s Mon_RememberBroken */
+            obID(a1) = id_ExplosionItem;         /* _move.b #id_ExplosionItem,obID(a1) */
+            obRoutine(a1) += 2;                  /* addq.b #2,obRoutine(a1) */
+            obX(a1)  = obX(o);                   /* move.w obX(a0),obX(a1) */
+            obY(a1)  = obY(o);                   /* move.w obY(a0),obY(a1) */
+        }
+    }
+    /* Mon_RememberBroken: */
+    {
+        uint8_t *a2 = RAM_ADDR(v_objstate);
+        uint8_t d0 = obRespawnNo(o);             /* moveq #0,d0 / move.b obRespawnNo */
+        a2[2 + d0] |= 1;                         /* bset #0,2(a2,d0.w) */
+    }
+
+    obAnim(o) = 9;                               /* move.b #9,obAnim */
+    DisplaySprite(o);                            /* bra.w DisplaySprite */
+}
+
+/* Monitor dispatcher — Mon_Index: 0/2/4/6/8 */
+static void Monitor_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0: Mon_Main(o);      break;
+        case 2:
+            /* Mon_Solid — Routine 2. We inline the call here for clarity;
+               Mon_Main already contains the full Mon_Solid body. For
+               routine 2 entry we just run it directly. */
+            {
+                uint8_t *a1 = RAM_ADDR(v_player);
+                uint8_t d0 = ob2ndRout(o);
+                int16_t d0_out = 0, d3_out = 0;
+                int16_t coltype;
+                int16_t d1, d2;
+
+                if (d0 != 0) {
+                    uint8_t d0b = (uint8_t)(d0 - 2);
+                    if (d0b != 0) {
+                        /* .fall */
+                        ObjectFall(o);
+                        {
+                            int16_t dist, angle;
+                            ObjFloorDist(o, &dist, &angle);
+                            if (dist >= 0) goto mon2_animate;
+                            obY(o) = (int16_t)(obY(o) + dist);
+                        }
+                        obVelY(o) = 0;
+                        ob2ndRout(o) = 0;
+                        goto mon2_animate;
+                    }
+                    /* 2nd Routine 2: .ontop */
+                    d1 = (int16_t)((int16_t)obActWid(o) + sonic_solid_width);
+                    {
+                        int16_t dummy;
+                        ExitPlatform(o, d1, &dummy);
+                    }
+                    if (obStatus(a1) & (1 << 3)) {
+                        int16_t d3 = 32 / 2;
+                        int16_t d2x = obX(o);
+                        MvSonicOnPtfm(o, d2x, d3);
+                        goto mon2_animate;
+                    }
+                    ob2ndRout(o) = 0;
+                    goto mon2_animate;
+                }
+
+                /* .normal */
+                d1 = (int16_t)(30 / 2 + sonic_solid_width);
+                d2 = 30 / 2;
+                coltype = Mon_SolidSides(o, d1, d2, &d0_out, &d3_out);
+                if (coltype == 0) goto mon2_checkpush;
+                if ((int16_t)obVelY(a1) < 0) goto mon2_dontbreak;
+                if (obAnim(a1) == id_Roll) goto mon2_checkpush;
+
+            mon2_dontbreak:
+                if (coltype >= 0) goto mon2_sidetouch;
+                obY(a1) = (int16_t)(obY(a1) - d3_out);
+                Plat_NoCheck(a1, o);
+                ob2ndRout(o) = 2;
+                goto mon2_animate;
+
+            mon2_sidetouch:
+                if (d0_out == 0) goto mon2_push;
+                if (d0_out < 0) goto mon2_sonicleft;
+
+            mon2_sonicright:
+                if ((int16_t)obVelX(a1) < 0) goto mon2_push;
+                goto mon2_stopsonic;
+
+            mon2_sonicleft:
+                if ((int16_t)obVelX(a1) >= 0) goto mon2_push;
+
+            mon2_stopsonic:
+                obX(a1) = (int16_t)(obX(a1) - d0_out);
+                obInertia(a1) = 0;
+                obVelX(a1) = 0;
+
+            mon2_push:
+                if (obStatus(a1) & (1 << 1)) goto mon2_stoppushing;
+                obStatus(a1) |= (1 << 5);
+                obStatus(o)  |= (1 << 5);
+                goto mon2_animate;
+
+            mon2_checkpush:
+                if (!(obStatus(o) & (1 << 5))) {
+                    goto mon2_animate;
+                }
+                obAnim(a1) = id_Run;
+
+            mon2_stoppushing:
+                obStatus(o)  &= ~(1 << 5);
+                obStatus(a1) &= ~(1 << 5);
+
+            mon2_animate:
+                if (Ani_Monitor) {
+                    AnimateSprite(o, Ani_Monitor);
+                }
+                DisplaySprite(o);
+                if (OutOfRange(o, -1)) {
+                    DeleteObject(o);
+                }
+            }
+            break;
+        case 4: Mon_BreakOpen(o); break;
+        case 6:
+            /* Mon_Animate — Routine 6 */
+            if (Ani_Monitor) {
+                AnimateSprite(o, Ani_Monitor);
+            }
+            /* falls through to Mon_Display */
+            /* fall through */
+        case 8:
+            /* Mon_Display — Routine 8 */
+            DisplaySprite(o);
+            if (OutOfRange(o, -1)) {
+                DeleteObject(o);
+            }
+            break;
+    }
+}
+
+/* ===========================================================================
+   Object 2E — PowerUp (monitor contents)
+   =========================================================================== */
+
+/* PowerUp dispatcher — Pow_Index: 0/2/4 */
+static void PowerUp_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0: {
+            /* Pow_Main — Routine 0 */
+            obRoutine(o) += 2;                   /* addq.b #2 */
+            obGfx(o)     = ArtTile_Monitor;      /* move.w #ArtTile_Monitor */
+            obRender(o)  = sprite_rawmappings | sprite_cam_field; /* move.b #sprite_rawmappings|sprite_cam_field */
+            obPriority(o)= 3;                    /* move.b #3 */
+            obActWid(o)  = 16 / 2;               /* move.b #16/2 */
+            obVelY(o)    = -0x300;               /* move.w #-$300 */
+
+            {
+                uint8_t d0 = (uint8_t)(obAnim(o) + 2); /* moveq #0,d0 / move.b obAnim / addq.b #2 */
+                obFrame(o) = d0;                 /* move.b d0,obFrame (redundant) */
+                const uint8_t *a1 = (const uint8_t *)Map_Monitor;
+                uint16_t offset = ((const uint16_t *)a1)[d0]; /* adda.w (a1,d0.w) */
+                a1 += offset;
+                a1 += 2;                         /* addq.w #1,a1 */
+                obMap(o) = (uint32_t)(uintptr_t)a1; /* move.l a1,obMap */
+            }
+            /* falls through to Pow_Move */
+            /* fall through */
+        }
+        case 2: {
+            /* Pow_Move — Routine 2 */
+            if ((int16_t)obVelY(o) >= 0) {       /* tst.w obVelY / bpl.w Pow_Checks */
+                goto pow_checks;
+            }
+            SpeedToPos(o);                       /* bsr.w SpeedToPos */
+            obVelY(o) = (int16_t)(obVelY(o) + 0x18); /* addi.w #$18 */
+            break;                               /* rts */
+        }
+        case 4: {
+            /* Pow_Delete — Routine 4 */
+            {
+                uint16_t *timer = (uint16_t *)((uint8_t *)o + 0x1E); /* obTimeFrame word */
+                *timer = (uint16_t)(*timer - 1); /* subq.w #1 */
+                if ((int16_t)*timer < 0) {       /* bmi.w DeleteObject */
+                    DeleteObject(o);
+                    return;
+                }
+            }
+            break;                               /* .return: rts */
+        }
+    }
+
+    DisplaySprite(o);                            /* bra.w DisplaySprite */
+    return;
+
+pow_checks:
+    /* Pow_Checks */
+    obRoutine(o) += 2;                           /* addq.b #2 */
+    {
+        uint16_t *timer = (uint16_t *)((uint8_t *)o + 0x1E);
+        *timer = 30 - 1;                         /* move.w #30-1,obTimeFrame */
+    }
+    {
+        uint8_t d0 = obAnim(o);                  /* move.b obAnim,d0 */
+
+        /* Pow_ChkEggman */
+        if (d0 == 1) {                           /* cmpi.b #1 / bne.s Pow_ChkSonic */
+            /* FixBugs=0: Eggman monitor does nothing */
+            goto pow_display;
+        }
+
+        /* Pow_ChkSonic */
+        if (d0 == 2) {                           /* cmpi.b #2 / bne.s Pow_ChkShoes */
+            /* ExtraLife */
+            v_lives     = v_lives + 1;           /* addq.b #1,(v_lives).w */
+            f_lifecount = f_lifecount + 1;       /* addq.b #1,(f_lifecount).w */
+            Sound_Queue(bgm_ExtraLife, false);   /* jmp QueueSound1 */
+            goto pow_display;
+        }
+
+        /* Pow_ChkShoes */
+        if (d0 == 3) {                           /* cmpi.b #3 / bne.s Pow_ChkShield */
+            v_shoes = 1;                         /* move.b #1,(v_shoes).w */
+            RAM_WORD(v_player + 0x2A) = 20 * 60; /* move.w #20*60,(v_player+shoetime).w */
+            v_sonspeedmax = son_maxspeed * 2;    /* move.w #son_maxspeed*2 */
+            v_sonspeedacc = son_acceleration * 2;/* move.w #son_acceleration*2 */
+            v_sonspeeddec = son_deceleration;    /* move.w #son_deceleration */
+            /* FixBugs=0: no underwater fix */
+            Sound_Queue(bgm_Speedup, false);     /* jmp QueueSound1 */
+            goto pow_display;
+        }
+
+        /* Pow_ChkShield */
+        if (d0 == 4) {                           /* cmpi.b #4 / bne.s Pow_ChkInvinc */
+            v_shield = 1;                        /* move.b #1,(v_shield).w */
+            RAM_BYTE(v_shieldobj) = id_ShieldItem; /* move.b #id_ShieldItem,(v_shieldobj).w */
+            Sound_Queue(sfx_Shield, false);      /* jmp QueueSound1 */
+            goto pow_display;
+        }
+
+        /* Pow_ChkInvinc */
+        if (d0 == 5) {                           /* cmpi.b #5 / bne.s Pow_ChkRings */
+            v_invinc = 1;                        /* move.b #1,(v_invinc).w */
+            RAM_WORD(v_player + 0x30) = 20 * 60; /* move.w #20*60,(v_player+invtime).w */
+            RAM_BYTE(v_starsobj1) = id_ShieldItem; /* move.b #id_ShieldItem,(v_starsobj1).w */
+            RAM_BYTE(v_starsobj1 + 0x1A) = 1;    /* move.b #1,(v_starsobj1+obAnim).w */
+            RAM_BYTE(v_starsobj2) = id_ShieldItem;
+            RAM_BYTE(v_starsobj2 + 0x1A) = 2;
+            RAM_BYTE(v_starsobj3) = id_ShieldItem;
+            RAM_BYTE(v_starsobj3 + 0x1A) = 3;
+            RAM_BYTE(v_starsobj4) = id_ShieldItem;
+            RAM_BYTE(v_starsobj4 + 0x1A) = 4;
+
+            if (f_lockscreen) {                  /* tst.b (f_lockscreen).w / bne.s Pow_NoMusic */
+                goto pow_display;
+            }
+            /* Revision<>0 (REV01): check drowning */
+            if (v_air <= 12) {                   /* cmpi.w #12,(v_air).w / bls.s Pow_NoMusic */
+                goto pow_display;
+            }
+            Sound_Queue(bgm_Invincible, false);  /* jmp QueueSound1 */
+            goto pow_display;
+        }
+
+        /* Pow_ChkRings */
+        if (d0 == 6) {                           /* cmpi.b #6 / bne.s Pow_ChkS */
+            v_rings = v_rings + 10;              /* addi.w #10,(v_rings).w */
+            /* FixBugs=0: no 999 cap */
+            f_ringcount |= 1;                    /* ori.b #1,(f_ringcount).w */
+            if (v_rings >= 100) {                /* cmpi.w #100 / blo.s Pow_RingSound */
+                if (!(v_lifecount & 2)) {        /* bset #1 / beq.w ExtraLife */
+                    v_lifecount |= 2;
+                    v_lives     = v_lives + 1;
+                    f_lifecount = f_lifecount + 1;
+                    Sound_Queue(bgm_ExtraLife, false);
+                    goto pow_display;
+                }
+                if (v_rings >= 200) {            /* cmpi.w #200 / blo.s Pow_RingSound */
+                    if (!(v_lifecount & 4)) {    /* bset #2 / beq.w ExtraLife */
+                        v_lifecount |= 4;
+                        v_lives     = v_lives + 1;
+                        f_lifecount = f_lifecount + 1;
+                        Sound_Queue(bgm_ExtraLife, false);
+                        goto pow_display;
+                    }
+                }
+            }
+            /* Pow_RingSound */
+            Sound_Queue(sfx_Ring, false);        /* jmp QueueSound1 */
+            goto pow_display;
+        }
+
+        /* Pow_ChkS */
+        if (d0 == 7) {                           /* cmpi.b #7 / bne.s Pow_ChkGoggles */
+            /* 'S' does nothing */
+            goto pow_display;
+        }
+
+        /* Pow_ChkGoggles */
+        /* FixBugs=0: goggles monitor disabled (commented out in ASM) */
+
+        /* Pow_ChkEnd */
+        /* subtype isn't any valid monitor ID: rts (no display) */
+        /* In C, we fall through to DisplaySprite, matching Pow_Delete's
+           rts which returns to PowerUp's dispatcher and then DisplaySprite. */
+    }
+
+pow_display:
+    DisplaySprite(o);                            /* bra.w DisplaySprite */
 }

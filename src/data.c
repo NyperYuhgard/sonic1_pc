@@ -495,6 +495,9 @@ size_t   SonicDynPLC_len = 0;
 const uint8_t *Ani_Sonic = NULL;
 size_t   Ani_Sonic_len = 0;
 
+const uint8_t *Ani_Monitor = NULL;
+size_t   Ani_Monitor_len = 0;
+
 const uint8_t *ObjPos_GHZ1 = NULL;
 size_t   ObjPos_GHZ1_len = 0;
 const uint8_t *ObjPos_GHZ2 = NULL;
@@ -604,6 +607,7 @@ size_t   Nem_GhzWall1_len = 0;
 /* Object mappings referenced by the DebugMode item lists.
    Most are unstaged (NULL) until their maps/*.asm assets are ported. */
 const uint8_t *Map_Monitor = NULL;
+size_t   Map_Monitor_len = 0;
 const uint8_t *Map_Chop = NULL;
 const uint8_t *Map_Spike = NULL;
 const uint8_t *Map_Plat_GHZ = NULL;
@@ -920,6 +924,8 @@ int Data_Init(void) {
     Map_Got_len = 0;
     Ani_Sonic = NULL;
     Ani_Sonic_len = 0;
+    Ani_Monitor = NULL;
+    Ani_Monitor_len = 0;
     Nem_Hud = NULL;
     Nem_Hud_len = 0;
     Nem_Lives = NULL;
@@ -1741,6 +1747,12 @@ int Data_Init(void) {
     }
     /* ===== FIN DEBUG ===== */
 
+    if (load_asm_asset("anim/Monitor.asm", &Ani_Monitor, &Ani_Monitor_len, 0) != 0) {
+        Ani_Monitor = NULL;
+        Ani_Monitor_len = 0;
+
+    }
+
 
     if (load_asset("tilemaps/title.eni", &Eni_Title, &Eni_Title_len) != 0) {
         Eni_Title = NULL;
@@ -1996,6 +2008,12 @@ int Data_Init(void) {
         Map_Buzz = NULL;
         Map_Buzz_len = 0;
     }
+
+    if (load_asm_asset("maps/Monitor.asm", &Map_Monitor, &Map_Monitor_len, 1) != 0) {
+        Map_Monitor = NULL;
+        Map_Monitor_len = 0;
+    }
+
 
     if (load_asm_asset("anim/buzzbomber.asm", &Ani_Buzz, &Ani_Buzz_len, 0) != 0) {
         Ani_Buzz = NULL;
