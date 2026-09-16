@@ -45,6 +45,8 @@ static void Animals_Main(void *obj);
 static void Points_Main(void *obj);
 static void Monitor_Main(void *obj);
 static void PowerUp_Main(void *obj);
+static void Spikes_ObjectMain(void *obj);
+static void Springs_ObjectMain(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -79,6 +81,8 @@ void Objects_Init(void) {
     obj_dispatch[id_Bridge]       = Bridge_Main;
     obj_dispatch[id_PurpleRock]   = PurpleRock_Main;
     obj_dispatch[id_EdgeWalls]    = EdgeWalls_Main;
+    obj_dispatch[id_Spikes] = Spikes_ObjectMain;
+    obj_dispatch[id_Springs] = Springs_ObjectMain;
 
     /* Register explosion/gray puff, fiery explosion, animals, and points */
     obj_dispatch[id_ExplosionItem] = ExplosionItem_Main;
@@ -88,6 +92,7 @@ void Objects_Init(void) {
     /* Register monitors and power-ups */
     obj_dispatch[id_Monitor] = Monitor_Main;
     obj_dispatch[id_PowerUp] = PowerUp_Main;
+
 
     /* Clear all object RAM */
     memset(ObjRAM, 0, NUM_OBJECTS * OBJECT_SIZE);
@@ -6554,7 +6559,7 @@ pow_checks:
             if (v_air <= 12) {                   /* cmpi.w #12,(v_air).w / bls.s Pow_NoMusic */
                 goto pow_display;
             }
-            Sound_Queue(bgm_Invincible, false);  /* jmp QueueSound1 */
+            Sound_Queue(bgm_Invincible, true);  /* jmp QueueSound1 */
             goto pow_display;
         }
 
@@ -6603,4 +6608,475 @@ pow_checks:
 
 pow_display:
     DisplaySprite(o);                            /* bra.w DisplaySprite */
+}
+
+
+/* ===========================================================================
+ *  Object 36 — Spikes (id_Spikes = $36)
+ *  Ported verbatim from _incObj/36 Spikes.asm (REV01, FixBugs=0).
+ *
+ *  spikes_origX          = objoff_30 (word): initial X (for out_of_range)
+ *  spikes_origY          = objoff_32 (word): initial Y
+ *  spikes_move_pos       = objoff_34 (word): 16.8 fixed-point delta,
+ *                                            pixel offset is the HIGH byte
+ *  spikes_move_direction = objoff_36 (word): 0 = retracting, 1 = moving in
+ *  spikes_move_delay     = objoff_38 (word): frames until next move
+ *  =========================================================================== */
+
+#define spikes_origX(obj)          (*(int16_t  *)((uint8_t *)(obj) + 0x30))
+#define spikes_origY(obj)          (*(int16_t  *)((uint8_t *)(obj) + 0x32))
+#define spikes_move_pos(obj)       (*(uint16_t *)((uint8_t *)(obj) + 0x34))
+#define spikes_move_direction(obj) (*(uint16_t *)((uint8_t *)(obj) + 0x36))
+#define spikes_move_delay(obj)     (*(uint16_t *)((uint8_t *)(obj) + 0x38))
+
+/* Spikes_Config: { frame, display & collision width/2 }, indexed by the
+ *  subtype's UPPER nybble ($0x..$5x). */
+static const uint8_t Spikes_Config[6][2] = {
+    { 0, 40  / 2 },   /* $0x: 3 spikes, upright           */
+    { 1, 32  / 2 },   /* $1x: 3 spikes, sideways          */
+    { 2,  8  / 2 },   /* $2x: 1 spike,  upright           */
+    { 3, 56  / 2 },   /* $3x: 3 spikes, upright (wide)    */
+    { 4, 128 / 2 },   /* $4x: 6 spikes, upright (wide)    */
+    { 5, 32  / 2 },   /* $5x: 1 spike,  sideways          */
+};
+
+static void Spikes_Main(uint8_t *o);
+static void Spikes_Solid(uint8_t *o);
+static void Spikes_Move(uint8_t *o);
+
+/* -------------------------------------------------------------------------
+ *  Spikes_WaitAndMove — delay spikes movement, or update the position delta
+ *  once the delay expires. Ported verbatim from Spikes_WaitAndMove.
+ *  ------------------------------------------------------------------------- */
+static void Spikes_WaitAndMove(uint8_t *o) {
+    if (spikes_move_delay(o) != 0) {                     /* tst.w / beq.s */
+        spikes_move_delay(o) = (uint16_t)(spikes_move_delay(o) - 1); /* subq.w #1 */
+        if (spikes_move_delay(o) != 0) return;           /* bne.s .return */
+
+            /* delay just expired: play the moving sound if on screen */
+            if ((int8_t)obRender(o) < 0) {                   /* tst.b / bpl.s */
+                Sound_Queue(sfx_SpikesMove, false);          /* jsr (QueueSound2) */
+            }
+            return;
+    }
+
+    /* .doSpikesMove */
+    if (spikes_move_direction(o) == 0) {                 /* tst.w / beq.s .retractSpikes */
+        /* .retractSpikes: push spikes out by 8px, up to 32px total */
+        spikes_move_pos(o) = (uint16_t)(spikes_move_pos(o) + 8 * 0x100); /* addi.w #8*$100 */
+        if ((uint16_t)spikes_move_pos(o) < (uint16_t)(32 * 0x100)) {     /* cmpi.w #32*$100 / blo */
+            return;
+        }
+        spikes_move_pos(o) = 32 * 0x100;                 /* clamp */
+        spikes_move_direction(o) = 1;                    /* next: move back in */
+        spikes_move_delay(o) = 60;                       /* 1 second delay */
+        return;
+    }
+
+    /* Direction = 1: move spikes back in by 8px, down to 0 */
+    if (spikes_move_pos(o) >= 8 * 0x100) {               /* subi.w #8*$100 / bhs.s */
+        spikes_move_pos(o) = (uint16_t)(spikes_move_pos(o) - 8 * 0x100);
+        return;
+    }
+    spikes_move_pos(o) = 0;                              /* clamp */
+    spikes_move_direction(o) = 0;                        /* next: retract */
+    spikes_move_delay(o) = 60;
+}
+
+/* -------------------------------------------------------------------------
+ *  Spikes_Move — dispatch on the lower nybble of obSubtype.
+ *  $x0 = static, $x1 = up/down, $x2 = left/right.
+ *  ------------------------------------------------------------------------- */
+static void Spikes_Move(uint8_t *o) {
+    switch (obSubtype(o)) {                              /* move.b obSubtype,d0 / add / jmp */
+        case 0:                                          /* Spikes_Type0: static */
+            break;
+
+        case 1:                                          /* Spikes_Type1: up/down */
+            Spikes_WaitAndMove(o);
+            /* move.b spikes_move_pos(a0),d0 (reads HIGH byte) ; add.w origY */
+            obY(o) = (int16_t)(spikes_origY(o) + (uint8_t)(spikes_move_pos(o) >> 8));
+            break;
+
+        case 2:                                          /* Spikes_Type2: left/right */
+            Spikes_WaitAndMove(o);
+            obX(o) = (int16_t)(spikes_origX(o) + (uint8_t)(spikes_move_pos(o) >> 8));
+            break;
+    }
+}
+
+/* -------------------------------------------------------------------------
+ *  Spikes_Main — routine 0: init.
+ *  Reads the config from the upper nybble of obSubtype, then clears that
+ *  nybble so obSubtype ends up holding only the movement type (lower nybble).
+ *  ------------------------------------------------------------------------- */
+static void Spikes_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                   /* addq.b #2 -> Spikes_Solid */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Spike;       /* move.l #Map_Spike */
+    obGfx(o)     = (uint16_t)ArtTile_Spikes;             /* move.w #ArtTile_Spikes */
+    obRender(o) |= sprite_cam_field;                     /* ori.b #sprite_cam_field */
+    obPriority(o)= 4;                                    /* move.b #4 */
+
+    uint8_t subtype   = obSubtype(o);                    /* move.b obSubtype(a0),d0 */
+    uint8_t config_i  = (uint8_t)(subtype >> 4);         /* andi.w #$F0 / lsr.w #3 */
+    obSubtype(o)      = (uint8_t)(subtype & 0x0F);       /* andi.b #$F,obSubtype */
+
+    obFrame(o)  = Spikes_Config[config_i][0];            /* move.b (a1)+,obFrame */
+    obActWid(o) = Spikes_Config[config_i][1];            /* move.b (a1)+,obActWid */
+
+    spikes_origX(o) = obX(o);                            /* move.w obX,spikes_origX */
+    spikes_origY(o) = obY(o);                            /* move.w obY,spikes_origY */
+    /* ASM falls through into Spikes_Solid */
+    Spikes_Solid(o);
+}
+
+/* -------------------------------------------------------------------------
+ *  Spikes_Solid — routine 2: main mode. Calls SolidObject, then applies
+ *  the FixBugs=0 damage rules (standing on top / side collision).
+ *  ------------------------------------------------------------------------- */
+static void Spikes_Solid(uint8_t *o) {
+    int16_t d2;
+    int16_t solid_ret;
+    int16_t out_d3 = 0, out_d5 = 0;
+
+    Spikes_Move(o);                                      /* bsr.w Spikes_Move */
+
+    d2 = 8 / 2;                                          /* move.w #8/2,d2 */
+    if (obFrame(o) == 5) goto Spikes_SideWays;           /* cmpi.b #5 / beq.s */
+        if (obFrame(o) != 1) goto Spikes_Upright;            /* cmpi.b #1 / bne.s */
+            d2 = 40 / 2;                                         /* move.w #40/2,d2 */
+
+            Spikes_SideWays:
+            {
+                int16_t d1 = (int16_t)(32 / 2 + sonic_solid_width); /* move.w #32/2+sonic_solid_width,d1 */
+                int16_t d3 = (int16_t)(d2 + 1);                     /* move.w d2,d3 / addq.w #1 */
+                int16_t d4 = obX(o);                                /* move.w obX(a0),d4 */
+                solid_ret = SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5);
+
+                /* FixBugs=0: Sonic standing on top -> solid platform, no damage.
+                 *          SolidObject return 1 (side collision) -> damage. Otherwise display. */
+                if (obStatus(o) & (1 << 3)) goto Spikes_Display;    /* btst #3 / bne.s */
+                    if (solid_ret == 1) goto Spikes_Hurt;               /* cmpi.w #1 / beq.s */
+                        goto Spikes_Display;
+            }
+
+            Spikes_Upright:
+            {
+                int16_t d1 = (int16_t)(int8_t)obActWid(o);          /* moveq #0,d1 / move.b obActWid,d1 */
+                d1 = (int16_t)(d1 + sonic_solid_width);             /* addi.w #sonic_solid_width,d1 */
+                int16_t d2u = 32 / 2;                               /* move.w #32/2,d2 */
+                int16_t d3  = 32 / 2 + 1;                           /* move.w #(32/2)+1,d3 */
+                int16_t d4  = obX(o);                               /* move.w obX(a0),d4 */
+                solid_ret = SolidObject(o, d1, d2u, d3, d4, &out_d3, &out_d5);
+
+                /* FixBugs=0: standing on top -> damage. SolidObject return >= 0
+                 *          (none or side) -> display. Return -1 (top/bottom) -> damage. */
+                if (obStatus(o) & (1 << 3)) goto Spikes_Hurt;       /* btst #3 / bne.s */
+                    if (solid_ret >= 0) goto Spikes_Display;            /* tst.w d4 / bpl.s */
+                        /* fall through to Spikes_Hurt */
+            }
+
+            Spikes_Hurt:
+            if (v_invinc) goto Spikes_Display;                       /* tst.b (v_invinc) / bne.s */
+            {
+                uint8_t *player = RAM_ADDR(v_player);
+                /* FixBugs=0: no flashtime early-out here (only FixBugs path adds it) */
+                if ((uint8_t)obRoutine(player) >= 4) goto Spikes_Display; /* cmpi.b #4 / bhs.s */
+
+                    /* REV01 (FixBugs=0): push Sonic up by his own vertical velocity
+                     *          before triggering the hurt. Reads the 32-bit Y (pixel+subpixel),
+                     *          subtracts velY<<8, writes it back. */
+                    {
+                        int32_t y = ((uint32_t)obY(player) << 16) | (uint16_t)obSubpixelY(player);
+                        y -= ((int32_t)obVelY(player)) << 8;
+                        obY(player)        = (int16_t)((uint32_t)y >> 16);
+                        obSubpixelY(player)= (int16_t)(y & 0xFFFF);
+                    }
+                    HurtSonic(player, o);
+            }
+
+            Spikes_Display:
+            /* FixBugs=0: DisplaySprite first, then out_of_range DeleteObject using
+             *      spikes_origX (the spike's spawn X), so moving spikes don't despawn
+             *      when they slide out of the camera range. */
+            DisplaySprite(o);                                        /* bsr.w DisplaySprite */
+            if (OutOfRange(o, spikes_origX(o))) {                    /* out_of_range.w DeleteObject,spikes_origX */
+                DeleteObject(o);
+            }
+}
+
+/* Spikes dispatcher — Spikes_Index: 0 = Main, 2 = Solid */
+static void Spikes_ObjectMain(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: Spikes_Main(o);  break;
+        case 2: Spikes_Solid(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 41 — Springs (id_Springs = $41)
+ *  Ported verbatim from _incObj/41 Springs.asm (REV01, FixBugs=0).
+ *
+ *  spring_pow = objoff_30 (word): bounce velocity (negative = up/left)
+ *
+ *  Subtype bits:
+ *    bit 4 = sideways spring (LR)
+ *    bit 5 = downwards spring
+ *    bit 1 = yellow (palette line 2, weaker power)
+ *    bits 0-3 = power index into Spring_Powers[]
+ *
+ *  Spring_Powers (ASM):
+ *      dc.w -$1000     ; red
+ *      dc.w -$0A00     ; yellow
+ *
+ *  El 68k direcciona con `move.w Spring_Powers(pc,d0.w), ...` — d0 es
+ *  un OFFSET DE BYTE, no un índice de word. La tabla se representa como
+ *  bytes big-endian (como estaría en ROM) para replicar esa semántica:
+ *
+ *      offset 0: -$1000 = 0xF000 = bytes F0 00
+ *      offset 2: -$0A00 = 0xF600 = bytes F6 00
+ * =========================================================================== */
+
+#define spring_pow(obj) (*(int16_t *)((uint8_t *)(obj) + 0x30))
+
+static const uint8_t Spring_Powers[4] = {
+    0xF0, 0x00,   /* offset 0: -$1000 (red)    */
+    0xF6, 0x00,   /* offset 2: -$0A00 (yellow) */
+};
+
+static void Spring_Main(uint8_t *o);
+static void Spring_Up(uint8_t *o);
+static void Spring_AniUp(uint8_t *o);
+static void Spring_ResetUp(uint8_t *o);
+static void Spring_LR(uint8_t *o);
+static void Spring_AniLR(uint8_t *o);
+static void Spring_ResetLR(uint8_t *o);
+static void Spring_Down(uint8_t *o);
+static void Spring_AniDown(uint8_t *o);
+static void Spring_ResetDown(uint8_t *o);
+
+/* -------------------------------------------------------------------------
+ *  Spring_Main — routine 0
+ *  ------------------------------------------------------------------------- */
+static void Spring_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                    /* addq.b #2 -> Spring_Up */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Spring;       /* move.l #Map_Spring,obMap */
+    obGfx(o)     = (uint16_t)ArtTile_Spring_Horizontal;   /* move.w #ArtTile_Spring_Horizontal */
+    obRender(o) |= sprite_cam_field;                      /* ori.b #sprite_cam_field */
+    obActWid(o)  = 32 / 2;                                /* move.b #32/2 */
+    obPriority(o)= 4;                                     /* move.b #4 */
+
+    uint8_t d0 = obSubtype(o);                            /* move.b obSubtype,d0 */
+
+    /* .checkSideways */
+    if (d0 & (1 << 4)) {                                  /* btst #4 / beq.s */
+        obRoutine(o) = 8;                                 /* move.b #8 -> Spring_LR */
+        obAnim(o)    = 1;                                 /* move.b #1,obAnim */
+        obFrame(o)   = 3;                                 /* move.b #3,obFrame */
+        obGfx(o)     = (uint16_t)ArtTile_Spring_Vertical; /* move.w #ArtTile_Spring_Vertical */
+        obActWid(o)  = 16 / 2;                            /* move.b #16/2 */
+    }
+
+    /* .checkDownwards */
+    if (d0 & (1 << 5)) {                                  /* btst #5 / beq.s */
+        obRoutine(o) = 0x0E;                              /* move.b #$E -> Spring_Down */
+        obStatus(o) |= (1 << 1);                          /* bset #1: Y-flip */
+    }
+
+    /* .checkYellow */
+    if (d0 & (1 << 1)) {                                  /* btst #1 / beq.s */
+        obGfx(o) = (uint16_t)(ArtTile_Spring_Horizontal | Tile_Pal2);                             /* bset #5,obGfx (palette line 2) */
+        fprintf(stderr, "SPRING gfx=%04X (yellow bit set)\n", obGfx(o));
+    }
+
+    /* .getPower
+     *
+     * move.w Spring_Powers(pc,d0.w), spring_pow(a0)
+     *   (pc,d0.w) indexa por BYTE: d0 es un byte-displacement.
+     *   La tabla se lee byte a byte en orden big-endian (como en ROM). */
+    d0 &= 0x0F;                                           /* andi.w #$F,d0 */
+    {
+        const uint8_t *sp = (const uint8_t *)Spring_Powers;
+        spring_pow(o) = (int16_t)(((uint16_t)sp[d0] << 8) | (uint16_t)sp[d0 + 1]);
+    }
+    fprintf(stderr, "SPRING final: gfx=%04X pow=%d sub=%02X\n",
+            obGfx(o), spring_pow(o), obSubtype(o));
+    /* returns to the outer dispatcher (bra.s -> DisplaySprite) */
+}
+
+/* -------------------------------------------------------------------------
+ *  Spring_Up — routine 2: upright spring, bounces Sonic up.
+ *  ------------------------------------------------------------------------- */
+static void Spring_Up(uint8_t *o) {
+    int16_t d1 = (int16_t)(32 / 2 + sonic_solid_width);
+    int16_t d2 = 16 / 2;
+    int16_t d3 = 32 / 2;
+    int16_t d4 = obX(o);
+    int16_t out_d3 = 0, out_d5 = 0;
+
+    SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5);     /* bsr.w SolidObject */
+
+    if (obSolid(o) == 0) return;                          /* tst.b obSolid(a0) / bne.s .bounceUp */
+
+        /* .bounceUp */
+        {
+            uint8_t *a1 = RAM_ADDR(v_player);
+            obRoutine(o) += 2;                                /* addq.b #2 -> Spring_AniUp */
+            obY(a1) = (int16_t)(obY(a1) + 8);                 /* addq.w #8,obY(a1) */
+            obVelY(a1) = spring_pow(o);                       /* move.w spring_pow(a0),obVelY(a1) */
+            obStatus(a1) |= (1 << 1);                         /* bset #1: airborne */
+            obStatus(a1) &= ~(1 << 3);                        /* bclr #3: not on platform */
+            obAnim(a1)   = id_Spring;                         /* move.b #id_Spring,obAnim(a1) */
+            obRoutine(a1)= 2;                                 /* move.b #2,obRoutine(a1) -> Sonic_Control */
+            obStatus(o)  &= ~(1 << 3);                        /* bclr #3,obStatus(a0) */
+            obSolid(o)   = 0;                                 /* clr.b obSolid(a0) */
+            Sound_Queue(sfx_Spring, false);                   /* jsr (QueueSound2) */
+        }
+}
+
+/* -------------------------------------------------------------------------
+ *  Spring_AniUp — routine 4: animate; the script advances routine to 6.
+ *  ------------------------------------------------------------------------- */
+static void Spring_AniUp(uint8_t *o) {
+    if (Ani_Spring) AnimateSprite(o, Ani_Spring);         /* lea Ani_Spring / bra AnimateSprite */
+}
+
+/* Spring_ResetUp — routine 6 */
+static void Spring_ResetUp(uint8_t *o) {
+    obPrevAni(o) = 1;                                     /* move.b #1,obPrevAni */
+    obRoutine(o) -= 4;                                    /* subq.b #4 -> Spring_Up (2) */
+}
+
+/* -------------------------------------------------------------------------
+ *  Spring_LR — routine 8: sideways spring, bounces Sonic left/right.
+ *  ------------------------------------------------------------------------- */
+static void Spring_LR(uint8_t *o) {
+    int16_t d1 = (int16_t)(16 / 2 + sonic_solid_width);
+    int16_t d2 = 28 / 2;
+    int16_t d3 = 30 / 2;
+    int16_t d4 = obX(o);
+    int16_t out_d3 = 0, out_d5 = 0;
+
+    SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5);     /* bsr.w SolidObject */
+
+    if (obRoutine(o) == 2) {                              /* cmpi.b #2 / bne.s .checkPushing */
+        obRoutine(o) = 8;                                 /* move.b #8: force back to Spring_LR */
+    }
+
+    /* .checkPushing */
+    if (!(obStatus(o) & (1 << 5))) return;                /* btst #5 / bne.s .bounceSideways */
+
+        /* .bounceSideways */
+        {
+            uint8_t *a1 = RAM_ADDR(v_player);
+            obRoutine(o) += 2;                                /* addq.b #2 -> Spring_AniLR */
+            obVelX(a1) = spring_pow(o);                       /* move.w spring_pow(a0),obVelX(a1) */
+            obX(a1) = (int16_t)(obX(a1) + 8);                 /* addq.w #8,obX(a1) */
+
+            if (!(obStatus(o) & (1 << 0))) {                  /* btst #0 / bne.s .doBounce */
+                /* Facing right (default): push left into spring, then bounce right */
+                obX(a1)    = (int16_t)(obX(a1) - (8 + 8));    /* subi.w #8+8,obX(a1) */
+                obVelX(a1) = (int16_t)(-obVelX(a1));          /* neg.w obVelX(a1) */
+            }
+
+            /* .doBounce */
+            locktime(a1) = 15;                                /* move.w #15,locktime(a1) */
+            obInertia(a1) = obVelX(a1);                       /* move.w obVelX(a1),obInertia(a1) */
+            obStatus(a1) ^= (1 << 0);                         /* bchg #0: flip X-orientation */
+
+            if (!(obStatus(a1) & (1 << 2))) {                 /* btst #2 / bne.s .clearPush (rolling?) */
+                obAnim(a1) = id_Walk;                         /* move.b #id_Walk,obAnim */
+            }
+
+            /* .clearPush */
+            obStatus(o)  &= ~(1 << 5);                        /* bclr #5,obStatus(a0) */
+            obStatus(a1) &= ~(1 << 5);                        /* bclr #5,obStatus(a1) */
+            Sound_Queue(sfx_Spring, false);                   /* jsr (QueueSound2) */
+        }
+}
+
+/* Spring_AniLR — routine $A */
+static void Spring_AniLR(uint8_t *o) {
+    if (Ani_Spring) AnimateSprite(o, Ani_Spring);
+}
+
+/* Spring_ResetLR — routine $C */
+static void Spring_ResetLR(uint8_t *o) {
+    obPrevAni(o) = 2;                                     /* move.b #2,obPrevAni */
+    obRoutine(o) -= 4;                                    /* subq.b #4 -> Spring_LR (8) */
+}
+
+/* -------------------------------------------------------------------------
+ *  Spring_Down — routine $E: ceiling-mounted spring, bounces Sonic down.
+ *  ------------------------------------------------------------------------- */
+static void Spring_Down(uint8_t *o) {
+    int16_t d1 = (int16_t)(32 / 2 + sonic_solid_width);
+    int16_t d2 = 16 / 2;
+    int16_t d3 = 32 / 2;
+    int16_t d4 = obX(o);
+    int16_t out_d3 = 0, out_d5 = 0;
+
+    int16_t ret = SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5); /* bsr.w SolidObject */
+
+    if (obRoutine(o) == 2) {                              /* cmpi.b #2 / bne.s .checkTouch */
+        obRoutine(o) = 0x0E;                              /* move.b #$E: force back to Spring_Down */
+    }
+
+    /* .checkTouch */
+    if (obSolid(o) != 0) return;                          /* tst.b obSolid / bne.s .return */
+        if (ret >= 0) return;                                 /* tst.w d4 / bmi.s .bounceDown */
+
+            /* .bounceDown */
+            {
+                uint8_t *a1 = RAM_ADDR(v_player);
+                obRoutine(o) += 2;                                /* addq.b #2 -> Spring_AniDown */
+                obY(a1) = (int16_t)(obY(a1) - 8);                 /* subq.w #8,obY(a1) */
+                obVelY(a1) = spring_pow(o);                       /* move.w spring_pow(a0),obVelY(a1) */
+                obVelY(a1) = (int16_t)(-obVelY(a1));              /* neg.w obVelY(a1): move down */
+                obStatus(a1) |= (1 << 1);                         /* bset #1: airborne */
+                obStatus(a1) &= ~(1 << 3);                        /* bclr #3: not on platform */
+                obRoutine(a1)= 2;                                 /* move.b #2 -> Sonic_Control */
+                obStatus(o)  &= ~(1 << 3);                        /* bclr #3,obStatus(a0) */
+                obSolid(o)   = 0;                                 /* clr.b obSolid(a0) */
+                Sound_Queue(sfx_Spring, false);                   /* jsr (QueueSound2) */
+            }
+}
+
+/* Spring_AniDown — routine $10 */
+static void Spring_AniDown(uint8_t *o) {
+    if (Ani_Spring) AnimateSprite(o, Ani_Spring);
+}
+
+/* Spring_ResetDown — routine $12 */
+static void Spring_ResetDown(uint8_t *o) {
+    obPrevAni(o) = 1;                                     /* move.b #1,obPrevAni */
+    obRoutine(o) -= 4;                                    /* subq.b #4 -> Spring_Down ($E) */
+}
+
+/* -------------------------------------------------------------------------
+ *  Springs dispatcher — Spring_Index: 0/2/4/6/8/A/C/E/$10/$12
+ *  FixBugs=0: DisplaySprite first, then out_of_range DeleteObject.
+ *  ------------------------------------------------------------------------- */
+static void Springs_ObjectMain(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00: Spring_Main(o);       break;
+        case 0x02: Spring_Up(o);         break;
+        case 0x04: Spring_AniUp(o);      break;
+        case 0x06: Spring_ResetUp(o);    break;
+        case 0x08: Spring_LR(o);         break;
+        case 0x0A: Spring_AniLR(o);      break;
+        case 0x0C: Spring_ResetLR(o);    break;
+        case 0x0E: Spring_Down(o);       break;
+        case 0x10: Spring_AniDown(o);    break;
+        case 0x12: Spring_ResetDown(o);  break;
+    }
+
+    /* Outer display + range check (FixBugs=0 order) */
+    DisplaySprite(o);                                     /* bsr.w DisplaySprite */
+    if (OutOfRange(o, -1)) {                              /* out_of_range.w DeleteObject */
+        DeleteObject(o);
+    }
 }

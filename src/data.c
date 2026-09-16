@@ -175,7 +175,7 @@ size_t   Nem_Flicky_len = 0;
 const uint8_t *Nem_Squirrel = NULL;
 size_t   Nem_Squirrel_len = 0;
 
-/* Remaining PLC art (artnem/*.nem verbatim names) */
+// Remaining PLC art (artnem/*.nem verbatim names)
 const uint8_t *Nem_BallHog = NULL;
 size_t   Nem_BallHog_len = 0;
 const uint8_t *Nem_Basaran = NULL;
@@ -498,6 +498,9 @@ size_t   Ani_Sonic_len = 0;
 const uint8_t *Ani_Monitor = NULL;
 size_t   Ani_Monitor_len = 0;
 
+const uint8_t *Ani_Spring = NULL;
+size_t   Ani_Spring_len = 0;
+
 const uint8_t *ObjPos_GHZ1 = NULL;
 size_t   ObjPos_GHZ1_len = 0;
 const uint8_t *ObjPos_GHZ2 = NULL;
@@ -605,14 +608,16 @@ const uint8_t *Nem_GhzWall1 = NULL;
 size_t   Nem_GhzWall1_len = 0;
 
 /* Object mappings referenced by the DebugMode item lists.
-   Most are unstaged (NULL) until their maps/*.asm assets are ported. */
+   Most are unstaged (NULL) until their maps ".asm" assets are ported. */
 const uint8_t *Map_Monitor = NULL;
 size_t   Map_Monitor_len = 0;
 const uint8_t *Map_Chop = NULL;
 const uint8_t *Map_Spike = NULL;
+size_t   Map_Spike_len = 0;
 const uint8_t *Map_Plat_GHZ = NULL;
 const uint8_t *Map_PRock = NULL;
 const uint8_t *Map_Spring = NULL;
+size_t   Map_Spring_len = 0;
 const uint8_t *Map_Newt = NULL;
 /* GHZ edge walls (id_EdgeWalls) mappings */
 static size_t Map_Edge_len = 0;
@@ -714,7 +719,7 @@ size_t   Col_CollArray2_len = 0;
 
 /* Per-zone collision indexes (ColPointers, sonic.asm:3116-3121).
    Only GHZ is staged so far; the rest stay NULL (ColIndexLoad picks a
-   NULL pointer) until their collide/*.bin lands. */
+   NULL pointer) until their collide ".bin" lands. */
 const uint8_t *Col_GHZ = NULL;
 size_t   Col_GHZ_len = 0;
 const uint8_t *Col_LZ = NULL;
@@ -1671,8 +1676,7 @@ int Data_Init(void) {
         Nem_Explode_len = 0;
     }
 
-    if (load_asm_asset_named("maps/explosions.asm", "Map_ExplodeItem",
-                             &Map_ExplodeItem, &Map_ExplodeItem_len) != 0) {
+    if (load_asm_asset_named("maps/explosions.asm", "Map_ExplodeItem", &Map_ExplodeItem, &Map_ExplodeItem_len) != 0) {
         Map_ExplodeItem = NULL;
         Map_ExplodeItem_len = 0;
     }
@@ -2012,6 +2016,21 @@ int Data_Init(void) {
     if (load_asm_asset("maps/Monitor.asm", &Map_Monitor, &Map_Monitor_len, 1) != 0) {
         Map_Monitor = NULL;
         Map_Monitor_len = 0;
+    }
+
+    if (load_asm_asset("maps/Spikes.asm", &Map_Spike, &Map_Spike_len, 1) != 0) {
+        Map_Spike = NULL;
+        Map_Spike_len = 0;
+    }
+
+    if (load_asm_asset("maps/Springs.asm", &Map_Spring, &Map_Spring_len, 1) != 0) {
+        Map_Spring = NULL;
+        Map_Spring_len = 0;
+    }
+
+    if (load_asm_asset("anim/Springs.asm", &Ani_Spring, &Ani_Spring_len, 0) != 0) {
+        Ani_Spring = NULL;
+        Ani_Spring_len = 0;
     }
 
 

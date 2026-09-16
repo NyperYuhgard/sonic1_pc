@@ -593,13 +593,16 @@ extern size_t   Map_Missile_len;
 extern const uint8_t *Ani_Missile;
 extern size_t   Ani_Missile_len;
 
+extern const uint8_t *Ani_Spring;
+extern size_t   Ani_Spring_len;
+
 /* GHZ bridge (id_Bridge) mappings */
 extern const uint8_t *Map_Bri;
 extern size_t   Map_Bri_len;
 
 /* Object mappings referenced by the DebugMode item lists (DebugMode.asm).
-   Most are unstaged (NULL) until their maps/*.asm assets are ported; the
-   debug list itself (debugmode.c) still references them faithfully. */
+   Most are unstaged (NULL) until their maps ".asm" assets are ported; the
+   debug list itself (debugmode.c) still references them faithfully.  */
 extern const uint8_t *Map_Monitor;
 extern const uint8_t *Map_Chop;
 extern const uint8_t *Map_Spike;
@@ -717,7 +720,7 @@ extern const uint8_t *ObjPos_End;
 extern size_t   ObjPos_End_len;
 
 /* Per-zone collision indexes (ColPointers, sonic.asm:3116-3121).
-   Only GHZ is staged; the rest are NULL until their collide/*.bin lands. */
+   Only GHZ is staged; the rest are NULL until their collide ".bin" lands.  */
 extern const uint8_t *Col_GHZ;
 extern size_t   Col_GHZ_len;
 extern const uint8_t *Col_LZ;
