@@ -6165,7 +6165,7 @@ static void Mon_Main(uint8_t *o) {
     {
         uint8_t *a2 = RAM_ADDR(v_objstate);
         uint8_t d0 = obRespawnNo(o);             /* moveq #0,d0 / move.b obRespawnNo */
-        /* FixBugs=0: bclr #7 relocated to RememberState; skipped here. */
+        a2[2 + d0] &= ~0x80;                     /* bclr #7,2(a2,d0.w) — FixBugs=0 */
         if (a2[2 + d0] & 1) {                    /* btst #0,2(a2,d0.w) / beq.s .notbroken */
             obRoutine(o) = 8;                    /* move.b #8,obRoutine */
             obFrame(o)   = 0x0B;                 /* move.b #$B,obFrame */

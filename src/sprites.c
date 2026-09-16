@@ -84,7 +84,7 @@ void BuildSprites(void) {
             uint8_t *obj = sprite_queue[i];
             if (!obj || obID(obj) == 0) continue;
             if ((obPriority(obj) & 7) != layer) continue;
-
+            obRender(obj) &= ~sprite_rendered;
             uint8_t render = obRender(obj);
             uint16_t cam_field = render & (sprite_cam_field | sprite_cam_bg);
             int x, y;
