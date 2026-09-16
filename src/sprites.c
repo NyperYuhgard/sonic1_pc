@@ -79,102 +79,95 @@ void BuildSprites(void) {
 
     int sprite_index = 0;
 
-    /* The MD fills the sprite table one priority layer at a time: all
-       obPriority-0 objects first (lowest link / drawn on top, since the VDP
-       follows the list front-to-back), then priority 1 ... 7. Within a layer
-       DisplaySprite FIFO order is kept. This ordering is exactly what makes
-       the title screen's "hide torso" trick work: the 30 filler sprites
-       (priority 0) land BEFORE Sonic's pieces (priority 1), so on scanlines
-       where the fillers + PRESS START + Sonic exceed the 20-sprite hardware
-       limit, Sonic's trailing pieces are the ones dropped. */
     for (int layer = 0; layer < 8 && sprite_index < sprites_max; layer++) {
         for (int i = 0; i < sprite_queue_count && sprite_index < sprites_max; i++) {
             uint8_t *obj = sprite_queue[i];
             if (!obj || obID(obj) == 0) continue;
             if ((obPriority(obj) & 7) != layer) continue;
 
-        /* --- Coordinate system (ASM BuildSprites:40-95) --- */
-        uint8_t render = obRender(obj);
-        uint16_t cam_field = render & (sprite_cam_field | sprite_cam_bg);
-        int x;
-        int y;
+            uint8_t render = obRender(obj);
+            uint16_t cam_field = render & (sprite_cam_field | sprite_cam_bg);
+            int x, y;
 
-        if (cam_field == 0) {
-            /* .screenCoords: on-screen positioning. No camera, no bounds check;
-               obX/obScreenY already carry the VDP $-80 sprite-start offset */
-            x = obX(obj);
-            y = obScreenY(obj);
-        } else {
-            int cam_x;
-            int cam_y;
-            if (cam_field == sprite_cam_field) {
-                cam_x = (int16_t)v_screenposx;
-                cam_y = (int16_t)v_screenposy;
-            } else if (cam_field == (sprite_cam_field | sprite_cam_bg)) {
-                cam_x = (int16_t)v_bgscreenposx;
-                cam_y = (int16_t)v_bgscreenposy;
+            if (cam_field == 0) {
+                x = obX(obj);
+                y = obScreenY(obj);
             } else {
-                cam_x = (int16_t)v_bg3screenposx;
-                cam_y = (int16_t)v_bg3screenposy;
+                int cam_x, cam_y;
+                if (cam_field == sprite_cam_field) {
+                    cam_x = (int16_t)v_screenposx;
+                    cam_y = (int16_t)v_screenposy;
+                } else if (cam_field == (sprite_cam_field | sprite_cam_bg)) {
+                    cam_x = (int16_t)v_bgscreenposx;
+                    cam_y = (int16_t)v_bgscreenposy;
+                } else {
+                    cam_x = (int16_t)v_bg3screenposx;
+                    cam_y = (int16_t)v_bg3screenposy;
+                }
+
+                int w = obActWid(obj);
+                x = obX(obj) - cam_x;
+                if (x + w < 0) continue;
+                if (x - w >= 320) continue;
+
+                y = obY(obj) - cam_y;
+                if (render & sprite_customheight) {
+                    int h = obHeight(obj);
+                    if (y + h < 0) continue;
+                    if (y - h >= 224) continue;
+                } else {
+                    if (y < -32) continue;
+                    if (y >= 192) continue;
+                }
+
+                x += 0x80;
+                y += 0x80;
             }
 
-            /* --- Screen bounds check for X-position (ASM:47-59) --- */
-            int w = obActWid(obj);
-            x = obX(obj) - cam_x;
-            if (x + w < 0) continue;         /* left edge out of bounds */
-            if (x - w >= 320) continue;      /* right edge out of bounds */
+            const uint8_t *map = (const uint8_t *)(uintptr_t)obMap(obj);
+            if (!map) continue;
 
-            /* --- Screen bounds check for Y-position (ASM:61-94) --- */
-            y = obY(obj) - cam_y;
-            if (render & sprite_customheight) {
-                int h = obHeight(obj);
-                if (y + h < 0) continue;            /* top edge out of bounds */
-                if (y - h >= 224) continue;         /* bottom edge out of bounds */
-            } else {
-                if (y < -32) continue;              /* assumed height = 32 ($20) */
-                if (y >= 192) continue;
+            uint16_t gfx = obGfx(obj);
+            int xflip = (render & sprite_xflip) ? 1 : 0;
+            int yflip = (render & sprite_yflip) ? 1 : 0;
+
+            /* ---- NUEVA RAMA: raw mappings ---- */
+            if (render & sprite_rawmappings) {
+                /* obMap apunta directamente a UNA pieza (5 bytes).
+                 *                  No se consulta Map_LookupLength ni la tabla de frames. */
+                const uint8_t *piece_data = map;
+                if (sprite_index < sprites_max) {
+                    build_sprite_piece(sprite_table, &sprite_index, y, x,
+                                       &piece_data, gfx, xflip, yflip);
+                }
+                obRender(obj) |= sprite_rendered;
+                continue;
+            }
+            /* ----------------------------------- */
+
+            size_t map_len = Map_LookupLength(map);
+            if (map_len == 0) continue;
+
+            int frame_idx = obFrame(obj);
+            if ((size_t)(frame_idx * 2 + 1) >= map_len) continue;
+            uint16_t frame_offset = ((const uint16_t *)map)[frame_idx];
+
+            if (frame_offset >= map_len) continue;
+            const uint8_t *frame_data = map + frame_offset;
+
+            int num_pieces = frame_data[0];
+            if (num_pieces <= 0 || num_pieces > 32) continue;
+
+            if ((size_t)frame_offset + 1 + (size_t)num_pieces * 5 > map_len) continue;
+
+            const uint8_t *piece_data = frame_data + 1;
+
+            for (int p = 0; p < num_pieces && sprite_index < sprites_max; p++) {
+                build_sprite_piece(sprite_table, &sprite_index, y, x,
+                                   &piece_data, gfx, xflip, yflip);
             }
 
-            x += 0x80;                     /* add VDP sprite start */
-            y += 0x80;                     /* add VDP sprite start */
-        }
-
-        /* Get mapping pointer */
-        const uint8_t *map = (const uint8_t *)(uintptr_t)obMap(obj);
-        if (!map || !obj) continue;
-
-        size_t map_len = Map_LookupLength(map);
-        if (map_len == 0) continue;
-
-        int frame_idx = obFrame(obj);
-        /* La tabla de offsets ocupa map_len bytes al principio; cada frame
-           es [count byte][count * 5 bytes de piezas]. */
-        if ((size_t)(frame_idx * 2 + 1) >= map_len) continue;
-        uint16_t frame_offset = ((const uint16_t *)map)[frame_idx];
-
-        /* frame_offset debe estar dentro del buffer y dejar sitio al menos
-           para el byte de count. */
-        if (frame_offset >= map_len) continue;
-        const uint8_t *frame_data = map + frame_offset;
-
-        int num_pieces = frame_data[0];
-        if (num_pieces <= 0 || num_pieces > 32) continue;
-
-        /* Comprobación crítica: count + count*5 bytes deben caber en el buffer. */
-        if ((size_t)frame_offset + 1 + (size_t)num_pieces * 5 > map_len) continue;
-
-        const uint8_t *piece_data = frame_data + 1;
-        uint16_t gfx = obGfx(obj);
-
-        int xflip = (obRender(obj) & sprite_xflip) ? 1 : 0;
-        int yflip = (obRender(obj) & sprite_yflip) ? 1 : 0;
-
-        for (int p = 0; p < num_pieces && sprite_index < sprites_max; p++) {
-            build_sprite_piece(sprite_table, &sprite_index, y, x,
-                               &piece_data, gfx, xflip, yflip);
-        }
-
-        obRender(obj) |= sprite_rendered; /* ASM: bset #sprite_rendered_bit (bit 7) */
+            obRender(obj) |= sprite_rendered;
         }
     }
 

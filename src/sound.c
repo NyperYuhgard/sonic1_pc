@@ -62,7 +62,7 @@ static const snd_map_t sfx_map[] = {
     { sfx_Ring,         "assets/SoundFX/Global/Ring.wav" },
     { sfx_SpikesMove,   "assets/SoundFX/Global/SpikesMove.wav" },
     { sfx_Rumbling,     "assets/SoundFX/Stage/Crusher.wav" },
-    { sfx_Collapse,     "assets/SoundFX/Stage/LargeWall.wav" },
+    { sfx_Collapse,     "assets/SoundFX/Stage/LedgeBreak.wav" },
     { sfx_SSGlass,      "assets/SoundFX/Stage/GemBlockSS.wav" },
     { sfx_Door,         "assets/SoundFX/Stage/FlappingDoor.wav" },
     { sfx_Teleport,     "assets/SoundFX/Stage/Exit_SS.wav" },

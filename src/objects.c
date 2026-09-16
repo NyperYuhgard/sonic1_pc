@@ -47,6 +47,8 @@ static void Monitor_Main(void *obj);
 static void PowerUp_Main(void *obj);
 static void Spikes_ObjectMain(void *obj);
 static void Springs_ObjectMain(void *obj);
+static void CollapseLedge_Main(void *obj);
+static void CollapseFloor_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -83,6 +85,8 @@ void Objects_Init(void) {
     obj_dispatch[id_EdgeWalls]    = EdgeWalls_Main;
     obj_dispatch[id_Spikes] = Spikes_ObjectMain;
     obj_dispatch[id_Springs] = Springs_ObjectMain;
+    obj_dispatch[id_CollapseLedge] = CollapseLedge_Main;
+    obj_dispatch[id_CollapseFloor] = CollapseFloor_Main;
 
     /* Register explosion/gray puff, fiery explosion, animals, and points */
     obj_dispatch[id_ExplosionItem] = ExplosionItem_Main;
@@ -7078,5 +7082,421 @@ static void Springs_ObjectMain(void *obj) {
     DisplaySprite(o);                                     /* bsr.w DisplaySprite */
     if (OutOfRange(o, -1)) {                              /* out_of_range.w DeleteObject */
         DeleteObject(o);
+    }
+}
+
+/* ===========================================================================
+   Object 1A — Collapsing Ledge (GHZ)
+   Object 53 — Collapsing Floors (MZ, SLZ, SBZ)
+   Ported from _incObj/1A, 53 Collapsing Ledges and Floors.asm (FixBugs=0).
+
+   Fields:
+     collapsible_timedelay = objoff_38 (byte): frames until fragment starts to fall
+     collapsible_flag      = objoff_3A (byte): set when collapsing has started
+   =========================================================================== */
+
+#define collapsible_timedelay(obj) (*(uint8_t *)((uint8_t *)(obj) + 0x38))  /* objoff_38 */
+#define collapsible_flag(obj)      (*(uint8_t *)((uint8_t *)(obj) + 0x3A))  /* objoff_3A */
+
+/* CollapseData: frames each fragment waits before it starts to fall.
+   Index order matches the sprite piece order in the corresponding frame. */
+static const uint8_t CollapseData_GHZLedge[25] = {
+    0x1C, 0x18, 0x14, 0x10,
+    0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06,
+    0x18, 0x14, 0x10, 0x0C, 0x08, 0x04,
+    0x16, 0x12, 0x0E, 0x0A, 0x06, 0x02,
+    0x14, 0x10, 0x0C,
+};
+
+static const uint8_t CollapseData_8x2_Swipe[8] = {
+    0x1E, 0x16, 0x0E, 0x06,
+    0x1A, 0x12, 0x0A, 0x02,
+};
+
+static const uint8_t CollapseData_8x2_Shuffle[8] = {
+    0x16, 0x1E, 0x1A, 0x12,
+    0x06, 0x0E, 0x0A, 0x02,
+};
+
+/* GHZ collapsing ledge heightmap (48 entries):
+     8 bytes flat ($20),
+     15 ascending values $21..$2F each repeated twice,
+     10 bytes flat ($30). */
+static const uint8_t Ledge_SlopeData[48] = {
+    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+    0x21, 0x21, 0x22, 0x22, 0x23, 0x23, 0x24, 0x24,
+    0x25, 0x25, 0x26, 0x26, 0x27, 0x27, 0x28, 0x28,
+    0x29, 0x29, 0x2A, 0x2A, 0x2B, 0x2B, 0x2C, 0x2C,
+    0x2D, 0x2D, 0x2E, 0x2E, 0x2F, 0x2F,
+    0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+};
+
+static void Ledge_Main(uint8_t *o);
+static void Ledge_ChkTouch(uint8_t *o);
+static void Ledge_OnPlatform(uint8_t *o);
+static void Ledge_FragmentPiece(uint8_t *o);
+static void Ledge_Delete(uint8_t *o);
+static void Ledge_WalkOff(uint8_t *o);
+static void CFlo_Main(uint8_t *o);
+static void CFlo_ChkTouch(uint8_t *o);
+static void CFlo_OnPlatform(uint8_t *o);
+static void CFlo_FragmentPiece(uint8_t *o);
+static void CFlo_Delete(uint8_t *o);
+static void CFlo_WalkOff(uint8_t *o);
+static void Fragmentate_GHZLedge(uint8_t *o);
+static void Fragmentate_GHZLedge_NoReset(uint8_t *o);
+static void Fragmentate_8x2Floor(uint8_t *o);
+static void Fragmentate_8x2Floor_NoReset(uint8_t *o);
+static void FragmentatePlatform(uint8_t *o, const uint8_t *a4, int d1);
+static void SlopeObject_AssumeStoodOn(uint8_t *o, int16_t d1, int16_t d2,
+                                      const uint8_t *a2);
+
+/* ---------------------------------------------------------------------------
+ *  Ledge_Main — routine 0
+ *  ------------------------------------------------------------------------- */
+static void Ledge_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                       /* addq.b #2 */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Ledge;           /* move.l #Map_Ledge */
+    obGfx(o)     = (uint16_t)(ArtTile_Level | Tile_Pal3);    /* move.w */
+    obRender(o) |= sprite_cam_field;                         /* ori.b #sprite_cam_field */
+    obPriority(o)= 4;
+    collapsible_timedelay(o) = 7;                            /* move.b #7 */
+    /* FixBugs=0: 200/2 culling radius (FixBugs uses 96/2 instead). */
+    obActWid(o)  = 200 / 2;
+    obFrame(o)   = obSubtype(o);                             /* move.b obSubtype,obFrame */
+    obHeight(o)  = 112 / 2;                                  /* move.b #112/2 */
+    obRender(o) |= sprite_customheight;                      /* bset #sprite_customheight_bit */
+}
+
+/* ---------------------------------------------------------------------------
+ *  Ledge_ChkTouch — routine 2
+ *  ------------------------------------------------------------------------- */
+static void Ledge_ChkTouch(uint8_t *o) {
+    if (collapsible_flag(o) != 0) {                          /* tst.b / beq.s */
+        if (collapsible_timedelay(o) == 0) {                 /* tst.b / beq.w */
+            Fragmentate_GHZLedge(o);
+            return;
+        }
+        collapsible_timedelay(o)--;                          /* subq.b #1 */
+    }
+    /* .chkTouch */
+    SlopeObject(o, 96 / 2, Ledge_SlopeData);                 /* bsr.w SlopeObject */
+    RememberState(o);                                        /* bra.w RememberState */
+}
+
+/* ---------------------------------------------------------------------------
+ *  Ledge_OnPlatform — routine 4 (falls through to Ledge_WalkOff)
+ *  ------------------------------------------------------------------------- */
+static void Ledge_OnPlatform(uint8_t *o) {
+    if (collapsible_timedelay(o) == 0) {                     /* tst.b / beq.w */
+        Fragmentate_GHZLedge_NoReset(o);
+        return;
+    }
+    collapsible_flag(o) = 1;                                 /* move.b #1 */
+    collapsible_timedelay(o)--;                              /* subq.b #1 */
+    Ledge_WalkOff(o);                                        /* (fall-through) */
+}
+
+/* ---------------------------------------------------------------------------
+ *  Ledge_WalkOff — routine $A
+ *  ------------------------------------------------------------------------- */
+static void Ledge_WalkOff(uint8_t *o) {
+    int16_t dummy;
+    ExitPlatform(o, 96 / 2, &dummy);                         /* bsr.w ExitPlatform */
+    SlopeObject_AssumeStoodOn(o, 96 / 2, obX(o), Ledge_SlopeData);
+    RememberState(o);                                        /* bra.w RememberState */
+}
+
+/* ---------------------------------------------------------------------------
+ *  Ledge_FragmentPiece — routine 6
+ *  ------------------------------------------------------------------------- */
+static void Ledge_FragmentPiece(uint8_t *o) {
+    if (collapsible_timedelay(o) == 0) {                     /* tst.b / beq.s */
+        /* .fragmentFall */
+        ObjectFall(o);                                       /* bsr.w ObjectFall */
+        /* FixBugs=0: DisplaySprite then out-of-range DeleteObject. */
+        DisplaySprite(o);                                    /* bsr.w DisplaySprite */
+        if ((int8_t)obRender(o) < 0) return;                 /* tst.b / bpl.s */
+        Ledge_Delete(o);
+        return;
+    }
+    if (collapsible_flag(o) != 0) goto delayCollapse;        /* tst.b / bne.w */
+    collapsible_timedelay(o)--;                              /* subq.b #1 */
+    DisplaySprite(o);                                        /* bra.w DisplaySprite */
+    return;
+
+delayCollapse:
+    collapsible_timedelay(o)--;                              /* subq.b #1 */
+    Ledge_WalkOff(o);                                        /* bsr.w Ledge_WalkOff */
+    {
+        uint8_t *a1 = RAM_ADDR(v_player);
+        if (!(obStatus(a1) & (1 << 3))) goto startCollapse;  /* btst #3 / beq.s */
+        if (collapsible_timedelay(o) != 0) return;           /* tst.b / bne.s */
+        obStatus(a1) &= ~(1 << 3);                           /* bclr #3 */
+        obStatus(a1) &= ~(1 << 5);                           /* bclr #5 */
+        obPrevAni(a1) = id_Run;                              /* move.b #id_Run */
+    }
+startCollapse:
+    collapsible_flag(o) = 0;                                 /* move.b #0 */
+    obRoutine(o) = 6;                                        /* move.b #6 */
+}
+
+/* ---------------------------------------------------------------------------
+ *  Ledge_Delete — routine 8
+ *  ------------------------------------------------------------------------- */
+static void Ledge_Delete(uint8_t *o) {
+    DeleteObject(o);                                         /* bsr.w DeleteObject */
+}
+
+/* ===========================================================================
+ *  Object 53 — Collapsing Floors (MZ / SLZ / SBZ)
+ * =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+ *  CFlo_Main — routine 0
+ *  ------------------------------------------------------------------------- */
+static void CFlo_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                       /* addq.b #2 */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_CFlo;            /* move.l #Map_CFlo */
+    obGfx(o)     = (uint16_t)(ArtTile_MZ_Block | Tile_Pal3); /* move.w */
+
+    if ((uint8_t)v_zone == id_SLZ) {                         /* cmpi.b #id_SLZ / bne.s */
+        obGfx(o) = (uint16_t)(ArtTile_SLZ_Collapsing_Floor | Tile_Pal3);
+        obFrame(o) += 2;                                     /* addq.b #2 */
+    }
+    if ((uint8_t)v_zone == id_SBZ) {                         /* cmpi.b #id_SBZ / bne.s */
+        obGfx(o) = (uint16_t)(ArtTile_SBZ_Collapsing_Floor | Tile_Pal3);
+    }
+    obRender(o) |= sprite_cam_field;                         /* ori.b #sprite_cam_field */
+    obPriority(o)= 4;
+    collapsible_timedelay(o) = 7;                            /* move.b #7 */
+    obActWid(o)  = 136 / 2;                                  /* move.b #136/2 */
+}
+
+/* ---------------------------------------------------------------------------
+ *  CFlo_ChkTouch — routine 2
+ *  ------------------------------------------------------------------------- */
+static void CFlo_ChkTouch(uint8_t *o) {
+    if (collapsible_flag(o) != 0) {                          /* tst.b / beq.s */
+        if (collapsible_timedelay(o) == 0) {                 /* tst.b / beq.w */
+            Fragmentate_8x2Floor(o);
+            return;
+        }
+        collapsible_timedelay(o)--;                          /* subq.b #1 */
+    }
+    /* .solid */
+    PlatformObject(o, 64 / 2);                               /* bsr.w PlatformObject */
+
+    /* SLZ-specific flip: if subtype MSB is set, mirror the collapse pattern
+       depending on which side Sonic touched. */
+    if ((int8_t)obSubtype(o) < 0) {                          /* tst.b / bpl.s */
+        uint8_t *a1 = RAM_ADDR(v_player);
+        if (obStatus(a1) & (1 << 3)) {                       /* btst #3 / beq.s */
+            obRender(o) &= ~sprite_xflip;                    /* bclr #sprite_xflip_bit */
+            if ((uint16_t)obX(a1) < (uint16_t)obX(o)) {      /* sub.w / bcc.s */
+                obRender(o) |= sprite_xflip;                 /* bset #sprite_xflip_bit */
+            }
+        }
+    }
+    /* .display */
+    RememberState(o);                                        /* bra.w RememberState */
+}
+
+/* ---------------------------------------------------------------------------
+ *  CFlo_OnPlatform — routine 4 (falls through to CFlo_WalkOff)
+ *  ------------------------------------------------------------------------- */
+static void CFlo_OnPlatform(uint8_t *o) {
+    if (collapsible_timedelay(o) == 0) {                     /* tst.b / beq.w */
+        Fragmentate_8x2Floor_NoReset(o);
+        return;
+    }
+    collapsible_flag(o) = 1;                                 /* move.b #1 */
+    collapsible_timedelay(o)--;                              /* subq.b #1 */
+    CFlo_WalkOff(o);                                         /* (fall-through) */
+}
+
+/* ---------------------------------------------------------------------------
+ *  CFlo_WalkOff — routine $A
+ *  ------------------------------------------------------------------------- */
+static void CFlo_WalkOff(uint8_t *o) {
+    int16_t dummy;
+    ExitPlatform(o, 64 / 2, &dummy);                         /* bsr.w ExitPlatform */
+    MvSonicOnPtfm2(o, obX(o));                               /* bsr.w MvSonicOnPtfm2 */
+    RememberState(o);                                        /* bra.w RememberState */
+}
+
+/* ---------------------------------------------------------------------------
+ *  CFlo_FragmentPiece — routine 6
+ *  ------------------------------------------------------------------------- */
+static void CFlo_FragmentPiece(uint8_t *o) {
+    if (collapsible_timedelay(o) == 0) {                     /* tst.b / beq.s */
+        /* .fragmentFall */
+        ObjectFall(o);                                       /* bsr.w ObjectFall */
+        DisplaySprite(o);                                    /* bsr.w DisplaySprite */
+        if ((int8_t)obRender(o) < 0) return;                 /* tst.b / bpl.s */
+        CFlo_Delete(o);
+        return;
+    }
+    if (collapsible_flag(o) != 0) goto delayCollapse;        /* tst.b / bne.w */
+    collapsible_timedelay(o)--;                              /* subq.b #1 */
+    DisplaySprite(o);                                        /* bra.w DisplaySprite */
+    return;
+
+delayCollapse:
+    collapsible_timedelay(o)--;                              /* subq.b #1 */
+    CFlo_WalkOff(o);                                         /* bsr.w CFlo_WalkOff */
+    {
+        uint8_t *a1 = RAM_ADDR(v_player);
+        if (!(obStatus(a1) & (1 << 3))) goto startCollapse;  /* btst #3 / beq.s */
+        if (collapsible_timedelay(o) != 0) return;           /* tst.b / bne.s */
+        obStatus(a1) &= ~(1 << 3);
+        obStatus(a1) &= ~(1 << 5);
+        obPrevAni(a1) = id_Run;
+    }
+startCollapse:
+    collapsible_flag(o) = 0;
+    obRoutine(o) = 6;
+}
+
+/* ---------------------------------------------------------------------------
+ *  CFlo_Delete — routine 8
+ *  ------------------------------------------------------------------------- */
+static void CFlo_Delete(uint8_t *o) {
+    DeleteObject(o);                                         /* bsr.w DeleteObject */
+}
+
+/* ===========================================================================
+ *  Fragmentate subroutines
+ * =========================================================================== */
+
+static void Fragmentate_GHZLedge(uint8_t *o) {
+    collapsible_flag(o) = 0;                                 /* move.b #0 */
+    Fragmentate_GHZLedge_NoReset(o);
+}
+
+static void Fragmentate_GHZLedge_NoReset(uint8_t *o) {
+    obFrame(o) += 2;                                         /* addq.b #2 */
+    FragmentatePlatform(o, CollapseData_GHZLedge, 25 - 1);   /* moveq #25-1,d1 */
+}
+
+static void Fragmentate_8x2Floor(uint8_t *o) {
+    collapsible_flag(o) = 0;                                 /* move.b #0 */
+    Fragmentate_8x2Floor_NoReset(o);
+}
+
+static void Fragmentate_8x2Floor_NoReset(uint8_t *o) {
+    const uint8_t *a4 = (obSubtype(o) & 1)                   /* btst #0 / beq.s */
+        ? CollapseData_8x2_Shuffle
+        : CollapseData_8x2_Swipe;
+    obFrame(o) += 1;                                         /* addq.b #1 */
+    FragmentatePlatform(o, a4, 8 - 1);                       /* moveq #8-1,d1 */
+}
+
+/* FragmentatePlatform — spawn one fragment per sprite piece in the current
+   frame. The first fragment reuses the parent object (a1 = a0); the rest
+   allocate fresh slots via FindFreeObj. */
+static void FragmentatePlatform(uint8_t *o, const uint8_t *a4, int d1) {
+    /* .setupFrag: read mapping pointer, jump to current frame's sprite list. */
+    uint8_t frame = obFrame(o);
+    uint8_t *a3 = (uint8_t *)(uintptr_t)obMap(o);
+    uint16_t offset = ((const uint16_t *)a3)[frame];         /* adda.w (a3,d0.w) */
+    a3 = a3 + offset + 1;                                    /* addq.w #1: skip piece count */
+
+    obRender(o) |= sprite_rawmappings;                       /* bset #sprite_rawmappings_bit */
+    uint8_t d4 = obID(o);                                    /* copy ID to fragments */
+    uint8_t d5 = obRender(o);                                /* copy render flags */
+    uint8_t *a1 = o;                                         /* first fragment = parent */
+
+    for (;;) {
+        /* .firstFragment: initialize fragment object */
+        obRoutine(a1)     = 6;
+        obID(a1)          = d4;
+        obMap(a1)         = (uint32_t)(uintptr_t)a3;
+        obRender(a1)      = d5;
+        obX(a1)           = obX(o);
+        obY(a1)           = obY(o);
+        obGfx(a1)         = obGfx(o);
+        obPriority(a1)    = obPriority(o);
+        obActWid(a1)      = obActWid(o);
+        collapsible_timedelay(a1) = *a4++;                   /* move.b (a4)+,delay */
+
+        /* FixBugs=0: fragments loaded before the parent must be displayed
+           on this frame too (DisplaySprite2 in the ASM). */
+        if ((uintptr_t)a1 < (uintptr_t)o) {                  /* cmpa.l a0,a1 / bhs */
+            DisplaySprite(a1);
+        }
+
+        d1--;                                                /* dbf */
+        if (d1 == -1) break;
+
+        /* .loopFragments: allocate next fragment */
+        uint8_t *slot = (uint8_t *)FindFreeObj();            /* bsr.w FindFreeObj */
+        if (slot == NULL) break;                             /* bne.s .fragmentationDone */
+        a3 += 5;                                             /* addq.w #5: next piece */
+        a1 = slot;
+    }
+
+    /* .fragmentationDone */
+    DisplaySprite(o);                                        /* bsr.w DisplaySprite */
+    Sound_Queue(sfx_Collapse, false);                        /* jmp QueueSound2 */
+}
+
+/* ===========================================================================
+ *  SlopeObject_AssumeStoodOn
+ *  Aligns Sonic to the ledge's sloped surface assuming he is already standing
+ *  on it (skips the usual x/y checks SlopeObject performs).
+ *
+ *  Inputs:
+ *    d1 = platform half width
+ *    d2 = platform X-position
+ *    a2 = heightmap data
+ * =========================================================================== */
+static void SlopeObject_AssumeStoodOn(uint8_t *o, int16_t d1, int16_t d2,
+                                      const uint8_t *a2) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+    if (!(obStatus(a1) & (1 << 3))) return;                  /* btst #3 / beq.s .return */
+
+    /* d0 = (Sonic_X - Ledge_X + half_width) >> 1, or mirrored if X-flipped */
+    int16_t diff = (int16_t)((int)(obX(a1) - obX(o)) + d1);
+    uint16_t d0 = (uint16_t)diff;
+    d0 = (uint16_t)(d0 >> 1);                                /* lsr.w #1,d0 */
+    if (obRender(o) & sprite_xflip) {                        /* btst #sprite_xflip_bit / beq.s */
+        d0 = (uint16_t)((uint16_t)~d0 + (uint16_t)d1);       /* not.w d0 ; add.w d1,d0 */
+    }
+    /* .alignSonic */
+    int16_t slope  = a2[d0];                                 /* moveq #0,d1 ; move.b (a2,d0.w),d1 */
+    int16_t y      = (int16_t)(obY(o) - slope);              /* move.w obY(a0),d0 ; sub.w d1,d0 */
+    int16_t height = (int16_t)obHeight(a1);                  /* moveq #0,d1 ; move.b obHeight(a1),d1 */
+    y = (int16_t)(y - height);                               /* sub.w d1,d0 */
+    obY(a1) = y;                                             /* move.w d0,obY(a1) */
+    int16_t dx = (int16_t)(d2 - obX(o));                     /* sub.w obX(a0),d2 */
+    obX(a1) = (int16_t)(obX(a1) - dx);                       /* sub.w d2,obX(a1) */
+}
+
+/* ===========================================================================
+ *  Dispatch
+ * =========================================================================== */
+
+static void CollapseLedge_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                                  /* Ledge_Index: 0/2/4/6/8/$A */
+        case 0x00: Ledge_Main(o);           break;
+        case 0x02: Ledge_ChkTouch(o);       break;
+        case 0x04: Ledge_OnPlatform(o);     break;
+        case 0x06: Ledge_FragmentPiece(o);  break;
+        case 0x08: Ledge_Delete(o);         break;
+        case 0x0A: Ledge_WalkOff(o);        break;
+    }
+}
+
+static void CollapseFloor_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                                  /* CFlo_Index: 0/2/4/6/8/$A */
+        case 0x00: CFlo_Main(o);            break;
+        case 0x02: CFlo_ChkTouch(o);        break;
+        case 0x04: CFlo_OnPlatform(o);      break;
+        case 0x06: CFlo_FragmentPiece(o);   break;
+        case 0x08: CFlo_Delete(o);          break;
+        case 0x0A: CFlo_WalkOff(o);         break;
     }
 }

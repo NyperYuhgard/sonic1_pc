@@ -637,6 +637,7 @@ extern const uint8_t *Map_Yad;
 extern const uint8_t *Map_Smab;
 extern const uint8_t *Map_MBlock;
 extern const uint8_t *Map_CFlo;
+extern size_t   Map_CFlo_len;
 extern const uint8_t *Map_LTag;
 extern const uint8_t *Map_Bas;
 extern const uint8_t *Map_Cat;
@@ -672,6 +673,8 @@ extern const uint8_t *Map_Animal2;
 extern size_t   Map_Animal2_len;
 extern const uint8_t *Map_Animal3;
 extern size_t   Map_Animal3_len;
+extern const uint8_t *Map_Ledge;
+extern size_t   Map_Ledge_len;
 
 /* Points object mappings (28, 29 Animals and Points.asm: Map_Points) */
 extern const uint8_t *Map_Points;

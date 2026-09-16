@@ -648,6 +648,7 @@ const uint8_t *Map_Yad = NULL;
 const uint8_t *Map_Smab = NULL;
 const uint8_t *Map_MBlock = NULL;
 const uint8_t *Map_CFlo = NULL;
+size_t   Map_CFlo_len = 0;
 const uint8_t *Map_LTag = NULL;
 const uint8_t *Map_Bas = NULL;
 const uint8_t *Map_Cat = NULL;
@@ -683,6 +684,8 @@ const uint8_t *Map_Animal2 = NULL;
 size_t   Map_Animal2_len = 0;
 const uint8_t *Map_Animal3 = NULL;
 size_t   Map_Animal3_len = 0;
+const uint8_t *Map_Ledge = NULL;
+size_t   Map_Ledge_len = 0;
 
 /* Points object mappings (28, 29 Animals and Points.asm) */
 const uint8_t *Map_Points = NULL;
@@ -1676,15 +1679,24 @@ int Data_Init(void) {
         Nem_Explode_len = 0;
     }
 
-    if (load_asm_asset_named("maps/explosions.asm", "Map_ExplodeItem", &Map_ExplodeItem, &Map_ExplodeItem_len) != 0) {
+    if (load_asm_asset("maps/explosions.asm", &Map_ExplodeItem, &Map_ExplodeItem_len, 1) != 0) {
         Map_ExplodeItem = NULL;
         Map_ExplodeItem_len = 0;
     }
 
-    if (load_asm_asset_named("maps/explosions.asm", "Map_ExplodeBomb",
-                             &Map_ExplodeBomb, &Map_ExplodeBomb_len) != 0) {
+    if (load_asm_asset("maps/explosions.asm", &Map_ExplodeBomb, &Map_ExplodeBomb_len, 1) != 0) {
         Map_ExplodeBomb = NULL;
         Map_ExplodeBomb_len = 0;
+    }
+
+    if (load_asm_asset("maps/Collapsing Ledge.asm", &Map_Ledge, &Map_Ledge_len, 1) != 0) {
+        Map_Ledge = NULL;
+        Map_Ledge_len = 0;
+    }
+
+    if (load_asm_asset("maps/Collapsing Floors.asm", &Map_CFlo, &Map_CFlo_len, 1) != 0) {
+        Map_CFlo = NULL;
+        Map_CFlo_len = 0;
     }
 
     /* Animals mappings (28, 29 Animals and Points.asm) — single table per file */
