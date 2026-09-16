@@ -600,6 +600,9 @@ extern size_t   Ani_Spring_len;
 extern const uint8_t *Map_Bri;
 extern size_t   Map_Bri_len;
 
+extern const uint8_t *Map_Scen;
+extern size_t   Map_Scen_len;
+
 /* Object mappings referenced by the DebugMode item lists (DebugMode.asm).
    Most are unstaged (NULL) until their maps ".asm" assets are ported; the
    debug list itself (debugmode.c) still references them faithfully.  */

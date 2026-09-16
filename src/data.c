@@ -615,6 +615,7 @@ const uint8_t *Map_Chop = NULL;
 const uint8_t *Map_Spike = NULL;
 size_t   Map_Spike_len = 0;
 const uint8_t *Map_Plat_GHZ = NULL;
+size_t   Map_Plat_GHZ_len = 0;
 const uint8_t *Map_PRock = NULL;
 const uint8_t *Map_Spring = NULL;
 size_t   Map_Spring_len = 0;
@@ -659,6 +660,7 @@ const uint8_t *Map_Stair = NULL;
 const uint8_t *Map_Fan = NULL;
 const uint8_t *Map_Seesaw = NULL;
 const uint8_t *Map_Scen = NULL;
+size_t   Map_Scen_len = 0;
 const uint8_t *Map_Bomb = NULL;
 const uint8_t *Map_Roll = NULL;
 const uint8_t *Map_Light = NULL;
@@ -2035,6 +2037,11 @@ int Data_Init(void) {
         Map_Spike_len = 0;
     }
 
+    if (load_asm_asset("maps/Platforms (GHZ).asm", &Map_Plat_GHZ, &Map_Plat_GHZ_len, 1) != 0) {
+        Map_Plat_GHZ = NULL;
+        Map_Plat_GHZ_len = 0;
+    }
+
     if (load_asm_asset("maps/Springs.asm", &Map_Spring, &Map_Spring_len, 1) != 0) {
         Map_Spring = NULL;
         Map_Spring_len = 0;
@@ -2064,6 +2071,11 @@ int Data_Init(void) {
     if (load_asm_asset("maps/bridge.asm", &Map_Bri, &Map_Bri_len, 1) != 0) {
         Map_Bri = NULL;
         Map_Bri_len = 0;
+    }
+
+    if (load_asm_asset("maps/Scenery.asm", &Map_Scen, &Map_Scen_len, 1) != 0) {
+        Map_Scen = NULL;
+        Map_Scen_len = 0;
     }
 
     if (load_asm_asset("maps/purple rock.asm", &Map_PRock, &Map_PRock_len, 1) != 0) {

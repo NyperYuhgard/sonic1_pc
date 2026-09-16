@@ -49,6 +49,8 @@ static void Spikes_ObjectMain(void *obj);
 static void Springs_ObjectMain(void *obj);
 static void CollapseLedge_Main(void *obj);
 static void CollapseFloor_Main(void *obj);
+static void Scenery_Main(void *obj);
+static void Platform_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -87,6 +89,8 @@ void Objects_Init(void) {
     obj_dispatch[id_Springs] = Springs_ObjectMain;
     obj_dispatch[id_CollapseLedge] = CollapseLedge_Main;
     obj_dispatch[id_CollapseFloor] = CollapseFloor_Main;
+    obj_dispatch[id_Scenery] = Scenery_Main;
+    obj_dispatch[id_BasicPlatform] = Platform_Main;
 
     /* Register explosion/gray puff, fiery explosion, animals, and points */
     obj_dispatch[id_ExplosionItem] = ExplosionItem_Main;
@@ -7498,5 +7502,402 @@ static void CollapseFloor_Main(void *obj) {
         case 0x06: CFlo_FragmentPiece(o);   break;
         case 0x08: CFlo_Delete(o);          break;
         case 0x0A: CFlo_WalkOff(o);         break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 1C — Scenery (GHZ bridge stump, SLZ lava thrower)
+ *  Ported verbatim from _incObj/1C GHZ, SYZ Scenery.asm (REV01, FixBugs=0).
+ *
+ *  Scen_Values entry layout in ROM (10 bytes = $A per entry):
+ *      dc.l  map          (4 bytes)
+ *      dc.w  ArtTile|Pal  (2 bytes)
+ *      dc.b  frame        (1 byte)
+ *      dc.b  actwid       (1 byte)
+ *      dc.b  priority     (1 byte)
+ *      dc.b  coltype      (1 byte)
+ *
+ *  The original table has the SLZ lava thrower defined three times (only
+ *  the first is used in-game), then the GHZ bridge stump as subtype 3.
+ *  Because Map_Scen/Map_Bri are runtime pointer variables in this port
+ *  (extern const uint8_t *), they cannot appear in a static initializer,
+ *  so the table lookup is inlined in Scen_Main (functionally identical).
+ *  =========================================================================== */
+
+static void Scen_Main(uint8_t *o);
+static void Scen_ChkDel(uint8_t *o);
+
+/* Scen_Main — Routine 0
+ *  Setup from Scen_Values[obSubtype] and advance straight to Scen_ChkDel. */
+static void Scen_Main(uint8_t *o) {
+    obRoutine(o) += 2;                       /* addq.b #2,obRoutine(a0) */
+
+    uint8_t subtype = obSubtype(o);          /* moveq #0,d0 / move.b obSubtype,d0 */
+
+    /* Scen_Values lookup, inlined. Subtypes 0,1,2 are the SLZ lava thrower
+     *      (three identical ROM entries; only subtype 0 is actually placed).
+     *      Subtype 3 is the GHZ bridge stump. */
+    if (subtype >= 3) {
+        /* GHZ bridge stump */
+        obMap(o)      = (uint32_t)(uintptr_t)Map_Bri;
+        obGfx(o)      = (uint16_t)(ArtTile_GHZ_Bridge | Tile_Pal3);
+        obRender(o)  |= sprite_cam_field;    /* ori.b #sprite_cam_field,obRender(a0) */
+        obFrame(o)    = 1;
+        obActWid(o)   = 32 / 2;
+        obPriority(o) = 1;
+        obColType(o)  = col_none;
+    } else {
+        /* SLZ lava thrower (entries 0,1,2 in Scen_Values are identical) */
+        obMap(o)      = (uint32_t)(uintptr_t)Map_Scen;
+        obGfx(o)      = (uint16_t)(ArtTile_SLZ_Fireball_Launcher | Tile_Pal3);
+        obRender(o)  |= sprite_cam_field;    /* ori.b #sprite_cam_field,obRender(a0) */
+        obFrame(o)    = 0;
+        obActWid(o)   = 16 / 2;
+        obPriority(o) = 2;
+        obColType(o)  = col_none;
+    }
+
+    /* Fall through to Scen_ChkDel for the first frame (matches ASM). */
+    Scen_ChkDel(o);
+}
+
+/* Scen_ChkDel — Routine 2
+ *  out_of_range.w DeleteObject ; bra.w DisplaySprite */
+static void Scen_ChkDel(uint8_t *o) {
+    if (OutOfRange(o, -1)) {                 /* out_of_range.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);                        /* bra.w DisplaySprite */
+}
+
+/* Scenery dispatcher — Scen_Index: 0 = Main, 2 = ChkDel */
+static void Scenery_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                  /* moveq #0,d0 / move.b obRoutine,d0 / move.w Scen_Index */
+        case 0: Scen_Main(o);   break;
+        case 2: Scen_ChkDel(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 18 — Basic platforms (GHZ, SYZ, SLZ)
+ *  Ported verbatim from _incObj/18 Platforms.asm (REV01, FixBugs=0).
+ *
+ *  Fields:
+ *    plat_rawY   = objoff_2C (word):  raw Y position (without nudge)
+ *    plat_origX  = objoff_32 (word):  initial X
+ *    plat_origY  = objoff_34 (word):  initial Y
+ *    plat_nudge  = objoff_38 (byte):  0-$40 nudge (depression from Sonic's weight)
+ *    plat_delay  = objoff_3A (word):  multi-purpose timer
+ *
+ *  Note: Plat_FallingDown reads plat_rawY as a 32-bit 16.16 value, using the
+ *  word at objoff_2E as the subpixel fraction. We model this with two words.
+ *  =========================================================================== */
+
+#define plat_rawY(obj)      (*(int16_t  *)((uint8_t *)(obj) + 0x2C)) /* objoff_2C */
+#define plat_rawY_sub(obj)  (*(uint16_t *)((uint8_t *)(obj) + 0x2E)) /* objoff_2E */
+#define plat_origX(obj)     (*(int16_t  *)((uint8_t *)(obj) + 0x32)) /* objoff_32 */
+#define plat_origY(obj)     (*(int16_t  *)((uint8_t *)(obj) + 0x34)) /* objoff_34 */
+#define plat_nudge(obj)     (*(uint8_t  *)((uint8_t *)(obj) + 0x38)) /* objoff_38 */
+#define plat_delay(obj)     (*(int16_t  *)((uint8_t *)(obj) + 0x3A)) /* objoff_3A */
+
+static void Plat_Main(uint8_t *o);
+static void Plat_Solid(uint8_t *o);
+static void Plat_StoodOn(uint8_t *o);
+static void Plat_Delete(uint8_t *o);
+static void Plat_Action(uint8_t *o);
+static void Plat_Nudge(uint8_t *o);
+static void Plat_Move(uint8_t *o);
+static void Plat_ChkDel(uint8_t *o);
+
+/* --- Plat_ChangeMotion: reload oscillation variable (freq 8, mid $40) --- */
+static void Plat_ChangeMotion(uint8_t *o) {
+    obAngle(o) = RAM_BYTE(v_oscillate + 0x1A);
+}
+
+/* --- Plat_Nudge: depress platform by up to 4px while Sonic stands on it --- */
+static void Plat_Nudge(uint8_t *o) {
+    int16_t s0, s1;
+    CalcSine(plat_nudge(o), &s0, &s1);                    /* bsr.w CalcSine */
+    int32_t d0 = (int32_t)s0 * (int32_t)(int16_t)0x400;   /* muls.w #$400,d0 */
+    int16_t high = (int16_t)((uint32_t)d0 >> 16);         /* swap d0 */
+    obY(o) = (int16_t)(high + plat_rawY(o));              /* add.w plat_rawY / move.w obY */
+}
+
+/* --- Plat_Move: dispatch on (obSubtype & $F) --- */
+static void Plat_Move(uint8_t *o) {
+    switch (obSubtype(o) & 0x0F) {
+        case 0x0: /* Plat_Stationary */
+        case 0x9: /* Plat_Stationary (alias) */
+            return;
+
+        case 0x1: {
+            /* Plat_RightLeft */
+            int16_t d0 = plat_origX(o);
+            uint8_t d1 = (uint8_t)(obAngle(o) - 0x40);    /* subi.b #$40 */
+            int16_t d1w = (int16_t)(int8_t)d1;            /* ext.w d1 */
+            obX(o) = (int16_t)(d0 + d1w);                 /* add.w d1,d0 / move.w obX */
+            Plat_ChangeMotion(o);
+            return;
+        }
+
+        case 0x5: {
+            /* Plat_LeftRight */
+            int16_t d0 = plat_origX(o);
+            uint8_t d1 = (uint8_t)(-(int8_t)obAngle(o) + 0x40); /* neg.b / addi.b */
+            int16_t d1w = (int16_t)(int8_t)d1;
+            obX(o) = (int16_t)(d0 + d1w);
+            Plat_ChangeMotion(o);
+            return;
+        }
+
+        case 0x2: {
+            /* Plat_DownUp */
+            int16_t d0 = plat_origY(o);
+            uint8_t d1 = (uint8_t)(obAngle(o) - 0x40);
+            int16_t d1w = (int16_t)(int8_t)d1;
+            plat_rawY(o) = (int16_t)(d0 + d1w);           /* move.w d0,plat_rawY */
+            Plat_ChangeMotion(o);
+            return;
+        }
+
+        case 0x6: {
+            /* Plat_UpDown */
+            int16_t d0 = plat_origY(o);
+            uint8_t d1 = (uint8_t)(-(int8_t)obAngle(o) + 0x40);
+            int16_t d1w = (int16_t)(int8_t)d1;
+            plat_rawY(o) = (int16_t)(d0 + d1w);
+            Plat_ChangeMotion(o);
+            return;
+        }
+
+        case 0xB: {
+            /* Plat_DownUp_Slow — v_oscillate+$E (freq 2, mid $30) */
+            int16_t d0 = plat_origY(o);
+            uint8_t osc = RAM_BYTE(v_oscillate + 0x0E);
+            uint8_t d1 = (uint8_t)(osc - 0x30);           /* subi.b #$30 */
+            int16_t d1w = (int16_t)(int8_t)d1;
+            plat_rawY(o) = (int16_t)(d0 + d1w);
+            Plat_ChangeMotion(o);
+            return;
+        }
+
+        case 0xC: {
+            /* Plat_UpDown_Slow — v_oscillate+$E (freq 2, mid $30) */
+            int16_t d0 = plat_origY(o);
+            uint8_t osc = RAM_BYTE(v_oscillate + 0x0E);
+            uint8_t d1 = (uint8_t)(-(int8_t)osc + 0x30);
+            int16_t d1w = (int16_t)(int8_t)d1;
+            plat_rawY(o) = (int16_t)(d0 + d1w);
+            Plat_ChangeMotion(o);
+            return;
+        }
+
+        case 0xA: {
+            /* Plat_DownUp_LargeGHZ2 — half amplitude */
+            int16_t d0 = plat_origY(o);
+            uint8_t d1 = (uint8_t)(obAngle(o) - 0x40);
+            int16_t d1w = (int16_t)(int8_t)d1;            /* ext.w d1 */
+            d1w = (int16_t)(d1w >> 1);                    /* asr.w #1 */
+            plat_rawY(o) = (int16_t)(d0 + d1w);
+            Plat_ChangeMotion(o);
+            return;
+        }
+
+        case 0x3: {
+            /* Plat_FallAfterStand */
+            if (plat_delay(o) == 0) {
+                if (obStatus(o) & (1 << 3)) {             /* btst #3 */
+                    plat_delay(o) = 30;                   /* move.w #30 */
+                }
+                return;
+            }
+            /* .wait */
+            plat_delay(o)--;
+            if (plat_delay(o) != 0) return;
+            plat_delay(o) = 32;                           /* move.w #32 */
+            obSubtype(o)++;                               /* addq.b #1 -> type 4 */
+            return;
+        }
+
+        case 0x4: {
+            /* Plat_FallingDown */
+            if (plat_delay(o) != 0) {
+                plat_delay(o)--;
+                if (plat_delay(o) == 0) {
+                    if (obStatus(o) & (1 << 3)) {         /* btst #3,obStatus(a0) */
+                        /* a1 = v_player (set by ExitPlatform earlier) */
+                        uint8_t *a1 = RAM_ADDR(v_player);
+                        obStatus(a1) |= (1 << 1);         /* bset #1 */
+                        obStatus(a1) &= ~(1 << 3);        /* bclr #3 */
+                        obRoutine(a1) = 2;                /* move.b #2 */
+                        obStatus(o)  &= ~(1 << 3);        /* bclr #3,obStatus(a0) */
+                        obSolid(o) = 0;                   /* clr.b obSolid */
+                        obVelY(a1) = obVelY(o);           /* move.w */
+                    }
+                    /* .notOnPlatform */
+                    obRoutine(o) = 8;                     /* move.b #8 -> Plat_Action */
+                }
+            }
+
+            /* .fallingDown: 16.16 raw Y += velY<<8 */
+            {
+                int32_t d3 = ((int32_t)plat_rawY(o) << 16) | plat_rawY_sub(o);
+                int32_t d0 = (int32_t)(int16_t)obVelY(o);
+                d0 <<= 8;                                 /* asl.l #8 */
+                d3 += d0;
+                plat_rawY(o)     = (int16_t)((uint32_t)d3 >> 16);
+                plat_rawY_sub(o) = (uint16_t)(d3 & 0xFFFF);
+            }
+            obVelY(o) = (int16_t)(obVelY(o) + gravity);   /* addi.w #gravity */
+
+            {
+                int16_t d0 = (int16_t)(v_limitbtm2 + 224); /* move.w / addi.w #224 */
+                if ((uint16_t)d0 < (uint16_t)plat_rawY(o)) { /* cmp / bhs.s */
+                    obRoutine(o) = 6;                     /* move.b #6 -> Plat_Delete */
+                }
+            }
+            return;
+        }
+
+        case 0x7: {
+            /* Plat_RiseOnSwitch */
+            if (plat_delay(o) == 0) {
+                uint8_t *a2 = RAM_ADDR(f_switch);
+                uint8_t d0 = (uint8_t)(obSubtype(o) >> 4); /* lsr.w #4 */
+                if (a2[d0] != 0) {                        /* tst.b (a2,d0.w) */
+                    plat_delay(o) = 1 * 60;               /* move.w #1*60 */
+                }
+                return;
+            }
+            /* .wait */
+            plat_delay(o)--;
+            if (plat_delay(o) != 0) return;
+            obSubtype(o)++;                               /* addq.b #1 -> type 8 */
+            return;
+        }
+
+        case 0x8: {
+            /* Plat_Rising — rise 2px/frame, stop $200 above origin */
+            plat_rawY(o) -= 2;                            /* subq.w #2 */
+            {
+                int16_t d0 = (int16_t)(plat_origY(o) - 0x200);
+                if (d0 == plat_rawY(o)) {
+                    obSubtype(o) = 0;                     /* clr.b obSubtype -> 0 */
+                }
+            }
+            return;
+        }
+    }
+}
+
+/* --- Plat_ChkDel: delete platform if out of range (FixBugs=0: rts) --- */
+static void Plat_ChkDel(uint8_t *o) {
+    if (OutOfRange(o, plat_origX(o))) {                   /* out_of_range.s plat_origX */
+        Plat_Delete(o);
+    }
+}
+
+/* --- Plat_Delete — Routine 6 --- */
+static void Plat_Delete(uint8_t *o) {
+    DeleteObject(o);                                      /* bra.w DeleteObject */
+}
+
+/* --- Plat_Action — Routine 8 --- */
+static void Plat_Action(uint8_t *o) {
+    Plat_Move(o);                                         /* bsr.w Plat_Move */
+    Plat_Nudge(o);                                        /* bsr.w Plat_Nudge */
+    /* FixBugs=0: DisplaySprite lives in Plat_Action */
+    DisplaySprite(o);                                     /* bsr.w DisplaySprite */
+    Plat_ChkDel(o);                                       /* bra.w Plat_ChkDel */
+}
+
+/* --- Plat_Solid — Routine 2 (falls through into Plat_Action) --- */
+static void Plat_Solid(uint8_t *o) {
+    if (plat_nudge(o) != 0) {                             /* tst.b / beq.s */
+        plat_nudge(o) = (uint8_t)(plat_nudge(o) - 4);     /* subq.b #4 */
+    }
+    /* .checkEnterPlatform */
+    {
+        int16_t d1 = (int16_t)obActWid(o);                /* moveq #0 / move.b obActWid */
+        PlatformObject(o, d1);                            /* bsr.w PlatformObject */
+    }
+    /* Fall through to Plat_Action */
+    Plat_Action(o);
+}
+
+/* --- Plat_StoodOn — Routine 4 --- */
+static void Plat_StoodOn(uint8_t *o) {
+    if (plat_nudge(o) != 0x40) {                          /* cmpi.b #$40 / beq.s */
+        plat_nudge(o) = (uint8_t)(plat_nudge(o) + 4);     /* addq.b #4 */
+    }
+    /* .platformBehavior */
+    {
+        int16_t d1 = (int16_t)obActWid(o);
+        int16_t dummy;
+        ExitPlatform(o, d1, &dummy);                      /* bsr.w ExitPlatform */
+    }
+
+    int16_t saved_x = obX(o);                             /* move.w obX(a0),-(sp) */
+    Plat_Move(o);                                         /* bsr.w Plat_Move */
+    Plat_Nudge(o);                                        /* bsr.w Plat_Nudge */
+    MvSonicOnPtfm2(o, saved_x);                           /* move.w (sp)+,d2 / bsr.w MvSonicOnPtfm2 */
+
+    /* FixBugs=0: DisplaySprite lives in Plat_StoodOn */
+    DisplaySprite(o);
+    Plat_ChkDel(o);                                       /* bra.w Plat_ChkDel */
+}
+
+/* --- Plat_Main — Routine 0 --- */
+static void Plat_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                    /* addq.b #2 -> Plat_Solid */
+
+    obGfx(o)     = (uint16_t)(ArtTile_Level | Tile_Pal3); /* move.w #ArtTile_Level|Tile_Pal3 */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Plat_GHZ;     /* move.l #Map_Plat_GHZ */
+    obActWid(o)  = 64 / 2;                                /* move.b #64/2 */
+
+    if ((uint8_t)v_zone == id_SYZ) {                      /* cmpi.b #id_SYZ / bne */
+        obMap(o)    = (uint32_t)(uintptr_t)Map_Plat_SYZ;
+        obActWid(o) = 64 / 2;
+    }
+
+    if ((uint8_t)v_zone == id_SLZ) {                      /* cmpi.b #id_SLZ / bne */
+        obMap(o)     = (uint32_t)(uintptr_t)Map_Plat_SLZ;
+        obActWid(o)  = 64 / 2;
+        obGfx(o)     = (uint16_t)(ArtTile_Level | Tile_Pal3);
+        obSubtype(o) = 3;                                 /* force Plat_FallAfterStand */
+    }
+
+    obRender(o)   = sprite_cam_field;                     /* move.b #sprite_cam_field */
+    obPriority(o) = 4;                                    /* move.b #4 */
+    plat_rawY(o)  = obY(o);                               /* move.w obY,plat_rawY */
+    plat_origY(o) = obY(o);                               /* move.w obY,plat_origY */
+    plat_origX(o) = obX(o);                               /* move.w obX,plat_origX */
+    obAngle(o)    = 0x80;                                 /* begin oscillating at center */
+
+    uint8_t d1 = 0;
+    uint8_t d0 = obSubtype(o);
+    if (d0 == 0x0A) {                                     /* cmpi.b #$A / bne */
+        d1++;                                             /* addq.b #1 */
+        obActWid(o) = 64 / 2;
+    }
+    obFrame(o) = d1;                                      /* move.b d1,obFrame */
+
+    /* Falls through into Plat_Solid */
+    Plat_Solid(o);
+}
+
+/* --- Platform dispatcher — Plat_Index --- */
+static void Platform_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                               /* moveq #0,d0 / move.b obRoutine */
+        case 0: Plat_Main(o);    break;                   /* Plat_Main       */
+        case 2: Plat_Solid(o);   break;                   /* Plat_Solid      */
+        case 4: Plat_StoodOn(o); break;                   /* Plat_StoodOn    */
+        case 6: Plat_Delete(o);  break;                   /* Plat_Delete     */
+        case 8: Plat_Action(o);  break;                   /* Plat_Action     */
     }
 }

@@ -484,7 +484,7 @@ static inline void RAM_SET_U32(uint32_t addr, uint32_t v) {
 
 #define v_emeralds              (RAM_BYTE(0xFE57))
 #define v_emldlist              0xFE58            /* 6 bytes */
-#define v_oscillate             (RAM_WORD(0xFE5E))
+#define v_oscillate             0xFE5E
 
 /* Timing and screen variables */
 #define v_ani0_time             (RAM_BYTE(0xFEC0))
