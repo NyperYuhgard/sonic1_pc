@@ -117,7 +117,7 @@ void BuildSprites(void) {
                     if (y - h >= 224) continue;
                 } else {
                     if (y < -32) continue;
-                    if (y >= 192) continue;
+                    if (y >= 256) continue;
                 }
 
                 x += 0x80;

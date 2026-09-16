@@ -6466,7 +6466,7 @@ static void PowerUp_Main(void *obj) {
                 const uint8_t *a1 = (const uint8_t *)Map_Monitor;
                 uint16_t offset = ((const uint16_t *)a1)[d0]; /* adda.w (a1,d0.w) */
                 a1 += offset;
-                a1 += 2;                         /* addq.w #1,a1 */
+                a1 += 1;                         /* addq.w #1,a1 */
                 obMap(o) = (uint32_t)(uintptr_t)a1; /* move.l a1,obMap */
             }
             /* falls through to Pow_Move */
