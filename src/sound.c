@@ -80,7 +80,7 @@ static const snd_map_t sfx_map[] = {
     { sfx_Burning,      "assets/SoundFX/Stage/FireBurn.wav" },
     { sfx_Bonus,        "assets/SoundFX/Global/BonusPoints.wav" },
     { sfx_EnterSS,      "assets/SoundFX/Global/SpecialWarp.wav" },
-    { sfx_WallSmash,    "assets/SoundFX/Stage/LargeWall.wav" },
+    { sfx_WallSmash,    "assets/SoundFX/Stage/BlockBreak.wav" },
     { sfx_Spring,       "assets/SoundFX/Global/Spring.wav" },
     { sfx_Switch,       "assets/SoundFX/Stage/ButtonPress.wav" },
     { sfx_RingLeft,     "assets/SoundFX/Global/Ring.wav" },

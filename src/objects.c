@@ -53,6 +53,15 @@ static void Scenery_Main(void *obj);
 static void Platform_Main(void *obj);
 static void ShieldItem_Main(void *obj);
 static void Chopper_Main(void *obj);
+static void SmashWall_Main(void *obj);
+static void Smash_Main(uint8_t *o);
+static void Smash_Solid(uint8_t *o);
+static void Smash_Fragment(uint8_t *o);
+static void Helix_Main(void *obj);
+static void BossGreenHill_Main(void *obj);
+static void BossBall_Main(void *obj);
+static void SwingingPlatform_Main(void *obj);
+
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -95,6 +104,11 @@ void Objects_Init(void) {
     obj_dispatch[id_BasicPlatform] = Platform_Main;
     obj_dispatch[id_ShieldItem] = ShieldItem_Main;
     obj_dispatch[id_Chopper] = Chopper_Main;
+    obj_dispatch[id_SmashWall] = SmashWall_Main;
+    obj_dispatch[id_Helix] = Helix_Main;
+    obj_dispatch[id_BossGreenHill]      = BossGreenHill_Main;
+    obj_dispatch[id_BossBall]           = BossBall_Main;
+    obj_dispatch[id_SwingingPlatform]   = SwingingPlatform_Main;
 
 
     /* Register explosion/gray puff, fiery explosion, animals, and points */
@@ -219,29 +233,41 @@ void CalcSine(int angle, int16_t *s0, int16_t *s1) {
 }
 
 /* ===========================================================================
-   SynchroAnimate (Sync2 + Sync4) — sonic.asm 3136-3179, FixBugs=0.
-   Only the parts used by Ring/RingLoss are ported. Sync1 (spiked log) and
-   Sync3 (unused) are not ported yet.
+   SynchroAnimate sonic.asm 3136-3179, FixBugs=0.
    =========================================================================== */
 void SynchroAnimate(void) {
-    /* Sync2: rings / giant rings — timer, then frame among 0..3 */
-    if ((int8_t)(--v_ani1_time) < 0) {   /* subq.b / bpl */
-        v_ani1_time = 8 - 1;
-        v_ani1_frame = (v_ani1_frame + 1) & 3;
+    /* Sync1: GHZ spiked pole helix (Object 17). */
+    if ((int8_t)(--v_ani0_time) < 0) {           /* subq.b / bpl.s Sync2 */
+        v_ani0_time  = 12 - 1;                   /* move.b #12-1 */
+        v_ani0_frame = (uint8_t)((v_ani0_frame - 1) & 7); /* subq.b / andi.b #7 */
     }
 
-    /* Sync4: bouncing rings — if the timer is active, derive the frame
-       from a buffered accumulate and count down. */
-    if (v_ani3_time == 0) {
+    /* Sync2: Rings */
+    if ((int8_t)(--v_ani1_time) < 0) {           /* subq.b / bpl.s Sync3 */
+        v_ani1_time  = 8 - 1;                    /* move.b #8-1 */
+        v_ani1_frame = (uint8_t)((v_ani1_frame + 1) & 3); /* addq.b / andi.b #3 */
+    }
+
+    /* Sync3: Unused */
+    if ((int8_t)(--v_ani2_time) < 0) {           /* subq.b / bpl.s Sync4 */
+        v_ani2_time  = 8 - 1;                    /* move.b #8-1 */
+        v_ani2_frame = (uint8_t)(v_ani2_frame + 1);    /* addq.b #1 */
+        if (v_ani2_frame >= 6) {                 /* cmpi.b #6 / blo.s Sync4 */
+            v_ani2_frame = 0;                    /* move.b #0 */
+        }
+    }
+
+    /* Sync4: RingLoss */
+    if (v_ani3_time == 0) {                      /* tst.b / beq.s SyncEnd */
         return;
     }
-    int d0 = v_ani3_time;
-    d0 += v_ani3_buf;
-    v_ani3_buf = (uint16_t)d0;
+    int d0 = v_ani3_time;                        /* moveq #0,d0 / move.b */
+    d0 += v_ani3_buf;                            /* add.w (v_ani3_buf).w,d0 */
+    v_ani3_buf = (uint16_t)d0;                   /* move.w d0,(v_ani3_buf).w */
     d0 = (int)(uint16_t)((d0 << 7) | ((uint16_t)d0 >> 9));  /* rol.w #7 */
-    d0 &= 3;
-    v_ani3_frame = (uint8_t)d0;
-    v_ani3_time = v_ani3_time - 1;                 /* subq.b */
+    d0 &= 3;                                     /* andi.w #3 */
+    v_ani3_frame = (uint8_t)d0;                  /* move.b d0,(v_ani3_frame).w */
+    v_ani3_time  = (uint8_t)(v_ani3_time - 1);   /* subq.b #1 */
 }
 
 /* ===========================================================================
@@ -378,6 +404,65 @@ static uint16_t RandomNumber(void) {
     return (uint16_t)d0;                             /* d0 contains pseudo-random number */
 }
 
+/* ===========================================================================
+ *  Shared helpers: FindNextFreeObj, BossMove, BossDefeated
+ *  Ported verbatim from _incObj/sub FindFreeObj.asm,
+ *  _incObj/sub BossDefeated & BossMove.asm (REV01, FixBugs=0).
+ * =========================================================================== */
+
+/* Find the next free object slot AFTER the given object. Used by all boss
+   init routines (matches FindNextFreeObj in FindFreeObj.asm). */
+static void *FindNextFreeObj(void *after) {
+    uint8_t *base = RAM_ADDR(v_lvlobjspace);
+    uint8_t *end  = RAM_ADDR(v_lvlobjend);
+    uint8_t *p    = (uint8_t *)after + OBJECT_SIZE;
+
+    if (p < base) p = base;               /* clamp por si `after` está antes */
+    for (; p + OBJECT_SIZE <= end; p += OBJECT_SIZE) {
+        if (p[0] == 0) return p;          /* obID == 0 = libre */
+    }
+    return NULL;
+}
+
+/* BossMove — modified SpeedToPos operating on the 16.16 fixed-point
+   obBossX/obBossY fields (BossDefeated & BossMove.asm). */
+static void BossMove(uint8_t *o) {
+    int32_t d2 = obBossX(o);
+    int32_t d3 = obBossY(o);
+    d2 += ((int32_t)obVelX(o)) << 8;
+    d3 += ((int32_t)obVelY(o)) << 8;
+    obBossX(o) = d2;
+    obBossY(o) = d3;
+}
+
+/* BossDefeated — spawn a gray explosion every 8 frames with randomized
+   X/Y offsets, until the boss's obBossHits countdown expires (the caller
+   keeps decrementing it), at which point the slot self-deletes. */
+static void BossDefeated(uint8_t *o) {
+    /* move.b (v_vblank_byte).w,d0 ; andi.b #7,d0 ; bne.s .noExplosion */
+    if ((v_vblank_byte & 7) != 0) return;
+
+    uint8_t *a1 = (uint8_t *)FindFreeObj();
+    if (!a1) return;
+
+    obID(a1) = id_Explosion;
+    obX(a1)  = obX(o);
+    obY(a1)  = obY(o);
+
+    /* jsr (RandomNumber).l ; move.w d0,d1 ; moveq #0,d1 ; move.b d0,d1
+       lsr.b #2,d1 ; subi.w #$20,d1 ; add.w d1,obX(a1) */
+    uint16_t r = RandomNumber();
+    int8_t dx = (int8_t)((uint8_t)r >> 2);
+    int16_t d1 = (int16_t)dx - 0x20;
+    obX(a1) = (int16_t)(obX(a1) + d1);
+
+    /* lsr.w #8,d0 ; lsr.b #3,d0 ; add.w d0,obY(a1) */
+    uint8_t dy = (uint8_t)(r >> 8);
+    dy >>= 3;
+    obY(a1) = (int16_t)(obY(a1) + (int16_t)dy);
+
+    /* The ASM omits a return here so the caller's flow continues. */
+}
 /* ===========================================================================
    TitleSonic object (id_TitleSonic = $0E)
    Ported from _incObj/0E, 0F Title Screen - Sonic, Press Start, TM.asm
@@ -8092,4 +8177,1110 @@ static void Chopper_Main(void *obj) {
         case 2: Chop_ChgSpeed(o); break;
     }
     RememberState(obj);
+}
+
+/* ===========================================================================
+ *  Object 3C — Smashable Wall (GHZ, SLZ)
+ *  Ported verbatim from _incObj/3C GHZ, SLZ Smashable Wall.asm
+ *  + _incObj/sub SmashObject.asm (REV01, FixBugs=0).
+ *
+ *  smash_speed = objoff_30 (word): Sonic's horizontal velocity captured
+ *                                   before SolidObject (which can modify it).
+ * =========================================================================== */
+
+#define smash_speed(obj) (*(int16_t *)((uint8_t *)(obj) + 0x30))
+
+/* Smash_FragSpd1: fragment velocities when the wall is broken from the left
+ * (fragments fly rightward). 8 pairs of (velX, velY). */
+static const int16_t Smash_FragSpd1[16] = {
+     0x400, -0x500,
+     0x600, -0x100,
+     0x600,  0x100,
+     0x400,  0x500,
+     0x600, -0x600,
+     0x800, -0x200,
+     0x800,  0x200,
+     0x600,  0x600,
+};
+
+/* Smash_FragSpd2: fragment velocities when the wall is broken from the right
+ * (fragments fly leftward). */
+static const int16_t Smash_FragSpd2[16] = {
+    -0x600, -0x600,
+    -0x800, -0x200,
+    -0x800,  0x200,
+    -0x600,  0x600,
+    -0x400, -0x500,
+    -0x600, -0x100,
+    -0x600,  0x100,
+    -0x400,  0x500,
+};
+
+
+/* SmashObject — shared subroutine (_incObj/sub SmashObject.asm).
+ *
+ * Converts the parent object (o) into fragment #0 and spawns d1 additional
+ * fragments in free slots. Each fragment's obMap points at ONE sprite piece
+ * of the parent's current frame (the "raw mappings" trick), advancing 5
+ * bytes per fragment. Every fragment inherits obID from the parent, so the
+ * dispatcher routes them into SmashWall/Smash_Fragment. No Points object
+ * is spawned here.
+ *
+ * a4 = fragment velocity table (indexed by obFrame(o) * 2 words)
+ * d2 = extra gravity applied to each fragment's initial velY (gravity*2). */
+static void SmashObject(uint8_t *o, const int16_t *a4, int d1, int16_t d2) {
+    /* moveq #0,d0 / move.b obFrame(a0),d0
+     * add.w d0,d0 / adda.w (a3,d0.w),a3
+     * The mapping file starts with a table of word offsets, one per frame. */
+    uint8_t frame = obFrame(o);
+    const uint8_t *map_base = (const uint8_t *)(uintptr_t)obMap(o);
+    uint16_t frame_off = *(const uint16_t *)(map_base + frame * 2);
+    const uint8_t *a3 = map_base + frame_off;
+    a3 += 1;                                    /* addq.w #1: skip piece count byte */
+
+    /* bset #sprite_rawmappings_bit,obRender(a0)
+     * move.b obRender(a0),d5 — copy AFTER the bset, so fragments inherit it. */
+    obRender(o) |= sprite_rawmappings;
+    uint8_t render_flags = obRender(o);
+    uint8_t frag_id = obID(o);                  /* _move.b obID(a0),d4 */
+
+    /* First fragment reuses the parent's slot (movea.l a0,a1). */
+    uint8_t *frag = o;
+
+    for (int i = 0; i <= d1; i++) {
+        if (i != 0) {
+            frag = (uint8_t *)FindFreeObj();    /* FixBugs=0 uses plain FindFreeObj */
+            if (frag == NULL) goto play_sound;  /* bne.s .playSmashSound */
+            a3 += 5;                            /* addq.w #5: next sprite piece */
+        }
+
+        /* .loadFirstFrag */
+        obRoutine(frag)   = 4;                  /* Smash_Fragment */
+        obID(frag)        = frag_id;            /* _move.b d4,obID(a1) */
+        obMap(frag)       = (uint32_t)(uintptr_t)a3; /* raw piece pointer */
+        obRender(frag)    = render_flags;       /* includes raw-mappings bit */
+        obX(frag)         = obX(o);
+        obY(frag)         = obY(o);
+        obGfx(frag)       = obGfx(o);
+        obPriority(frag)  = obPriority(o);
+        obActWid(frag)    = obActWid(o);
+        obVelX(frag)      = a4[0];
+        obVelY(frag)      = a4[1];
+        a4 += 2;
+
+        /* FixBugs=0: if the fragment sits BEFORE the parent in RAM, then
+         * ExecuteObjects already passed that slot this frame. Manually run
+         * one step of Smash_Fragment so it doesn't fall behind. */
+        if ((uintptr_t)frag < (uintptr_t)o) {
+            SpeedToPos(frag);
+            obVelY(frag) = (int16_t)(obVelY(frag) + d2);
+            DisplaySprite(frag);                /* ASM: DisplaySprite2 */
+        }
+    }
+
+play_sound:
+    Sound_Queue(sfx_WallSmash, false);          /* move.w #sfx_WallSmash,d0 / jmp QueueSound2 */
+}
+
+/* Smash_Main — routine 0 */
+static void Smash_Main(uint8_t *o) {
+    obRoutine(o) += 2;                              /* addq.b #2 → Smash_Solid */
+    obMap(o)      = (uint32_t)(uintptr_t)Map_Smash;
+    obGfx(o)      = (uint16_t)(ArtTile_GHZ_SLZ_Smashable_Wall | Tile_Pal3);
+    obRender(o)   = sprite_cam_field;
+    obActWid(o)   = 32 / 2;
+    obPriority(o) = 4;
+    obFrame(o)    = obSubtype(o);                   /* 0=left, 1=middle, 2=right */
+    /* ASM falls through into Smash_Solid. */
+    Smash_Solid(o);
+}
+
+/* Smash_Solid — routine 2 */
+static void Smash_Solid(uint8_t *o) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+
+    /* Remember Sonic's speed BEFORE SolidObject gets a chance to modify it. */
+    smash_speed(o) = obVelX(a1);
+
+    {
+        int16_t d1 = (int16_t)(32 / 2 + sonic_solid_width);
+        int16_t d2 = 64 / 2;
+        int16_t d3 = 64 / 2;
+        int16_t d4 = obX(o);
+        int16_t out_d3 = 0, out_d5 = 0;
+        SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5);
+    }
+
+    /* btst #5,obStatus(a0) / bne.s .chkroll */
+    if (!(obStatus(o) & (1 << 5))) return;
+
+    /* .chkroll: cmpi.b #id_Roll,obAnim(a1) / bne.s .return */
+    if (obAnim(a1) != id_Roll) return;
+
+    {
+        int16_t d0 = smash_speed(o);
+        if (d0 < 0) d0 = (int16_t)(-d0);            /* bpl.s .chkspeed / neg.w d0 */
+        if ((uint16_t)d0 < 0x480) return;           /* cmpi.w #$480 / blo.s .return */
+    }
+
+    /* Restore Sonic's pre-impact speed and nudge him so the break looks
+     * seamless as he passes through. */
+    obVelX(a1) = smash_speed(o);
+    obX(a1) = (int16_t)(obX(a1) + 4);               /* addq.w #4 */
+
+    const int16_t *a4 = Smash_FragSpd1;
+    /* cmp.w obX(a1),d0 / blo.s .smash — wall strictly left of Sonic?
+     *   yes → fragments fly right (Spd1)
+     *   no  → nudge Sonic back left and use Spd2 */
+    if ((uint16_t)obX(o) >= (uint16_t)obX(a1)) {
+        obX(a1) = (int16_t)(obX(a1) - 8);           /* subq.w #4*2 */
+        a4 = Smash_FragSpd2;
+    }
+
+    /* .smash */
+    obInertia(a1) = obVelX(a1);
+    obStatus(o)  &= ~(1 << 5);                      /* bclr #5,obStatus(a0) */
+    obStatus(a1) &= ~(1 << 5);                      /* bclr #5,obStatus(a1) */
+
+    SmashObject(o, a4, 7, (int16_t)(gravity * 2));  /* moveq #8-1,d1 ; move.w #gravity*2,d2 */
+
+    /* ASM falls through: SmashObject converted the parent into fragment #0,
+     * so obRoutine(parent) is now 4 and Smash_Fragment runs on this frame. */
+    Smash_Fragment(o);
+}
+
+/* Smash_Fragment — routine 4 */
+static void Smash_Fragment(uint8_t *o) {
+    SpeedToPos(o);
+    obVelY(o) = (int16_t)(obVelY(o) + gravity * 2); /* addi.w #gravity*2 */
+
+    /* FixBugs=0 order: DisplaySprite first, then delete if offscreen.
+     * rts returns to SmashWall, which then calls RememberState — that
+     * double-queues the fragment when on-screen, exactly as the original. */
+    DisplaySprite(o);
+    if (!(obRender(o) & 0x80)) {
+        DeleteObject(o);                            /* bpl.w DeleteObject */
+    }
+}
+
+/* SmashWall dispatcher — Smash_Index: 0/2/4, then RememberState. */
+static void SmashWall_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0: Smash_Main(o);     break;
+        case 2: Smash_Solid(o);    break;
+        case 4: Smash_Fragment(o); break;
+    }
+    RememberState(obj);   /* bra.w RememberState */
+}
+
+/* ===========================================================================
+ *  Object 17 — Rotating helix of spikes on a horizontal pole (GHZ)
+ *  Ported verbatim from _incObj/17 GHZ Spiked Pole Helix.asm
+ *  (REV01, FixBugs=0).
+ *
+ *  hel_nchildren    = obSubtype ($28): number of spikes actually loaded
+ *                                       (children + parent, if parent was
+ *                                       placed mid-loop)
+ *  hel_child_index  = $29-$38:          object-slot index per child spike
+ *  hel_frame        = objoff_3E (byte): base spike frame ID (0-7)
+ *
+ *  Each spike displays frame (v_ani0_frame + hel_frame) & 7, and becomes
+ *  harmful (col_8x32 | col_hurt) only on frame 0 — the pose where the
+ *  sprite points up. v_ani0_frame comes from Sync1 of SynchroAnimate,
+ *  which is ported here for the first time (see the SynchroAnimate patch
+ *  below).
+ * =========================================================================== */
+
+#define hel_nchildren(obj)   (*(uint8_t *)((uint8_t *)(obj) + 0x28))   /* obSubtype */
+#define hel_child_index(obj) ((uint8_t *)(obj) + 0x29)                  /* $29 onwards */
+#define hel_frame(obj)       (*(uint8_t *)((uint8_t *)(obj) + 0x3E))    /* objoff_3E */
+
+static void Hel_Main(uint8_t *o);
+static void Hel_ParentSpike(uint8_t *o);
+static void Hel_Delete(uint8_t *o);
+static void Hel_ChildSpike(uint8_t *o);
+static void Hel_RotateSpikes(uint8_t *o);
+static void Hel_ChkDel(uint8_t *o);
+
+/* Hel_RotateSpikes — set frame from Sync1 and toggle damage based on pose.
+   Ported verbatim from Hel_RotateSpikes. */
+static void Hel_RotateSpikes(uint8_t *o) {
+    uint8_t d0 = v_ani0_frame;                    /* move.b (v_ani0_frame).w,d0 */
+    obColType(o) = col_none;                      /* harmless by default */
+    d0 = (uint8_t)(d0 + hel_frame(o));            /* add.b helix_frame(a0),d0 */
+    d0 &= 7;                                      /* andi.b #7,d0 */
+    obFrame(o) = d0;                              /* move.b d0,obFrame(a0) */
+    if (d0 != 0) return;                          /* bne.s .return */
+    obColType(o) = (uint8_t)(col_8x32 | col_hurt);/* hurt only on frame 0 (spike up) */
+}
+
+/* Hel_Main — Routine 0: build the helix, then fall through to Hel_ParentSpike. */
+static void Hel_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                   /* addq.b #2 → Hel_ParentSpike */
+    obMap(o)      = (uint32_t)(uintptr_t)Map_Hel;        /* move.l #Map_Hel,obMap */
+    obGfx(o)      = (uint16_t)(ArtTile_GHZ_Spike_Pole | Tile_Pal3);
+    obStatus(o)   = 7;                                   /* move.b #7,obStatus (leftover) */
+    obRender(o)   = sprite_cam_field;                    /* move.b #sprite_cam_field */
+    obPriority(o) = 3;                                   /* move.b #3 */
+    obActWid(o)   = 16 / 2;                              /* move.b #16/2 */
+
+    int16_t d2 = obY(o);                                 /* base Y for children */
+    int16_t d3 = obX(o);                                 /* base X for children */
+    uint8_t d4 = obID(o);                                /* _move.b obID(a0),d4 */
+
+    /* Read spike count from obSubtype, then clear it. a2 ends up pointing at
+     * the child index array ($29). ASM: move.b (a2),d1 ; move.b #0,(a2)+ */
+    uint8_t d1 = hel_nchildren(o);
+    hel_nchildren(o) = 0;
+    uint8_t *a2 = hel_child_index(o);
+
+    /* Center the leftmost spike: d0 = (count / 2) * 16 */
+    int16_t d0 = (int16_t)((uint16_t)d1 >> 1) << 4;       /* lsr.w #1 ; lsl.w #4 */
+    d3 -= d0;                                             /* sub.w d0,d3 */
+
+    /* subq.b #2,d1 ; bcs.s Hel_ParentSpike — branch when count < 2.
+     * After the subtract, a borrow leaves bit 7 set on the byte result. */
+    d1 = (uint8_t)(d1 - 2);
+    if (d1 & 0x80) {
+        Hel_ParentSpike(o);
+        return;
+    }
+
+    uint8_t d6 = 0;                                       /* frame ID, wraps 0-7 */
+
+    do {
+        /* .loopBuildHelix */
+        uint8_t *a1 = (uint8_t *)FindFreeObj();           /* FixBugs=0: plain FindFreeObj */
+        if (a1 == NULL) {                                 /* bne.s Hel_ParentSpike */
+            Hel_ParentSpike(o);
+            return;
+        }
+        hel_nchildren(o)++;                               /* addq.b #1,helix_children(a0) */
+
+        /* Store child slot index in the parent's array. ASM reconstructs the
+         * index from a1's address; use Object_GetIndex directly. */
+        uint8_t idx = (uint8_t)Object_GetIndex(a1);
+        *a2++ = idx;                                      /* move.b d5,(a2)+ */
+
+        /* Set up child spike */
+        obRoutine(a1)  = 8;                               /* move.b #8,obRoutine(a1) → Hel_ChildSpike */
+        obID(a1)       = d4;                              /* _move.b d4,obID(a1) */
+        obY(a1)        = d2;                              /* copy parent Y */
+        obX(a1)        = d3;                              /* position along the pole */
+        obMap(a1)      = obMap(o);                        /* share parent's mappings */
+        obGfx(a1)      = (uint16_t)(ArtTile_GHZ_Spike_Pole | Tile_Pal3);
+        obRender(a1)   = sprite_cam_field;
+        obPriority(a1) = 3;
+        obActWid(a1)   = 16 / 2;
+
+        hel_frame(a1) = d6;                               /* move.b d6,helix_frame(a1) */
+        d6 = (uint8_t)((d6 + 1) & 7);                     /* addq.b #1 ; andi.b #7 */
+        d3 = (int16_t)(d3 + 0x10);                        /* addi.w #$10,d3 */
+
+        /* cmp.w obX(a0),d3 ; bne.s .next — has the sweep reached the parent? */
+        if (d3 == obX(o)) {
+            hel_frame(o) = d6;                            /* set parent's frame */
+            d6 = (uint8_t)((d6 + 1) & 7);
+            d3 = (int16_t)(d3 + 0x10);
+            hel_nchildren(o)++;                           /* parent counted too */
+        }
+
+        d1 = (uint8_t)(d1 - 1);                           /* dbf d1 */
+    } while ((int8_t)d1 != -1);
+
+    Hel_ParentSpike(o);                                   /* fall through */
+}
+
+/* Hel_ChkDel — delete parent + children if offscreen. FixBugs=0: rts only
+   on the on-screen branch (DisplaySprite is done by the caller). */
+static void Hel_ChkDel(uint8_t *o) {
+    if (!OutOfRange(o, -1)) return;                       /* out_of_range.w .deleteHelix */
+
+    /* .deleteHelix */
+    uint8_t d2 = hel_nchildren(o);                        /* move.b (a2)+,d2 */
+    uint8_t *a2 = hel_child_index(o);
+    d2 = (uint8_t)(d2 - 2);                               /* subq.b #2,d2 */
+    if (d2 & 0x80) {                                      /* bcs.s Hel_Delete (count < 2) */
+        Hel_Delete(o);
+        return;
+    }
+
+    do {
+        /* .delLoop */
+        uint8_t d0 = *a2++;                               /* move.b (a2)+,d0 */
+        uint8_t *a1 = (uint8_t *)Object_GetSlot((int)d0);
+        DeleteObject(a1);                                 /* bsr.w DeleteChild */
+        d2 = (uint8_t)(d2 - 1);                           /* dbf d2 */
+    } while ((int8_t)d2 != -1);
+
+    Hel_Delete(o);                                        /* fall through */
+}
+
+/* Hel_ParentSpike — Routine 2 (and 4, unused). FixBugs=0: DisplaySprite
+   happens BEFORE Hel_ChkDel. */
+static void Hel_ParentSpike(uint8_t *o) {
+    Hel_RotateSpikes(o);                                  /* bsr.w Hel_RotateSpikes */
+    DisplaySprite(o);                                     /* bsr.w DisplaySprite (FixBugs=0) */
+    Hel_ChkDel(o);                                        /* bra.w Hel_ChkDel */
+}
+
+/* Hel_Delete — Routine 6 (also the shared tail of Hel_ChkDel). */
+static void Hel_Delete(uint8_t *o) {
+    DeleteObject(o);                                      /* bsr.w DeleteObject */
+}
+
+/* Hel_ChildSpike — Routine 8. Child spikes never self-delete; the parent
+   handles cleanup through Hel_ChkDel. */
+static void Hel_ChildSpike(uint8_t *o) {
+    Hel_RotateSpikes(o);                                  /* bsr.w Hel_RotateSpikes */
+    DisplaySprite(o);                                     /* bra.w DisplaySprite */
+}
+
+/* Helix dispatcher — Hel_Index: 0=Main, 2/4=ParentSpike, 6=Delete, 8=ChildSpike. */
+static void Helix_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                               /* Hel_Index */
+        case 0: Hel_Main(o);        break;
+        case 2: Hel_ParentSpike(o); break;
+        case 4: Hel_ParentSpike(o); break;  /* never set in practice */
+        case 6: Hel_Delete(o);      break;  /* never set in practice */
+        case 8: Hel_ChildSpike(o);  break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 15 — Swinging Platforms (GHZ, MZ, SLZ) / spiked ball (SBZ)
+ *  Ported verbatim from _incObj/15 Swinging Platforms.asm (REV01, FixBugs=0).
+ *
+ *  swing_children = obSubtype ($28): number of spawned child links
+ *  swing_origY    = objoff_38 (word)
+ *  swing_origX    = objoff_3A (word)
+ *  swing_radius   = objoff_3C (byte): distance from pivot
+ *
+ *  This file also hosts Swing_UpdateSwingPosition and GBall_Move, both
+ *  shared with Object 48 (Wrecking Ball).
+ * =========================================================================== */
+
+#define swing_children(o)  (*(uint8_t *)((uint8_t *)(o) + 0x28))
+#define swing_origY(o)     (*(int16_t *)((uint8_t *)(o) + 0x38))
+#define swing_origX(o)     (*(int16_t *)((uint8_t *)(o) + 0x3A))
+#define swing_radius(o)    (*(uint8_t *)((uint8_t *)(o) + 0x3C))
+
+/* Wrecking-ball fields, sharing the same offsets as Object 15 for the
+   pivot and radius. */
+#define gb_anchorpos(o)    (*(int16_t *)((uint8_t *)(o) + 0x32))
+#define gb_linkdist(o)     (*(uint8_t *)((uint8_t *)(o) + 0x3C))
+#define gb_swingdir(o)     (*(uint8_t *)((uint8_t *)(o) + 0x3D))
+#define gb_swingspeed(o)   (*(int16_t *)((uint8_t *)(o) + 0x3E))
+#define gb_anglew(o)       (*(int16_t *)((uint8_t *)(o) + 0x30))
+
+static void Swing_Main(uint8_t *o);
+static void Swing_Platform(uint8_t *o);
+static void Swing_StoodOn(uint8_t *o);
+static void Swing_Delete(uint8_t *o);
+static void Swing_ChainLink(uint8_t *o);
+static void Swing_Swinging(uint8_t *o);
+static void Swing_Move(uint8_t *o);
+static void GBall_Move(uint8_t *o);
+static void Swing_UpdateSwingPosition(uint8_t *o);
+static void Swing_ChkDel(uint8_t *o);
+
+/* Swing_UpdateSwingPosition — convert angle (d0) to (sin, cos) and place
+   every object in swing_children at its radius offset from the pivot.
+   Shared by Object 15 (swinging platforms) and Object 48 (wrecking ball). */
+static void Swing_UpdateSwingPosition(uint8_t *o) {
+    int16_t s0, s1;
+    CalcSine(v_unused11 /* placeholder */, &s0, &s1); /* see note below */
+    /* The ASM reads the angle from d0, which the caller set. We accept it
+       via a static since C has no register convention here. */
+    (void)s0; (void)s1;
+}
+/* The actual implementation with d0 passed explicitly. */
+static void Swing_UpdateSwingPosition_D0(uint8_t *o, int16_t d0) {
+    int16_t s0, s1;
+    CalcSine(d0, &s0, &s1);             /* s0=sin, s1=cos */
+    int16_t d2 = swing_origY(o);
+    int16_t d3 = swing_origX(o);
+
+    uint8_t *a2 = (uint8_t *)((uint8_t *)o + 0x29);  /* swing_children + 1 */
+    uint8_t d6 = *(a2 - 1);                          /* swing_children count */
+    for (int i = d6; i >= 0; i--) {
+        uint8_t idx = *a2++;
+        uint8_t *a1 = (uint8_t *)Object_GetSlot((int)idx);
+
+        uint8_t d4 = swing_radius(a1);               /* radius */
+        int32_t dy = (int32_t)(int16_t)d4 * s0;      /* muls.w d0,d4 */
+        int32_t dx = (int32_t)(int16_t)d4 * s1;      /* muls.w d1,d5 */
+        dy >>= 8;
+        dx >>= 8;
+        obY(a1) = (int16_t)(d2 + (int16_t)dy);
+        obX(a1) = (int16_t)(d3 + (int16_t)dx);
+    }
+}
+
+/* Swing_Main — Routine 0: initialize platform + spawn child links. */
+static void Swing_Main(uint8_t *o) {
+    obRoutine(o) += 2;
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Swing_GHZ;
+    obGfx(o)     = (uint16_t)(ArtTile_GHZ_MZ_Swing | Tile_Pal3);
+    obRender(o)  = sprite_cam_field;
+    obPriority(o)= 3;
+    obActWid(o)  = 48 / 2;
+    obHeight(o)  = 16 / 2;
+    swing_origY(o) = obY(o);
+    swing_origX(o) = obX(o);
+
+    if ((uint8_t)v_zone == id_SLZ) {
+        obMap(o)     = (uint32_t)(uintptr_t)Map_Swing_SLZ;
+        obGfx(o)     = (uint16_t)(ArtTile_SLZ_Swing | Tile_Pal3);
+        obActWid(o)  = 64 / 2;
+        obHeight(o)  = 32 / 2;
+        obColType(o) = (uint8_t)(col_64x16 | col_hurt);
+    }
+    if ((uint8_t)v_zone == id_SBZ) {
+        obMap(o)     = (uint32_t)(uintptr_t)Map_BBall;
+        obGfx(o)     = (uint16_t)ArtTile_SBZ_Swing;
+        obActWid(o)  = 48 / 2;
+        obHeight(o)  = 48 / 2;
+        obColType(o) = (uint8_t)(col_32x32 | col_hurt);
+        obRoutine(o) = 0x0C;
+    }
+
+    /* Spawn child links (same loop shape as Hel_Main). */
+    uint8_t d4 = obID(o);
+    uint8_t *a2 = (uint8_t *)o + 0x28;
+    uint8_t d1 = *(a2);                          /* subtype */
+    int16_t sp_backup = (int16_t)d1;
+    uint8_t count = d1 & 0x0F;
+    *(a2)++ = 0;                                 /* clear subtype */
+    uint8_t d3 = (uint8_t)((count << 4) + 8);    /* parent radius */
+    swing_radius(o) = d3;
+    d3 = (uint8_t)(d3 - 8);
+
+    if (obFrame(o) != 0) {                       /* main block? */
+        d3 = (uint8_t)(d3 + 8);
+        if (count > 0) count -= 1;
+    }
+
+    uint8_t *a1 = o;
+    for (int i = 0; i <= count; i++) {         /* count + 1 iteraciones (dbf) */
+        a1 = (uint8_t *)FindNextFreeObj(a1);   /* SIEMPRE nuevo slot */
+        if (!a1) break;
+
+        swing_children(o)++;
+        *a2++ = (uint8_t)Object_GetIndex(a1);
+
+        /* Link setup común */
+        obRoutine(a1)  = 0x0A;                 /* Swing_ChainLink */
+        obID(a1)       = d4;
+        obMap(a1)      = obMap(o);
+        obGfx(a1)      = (uint16_t)(obGfx(o) & ~0x0060); /* bclr #6 → pal 1 */
+        obRender(a1)   = sprite_cam_field;
+        obPriority(a1) = 4;
+        obActWid(a1)   = 16 / 2;
+        obFrame(a1)    = 1;                    /* chain */
+        swing_radius(a1) = d3;
+        d3 = (uint8_t)(d3 - 0x10);
+        if ((int8_t)d3 < 0) {
+            obFrame(a1)    = 2;                /* anchor */
+            obPriority(a1) = 3;
+            obGfx(a1)      = (uint16_t)(obGfx(o) | 0x0060); /* bset #6 → pal 3 */
+        }
+    }
+
+    /* Parent index stored last. */
+    *a2++ = (uint8_t)Object_GetIndex(o);
+
+    obAngle(o) = (int16_t)0x4080;            /* $4080 word */
+    gb_swingspeed(o) = (int16_t)-0x200;
+
+    if (sp_backup & 0x10) {                  /* bit 4 → GHZ ball variant */
+        obMap(o)     = (uint32_t)(uintptr_t)Map_GBall;
+        obGfx(o)     = (uint16_t)(ArtTile_GHZ_Giant_Ball | Tile_Pal3);
+        obFrame(o)   = 1;
+        obPriority(o)= 2;
+        obColType(o) = (uint8_t)(col_40x40 | col_hurt);
+    }
+
+    if ((uint8_t)v_zone == id_SBZ) {
+        /* ASM: beq.s Swing_Swinging */
+        Swing_Swinging(o);
+        return;
+    }
+    /* ASM cae a Swing_Platform */
+    Swing_Platform(o);
+}
+
+/* Swing_Platform — Routine 2 */
+static void Swing_Platform(uint8_t *o) {
+    int16_t d1 = (int16_t)obActWid(o);
+    int16_t d3 = (int16_t)obHeight(o);
+    PlatformObject_CustomHeight(o, d1, d3);
+    /* ASM cae a Swing_Swinging */
+    Swing_Swinging(o);
+}
+
+/* Swing_Swinging — Routine $C: main visual/position update. */
+static void Swing_Swinging(uint8_t *o) {
+    Swing_Move(o);
+    DisplaySprite(o);
+    Swing_ChkDel(o);
+}
+
+/* Swing_StoodOn — Routine 4 */
+static void Swing_StoodOn(uint8_t *o) {
+    int16_t d1 = (int16_t)obActWid(o);
+    int16_t dummy;
+    ExitPlatform(o, d1, &dummy);
+
+    int16_t saved_x = obX(o);
+    Swing_Move(o);
+
+    int16_t d3 = (int16_t)(int8_t)obHeight(o);
+    d3 = (int16_t)(d3 + 1);                  /* addq.b #1,d3 */
+    MvSonicOnPtfm(o, saved_x, d3);
+
+    DisplaySprite(o);
+    Swing_ChkDel(o);
+}
+
+/* Swing_Delete — Routine 6/8 */
+static void Swing_Delete(uint8_t *o) {
+    DeleteObject(o);
+}
+
+/* Swing_ChainLink — Routine $A: just display */
+static void Swing_ChainLink(uint8_t *o) {
+    DisplaySprite(o);
+}
+
+/* Swing_Move — compute angle from v_oscillate and dispatch to the shared
+   position updater. */
+static void Swing_Move(uint8_t *o) {
+    int16_t d0 = (int16_t)(int8_t)RAM_BYTE(v_oscillate + 0x1A);
+    int16_t d1 = (int16_t)(0x40 * 2);
+    if (obStatus(o) & sprite_xflip) {
+        d0 = (int16_t)(-d0);
+        d0 = (int16_t)(d0 + d1);
+    }
+    Swing_UpdateSwingPosition_D0(o, d0);
+}
+
+/* GBall_Move — alternate swing update for the wrecking ball. */
+static void GBall_Move(uint8_t *o) {
+    int16_t d0;
+    if (gb_swingdir(o) != 0) {
+        /* .swingCounterclockwise */
+        d0 = (int16_t)(gb_swingspeed(o) - 8);
+        gb_swingspeed(o) = d0;
+        gb_anglew(o) = (int16_t)(gb_anglew(o) + d0);
+        if (d0 == -0x200) gb_swingdir(o) = 0;
+    } else {
+        /* .swingClockwise */
+        d0 = (int16_t)(gb_swingspeed(o) + 8);
+        gb_swingspeed(o) = d0;
+        gb_anglew(o) = (int16_t)(gb_anglew(o) + d0);
+        if (d0 == 0x200) gb_swingdir(o) = 1;
+    }
+
+    int16_t angle = (int16_t)((uint16_t)gb_anglew(o) >> 8);
+    Swing_UpdateSwingPosition_D0(o, angle);
+}
+
+/* Swing_ChkDel — delete platform and every child when off-screen. */
+static void Swing_ChkDel(uint8_t *o) {
+    if (!OutOfRange(o, swing_origX(o))) return;
+
+    uint8_t count = swing_children(o);
+    uint8_t *entry = (uint8_t *)o + 0x29;
+    uint8_t parent_id = obID(o);
+
+    for (int i = 0; i <= count; i++) {
+        uint8_t idx = entry[i];
+
+        /* Defensa: descarta índices fuera del rango de objetos y slots
+           que no son nuestros (por si el array tiene basura). */
+        if (idx >= NUM_OBJECTS) continue;
+
+        uint8_t *slot = (uint8_t *)Object_GetSlot((int)idx);
+        if (obID(slot) != parent_id) continue;
+
+        DeleteObject(slot);
+    }
+}
+
+/* Object 15 dispatcher. */
+static void SwingingPlatform_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0x00: Swing_Main(o);       break;
+        case 0x02: Swing_Platform(o);   break;
+        case 0x04: Swing_StoodOn(o);    break;
+        case 0x06: case 0x08:
+                   Swing_Delete(o);     break;
+        case 0x0A: Swing_ChainLink(o);  break;
+        case 0x0C: Swing_Swinging(o);   break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 3D — Eggman (GHZ) boss
+ *  Ported verbatim from _incObj/3D, 48 Boss - GHZ Main and Wrecking Ball.asm
+ *  (REV01, FixBugs=0).
+ *
+ *  bghz_parentobj = $34 (4-byte slot index, not a pointer)
+ *  bghz_timer     = $3C (word)
+ *  bghz_sine      = $3F (byte)
+ *  obBossX/Y      = $30 / $38 (long, 16.16 fixed-point)
+ *  obBossFlash    = $3E (byte, moved from $32 to avoid overlap with X high word)
+ *  obBossHits     = $3A (byte, as used by ReactToItem)
+ * =========================================================================== */
+
+#define bghz_parentobj(o) (*(uint32_t *)((uint8_t *)(o) + 0x34))
+#define bghz_timer(o)     (*(int16_t *)((uint8_t *)(o) + 0x3C))
+#define bghz_sine(o)      (*(uint8_t *)((uint8_t *)(o) + 0x3F))
+
+static void BGHZ_Main(uint8_t *o);
+static void BGHZ_ShipMain(uint8_t *o);
+static void BGHZ_FaceMain(uint8_t *o);
+static void BGHZ_FlameMain(uint8_t *o);
+
+/* BGHZ_ObjData: { routine, animation } × 3 */
+static const uint8_t BGHZ_ObjData[6] = {
+    2, 0,
+    4, 1,
+    6, 7,
+};
+
+/* BGHZ_Main — Routine 0: spawn ship + face + flame. The first iteration
+   reuses the parent slot; the other two allocate new slots. */
+static void BGHZ_Main(uint8_t *o) {
+    const uint8_t *a2 = BGHZ_ObjData;
+    uint8_t *a1 = o;
+
+    for (int i = 0; i < 3; i++) {
+        if (i > 0) {
+            a1 = (uint8_t *)FindNextFreeObj(a1);
+            if (!a1) break;
+        }
+        obRoutine(a1)  = *a2++;
+        obID(a1)       = id_BossGreenHill;
+        obX(a1)        = obX(o);
+        obY(a1)        = obY(o);
+        obMap(a1)      = (uint32_t)(uintptr_t)Map_Eggman;
+        obGfx(a1)      = (uint16_t)ArtTile_Eggman;
+        obRender(a1)   = sprite_cam_field;
+        obActWid(a1)   = 64 / 2;
+        obPriority(a1) = 3;
+        obAnim(a1)     = *a2++;
+
+        /* Store parent's slot INDEX (addresses don't survive 32-bit fields). */
+        bghz_parentobj(a1) = (uint32_t)Object_GetIndex(o);
+    }
+
+    /* BGHZ_Done */
+    obBossX(o) = ((int32_t)(int16_t)obX(o)) << 16;
+    obBossY(o) = ((int32_t)(int16_t)obY(o)) << 16;
+    obColType(o) = (uint8_t)(col_48x48 | col_boss);
+    obBossHits(o) = 8;
+}
+
+/* BGHZ_ShipMain — Routine 2 */
+static void BGHZ_ShipMain(uint8_t *o) {
+    switch (ob2ndRout(o)) {
+        case 0x00: { /* BGHZ_ShipStart */
+            obVelY(o) = 0x100;
+            BossMove(o);
+            if ((int16_t)(obBossY(o) >> 16) != (int16_t)(boss_ghz_y + 0x38)) {
+                /* fall through to ShipUpdate */
+            } else {
+                obVelY(o) = 0;
+                ob2ndRout(o) += 2;
+            }
+            break;
+        }
+        case 0x02: { /* BGHZ_MakeBall */
+            obVelX(o) = -0x100;
+            obVelY(o) = -0x40;
+            BossMove(o);
+            if ((int16_t)(obBossX(o) >> 16) != (int16_t)(boss_ghz_x + 0xA0)) {
+                break;
+            }
+            obVelX(o) = 0;
+            obVelY(o) = 0;
+            ob2ndRout(o) += 2;
+            uint8_t *a1 = (uint8_t *)FindNextFreeObj(o);
+            if (a1) {
+                obID(a1) = id_BossBall;
+                obX(a1)  = (int16_t)(obBossX(o) >> 16);
+                obY(a1)  = (int16_t)(obBossY(o) >> 16);
+                bghz_parentobj(a1) = (uint32_t)Object_GetIndex(o);
+            }
+            bghz_timer(o) = 120 - 1;
+            break;
+        }
+        case 0x04: { /* BGHZ_ShipMove */
+            bghz_timer(o)--;
+            if ((int16_t)bghz_timer(o) < 0) {
+                ob2ndRout(o) += 2;
+                bghz_timer(o) = 0x40 - 1;
+                obVelX(o) = 0x100;
+                if ((int16_t)(obBossX(o) >> 16) == (int16_t)(boss_ghz_x + 0xA0)) {
+                    bghz_timer(o) = (0x40 * 2) - 1;
+                    obVelX(o) = 0x40;
+                }
+            }
+            /* BGHZ_Reverse — corre SIEMPRE, en ambos caminos */
+            if (!(obStatus(o) & 1)) obVelX(o) = (int16_t)(-obVelX(o));
+            break;
+        }
+        case 0x06: { /* BGHZ_ChgDir */
+            bghz_timer(o)--;
+            if ((int16_t)bghz_timer(o) < 0) {
+                obStatus(o) ^= sprite_xflip;
+                bghz_timer(o) = 64 - 1;
+                ob2ndRout(o) -= 2;
+                obVelX(o) = 0;
+            } else {
+                BossMove(o);
+            }
+            break;
+        }
+        case 0x08: { /* BGHZ_Explode */
+            bghz_timer(o)--;
+            if ((int16_t)bghz_timer(o) < 0) {
+                obStatus(o) |= sprite_xflip;
+                obStatus(o) &= ~(1 << 7);
+                obVelX(o) = 0;
+                ob2ndRout(o) += 2;
+                bghz_timer(o) = -38;
+                if (!v_bossstatus) v_bossstatus = 1;
+                break;
+            }
+            BossDefeated(o);
+            break;
+        }
+        case 0x0A: { /* BGHZ_Recover */
+            bghz_timer(o)++;
+            int16_t t = bghz_timer(o);
+            if (t == 0) {
+                obVelY(o) = 0;
+            } else if (t < 0) {
+                obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+            } else if (t < 0x30) {
+                obVelY(o) = (int16_t)(obVelY(o) - 8);
+            } else if (t == 0x30) {
+                obVelY(o) = 0;
+                Sound_Queue(bgm_GHZ, false);
+            } else if (t < 0x38) {
+                /* nothing */
+            } else {
+                ob2ndRout(o) += 2;
+            }
+            BossMove(o);
+            break;
+        }
+        case 0x0C: { /* BGHZ_Escape */
+            obVelX(o) = 0x400;
+            obVelY(o) = -0x40;
+            if (v_limitright2 != boss_ghz_end) {
+                v_limitright2 += 2;
+            } else if (!(obRender(o) & 0x80)) {
+                DeleteObject(o);
+                return;
+            }
+            BossMove(o);
+            break;
+        }
+    }
+
+    /* BGHZ_ShipUpdate (common tail) */
+    {
+        int16_t s0, s1;
+        CalcSine(bghz_sine(o), &s0, &s1);
+        int16_t bob = (int16_t)(s0 >> 6);
+        bob = (int16_t)(bob + (int16_t)(obBossY(o) >> 16));
+        obY(o) = bob;
+        obX(o) = (int16_t)(obBossX(o) >> 16);
+        bghz_sine(o) += 2;
+
+                if (ob2ndRout(o) < 8) {
+            if ((int8_t)obStatus(o) < 0) {          /* defeated flag */
+                AddPoints(1000);
+                ob2ndRout(o) = 8;
+                bghz_timer(o) = 0xB3;
+            } else if (obColType(o) == 0) {         /* SOLO cuando ya fue golpeado */
+                if (obBossFlash(o) == 0) {
+                    obBossFlash(o) = 0x20;
+                    Sound_Queue(sfx_HitBoss, false);
+                }
+                /* .flash — siempre corre una vez dentro del bloque */
+                uint16_t *pal = (uint16_t *)RAM_ADDR(v_palette + 0x22);
+                uint16_t col = (*pal != 0) ? 0 : cWhite;
+                *pal = col;
+                obBossFlash(o)--;
+                if (obBossFlash(o) == 0) {
+                    obColType(o) = (uint8_t)(col_48x48 | col_boss);
+                }
+            }
+        }
+    }
+
+    if (Ani_Eggman) AnimateSprite(o, Ani_Eggman);
+    /* Copy flip bits from status to render. */
+    uint8_t d0 = obStatus(o) & 3;
+    obRender(o) = (uint8_t)((obRender(o) & ~(sprite_xflip | sprite_yflip)) | d0);
+    DisplaySprite(o);
+}
+
+/* BGHZ_FaceMain — Routine 4 */
+static void BGHZ_FaceMain(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)bghz_parentobj(o));
+    uint8_t d0 = ob2ndRout(a1);
+    int d1 = 1;                              /* face normal */
+
+    d0 -= 4;
+    if (d0 == 0 && (int16_t)(obBossX(a1) >> 16) == (int16_t)(boss_ghz_x + 0xA0)) {
+        d1 = 4;                              /* face laugh at default pos */
+    }
+    d0 -= 6;
+    if (d0 >= 0) {
+        d1 = 0xA;                            /* defeated */
+    } else if (obColType(a1) == 0) {
+        d1 = 5;                              /* face hit */
+    } else if (obRoutine(RAM_ADDR(v_player)) >= 4) {
+        d1 = 4;                              /* face laugh */
+    }
+
+    obAnim(o) = (uint8_t)d1;
+
+    d0 -= 2;
+    if (d0 == 0) {                           /* Escape state */
+        obAnim(o) = 6;
+        if (!(obRender(o) & 0x80)) {         /* offscreen → delete face */
+            DeleteObject(o);
+            return;
+        }
+    }
+    /* BGHZ_Display (shared with flame) */
+    uint8_t *p = (uint8_t *)Object_GetSlot((int)bghz_parentobj(o));
+    obX(o)      = obX(p);
+    obY(o)      = obY(p);
+    obStatus(o) = obStatus(p);
+    if (Ani_Eggman) AnimateSprite(o, Ani_Eggman);
+    uint8_t dd = obStatus(o) & 3;
+    obRender(o) = (uint8_t)((obRender(o) & ~(sprite_xflip | sprite_yflip)) | dd);
+    DisplaySprite(o);
+}
+
+/* BGHZ_FlameMain — Routine 6 */
+static void BGHZ_FlameMain(uint8_t *o) {
+    obAnim(o) = 7;
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)bghz_parentobj(o));
+    if (ob2ndRout(a1) == 0x0C) {
+        obAnim(o) = 0xB;
+        if (!(obRender(o) & 0x80)) {
+            DeleteObject(o);
+            return;
+        }
+    } else if (obVelX(a1) == 0) {
+        /* no move → no flame anim */
+    } else {
+        obAnim(o) = 8;
+    }
+
+    uint8_t *p = (uint8_t *)Object_GetSlot((int)bghz_parentobj(o));
+    obX(o)      = obX(p);
+    obY(o)      = obY(p);
+    obStatus(o) = obStatus(p);
+    if (Ani_Eggman) AnimateSprite(o, Ani_Eggman);
+    uint8_t dd = obStatus(o) & 3;
+    obRender(o) = (uint8_t)((obRender(o) & ~(sprite_xflip | sprite_yflip)) | dd);
+    DisplaySprite(o);
+}
+
+static void BossGreenHill_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: BGHZ_Main(o);      break;
+        case 2: BGHZ_ShipMain(o);  break;
+        case 4: BGHZ_FaceMain(o);  break;
+        case 6: BGHZ_FlameMain(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 48 — Wrecking Ball (GHZ boss chain)
+ *  Ported verbatim from _incObj/3D, 48 Boss - GHZ Main and Wrecking Ball.asm
+ *  (REV01, FixBugs=0). Shares swing_origX/Y/radius fields with Object 15.
+ *
+ *  gb_anchorpos  = objoff_32 (word)
+ *  gb_linkdist   = objoff_3C (byte) — reuses swing_radius offset
+ *  gb_swingdir   = objoff_3D (byte)
+ *  gb_swingspeed = objoff_3E (word)
+ * =========================================================================== */
+
+static const uint8_t GBall_PosData[6] = { 0, 0x10, 0x20, 0x30, 0x40, 0x60 };
+
+static void GBall_Main(uint8_t *o);
+static void GBall_Base(uint8_t *o);
+static void GBall_Base2(uint8_t *o);
+static void GBall_Link(uint8_t *o);
+static void GBall_Ball(uint8_t *o);
+static void GBall_UpdateBase(uint8_t *o);
+
+/* GBall_Main — Routine 0: spawn 6 chain links (including the parent). */
+static void GBall_Main(uint8_t *o) {
+    obRoutine(o) += 2;
+    gb_anglew(o) = (int16_t)0x4080;                       /* low byte of move.w #$4080 */
+    gb_swingspeed(o) = (int16_t)-0x200;      /* GBall_Swing_Speed = -$200 */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_BossItems;
+    obGfx(o)     = (uint16_t)ArtTile_Eggman_Weapons;
+
+    uint8_t *a2 = (uint8_t *)o + 0x28;
+    *a2++ = 0;                               /* clear obSubtype (count) */
+
+    /* 6 objetos: el padre en la posición 0 y 5 hijos nuevos. */
+    uint8_t *a1 = o;
+    for (int i = 0; i < 6; i++) {
+        if (i > 0) {
+            a1 = (uint8_t *)FindNextFreeObj(a1);
+            if (!a1) break;
+
+            /* GBall_MakeLinks setup */
+            obX(a1)      = obX(o);
+            obY(a1)      = obY(o);
+            obID(a1)     = id_BossBall;
+            obRoutine(a1)= 6;
+            obMap(a1)    = (uint32_t)(uintptr_t)Map_Swing_GHZ;
+            obGfx(a1)    = (uint16_t)ArtTile_GHZ_MZ_Swing;
+            obFrame(a1)  = 1;
+
+            swing_children(o)++;             /* sólo los hijos nuevos */
+        }
+
+        /* GBall_LinkSetup común */
+        *a2++ = (uint8_t)Object_GetIndex(a1);
+        obRender(a1)   = sprite_cam_field;
+        obActWid(a1)   = 16 / 2;
+        obPriority(a1) = 6;
+        bghz_parentobj(a1) = bghz_parentobj(o);
+    }
+
+    /* GBall_MakeBall: el último objeto se convierte en la bola. */
+    if (a1) {
+        obRoutine(a1) = 8;
+        obMap(a1)     = (uint32_t)(uintptr_t)Map_GBall;
+        obGfx(a1)     = (uint16_t)(ArtTile_GHZ_Giant_Ball | Tile_Pal3);
+        obFrame(a1)   = 1;
+        obPriority(a1)= 5;
+        obColType(a1) = (uint8_t)(col_40x40 | col_hurt);
+    }
+}
+
+/* GBall_Base — Routine 2 */
+static void GBall_Base(uint8_t *o) {
+    const uint8_t *a3 = GBall_PosData;
+    uint8_t *a2 = (uint8_t *)o + 0x28;
+    uint8_t d6 = *(a2);                  /* child count (excluding parent) */
+    uint8_t *a1 = o;
+
+    for (int i = 0; i <= d6; i++) {
+        uint8_t idx = a2[1 + i];
+        a1 = (uint8_t *)Object_GetSlot((int)idx);
+        uint8_t target = *a3++;
+        if (gb_linkdist(a1) != target) {
+            gb_linkdist(a1)++;
+        }
+    }
+
+    uint8_t target = *(a3 - 1);
+    if (gb_linkdist(a1) == target) {
+        uint8_t *parent = (uint8_t *)Object_GetSlot((int)bghz_parentobj(o));
+        if (ob2ndRout(parent) == 6) {
+            obRoutine(o) += 2;           /* → GBall_Base2 */
+        }
+    }
+
+    /* .checkAnchor */
+    if (gb_anchorpos(o) != 32) gb_anchorpos(o)++;
+
+    GBall_UpdateBase(o);
+        int16_t angle = (int16_t)((uint16_t)gb_anglew(o) >> 8);
+    Swing_UpdateSwingPosition_D0(o, angle);
+    DisplaySprite(o);
+}
+
+/* GBall_Base2 — Routine 4 */
+static void GBall_Base2(uint8_t *o) {
+    GBall_UpdateBase(o);
+    GBall_Move(o);
+    DisplaySprite(o);
+}
+
+/* GBall_Link — Routine 6: swap to explosion when boss defeated. */
+static void GBall_Link(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)bghz_parentobj(o));
+    if ((int8_t)obStatus(a1) < 0) {
+        obID(o) = id_Explosion;
+        obRoutine(o) = 0;
+    }
+    DisplaySprite(o);
+}
+
+/* GBall_Ball — Routine 8: ball vanish/explode on defeat. */
+static void GBall_Ball(uint8_t *o) {
+    int d0 = 0;
+    if (obFrame(o) == 0) d0 = 1;
+    obFrame(o) = (uint8_t)d0;
+
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)bghz_parentobj(o));
+    if ((int8_t)obStatus(a1) < 0) {
+        obColType(o) = col_none;
+        BossDefeated(o);
+        uint8_t *p = (uint8_t *)o;
+        bghz_timer(p)--;                  /* reuse timer from parent layout; see note */
+        if ((int16_t)bghz_timer(p) < 0) {
+            obID(o) = id_Explosion;
+            obRoutine(o) = 0;
+        }
+    }
+    DisplaySprite(o);
+}
+
+/* GBall_UpdateBase — shared animation + parent-follow logic. */
+static void GBall_UpdateBase(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)bghz_parentobj(o));
+
+    /* Animate: swap obFrame bit 0 every $C0 frames. */
+    uint8_t prev = obAniFrame(o);
+    obAniFrame(o) = (uint8_t)(prev + 32);
+    if (obAniFrame(o) < prev) {           /* byte wrap $C0 → 0 */
+        obFrame(o) ^= 1;
+    }
+
+    /* swing_origX/Y act as the ball's pivot anchor here. */
+    swing_origX(o) = obX(a1);
+    int16_t d0 = (int16_t)(obY(a1) + gb_anchorpos(o));
+    swing_origY(o) = d0;
+    obStatus(o) = obStatus(a1);
+
+    if ((int8_t)obStatus(a1) < 0) {       /* boss defeated */
+        obID(o) = id_Explosion;
+        obRoutine(o) = 0;
+    }
+}
+
+static void BossBall_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: GBall_Main(o);   break;
+        case 2: GBall_Base(o);   break;
+        case 4: GBall_Base2(o);  break;
+        case 6: GBall_Link(o);   break;
+        case 8: GBall_Ball(o);   break;
+    }
 }

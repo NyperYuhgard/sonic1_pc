@@ -426,10 +426,10 @@ enum {
 /* ---------------------------------------------------------------------------
    Boss variables (aliases into generic object offsets)
    --------------------------------------------------------------------------- */
-#define obBossHits   obColProp
-#define obBossX      objoff_30
-#define obBossY      objoff_38
-#define obBossFlash  objoff_3E
+#define obBossHits(o)    (*(uint8_t  *)((uint8_t *)(o) + 0x21))   /* 0x21 */
+#define obBossX(o)       (*(int32_t  *)((uint8_t *)(o) + objoff_30))   /* 0x30-33, 16.16 */
+#define obBossY(o)       (*(int32_t  *)((uint8_t *)(o) + objoff_38))   /* 0x38-3B, 16.16 */
+#define obBossFlash(o)   (*(uint8_t  *)((uint8_t *)(o) + objoff_3E))   /* 0x3E */
 
 /* ---------------------------------------------------------------------------
    Object size

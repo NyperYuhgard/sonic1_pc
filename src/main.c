@@ -229,6 +229,7 @@ void WaitForVBlank(void) {
     /* Increment frame counters */
     v_framecount = v_framecount + 1;
     v_vblank_count = v_vblank_count + 1;
+    v_vblank_byte = (uint8_t)(v_vblank_byte + 1);
 }
 
 /* ===================================================================

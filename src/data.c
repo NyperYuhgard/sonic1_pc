@@ -488,6 +488,24 @@ size_t   Map_HUD_len = 0;
 const uint8_t *Map_Shield = NULL;
 size_t   Map_Shield_len = 0;
 
+const uint8_t *Map_Smash = NULL;
+size_t   Map_Smash_len = 0;
+
+const uint8_t *Map_Hel = NULL;
+size_t   Map_Hel_len = 0;
+
+const uint8_t *Map_Swing_SLZ = NULL;
+size_t  Map_Swing_SLZ_len = 0;
+
+const uint8_t *Map_Swing_GHZ = NULL;
+size_t  Map_Swing_GHZ_len = 0;
+
+const uint8_t *Map_Eggman = NULL;
+size_t  Map_Eggman_len = 0;
+
+const uint8_t *Map_BossItems = NULL;
+size_t  Map_BossItems_len = 0;
+
 const uint8_t *Map_Sonic = NULL;
 size_t   Map_Sonic_len = 0;
 
@@ -500,6 +518,9 @@ size_t   Ani_Sonic_len = 0;
 
 const uint8_t *Ani_Chop = NULL;
 size_t  Ani_Chop_len = 0;
+
+const uint8_t *Ani_Eggman = NULL;
+size_t  Ani_Eggman_len = 0;
 
 const uint8_t *Ani_Monitor = NULL;
 size_t   Ani_Monitor_len = 0;
@@ -634,6 +655,7 @@ const uint8_t *Map_Newt = NULL;
 static size_t Map_Edge_len = 0;
 const uint8_t *Map_Edge = NULL;
 const uint8_t *Map_GBall = NULL;
+static size_t Map_GBall_len = 0;
 const uint8_t *Map_Lamp = NULL;
 const uint8_t *Map_GRing = NULL;
 const uint8_t *Map_Bonus = NULL;
@@ -1992,6 +2014,36 @@ int Data_Init(void) {
         Map_Shield_len = 0;
     }
 
+    if (load_asm_asset("maps/Smashable Walls.asm", &Map_Smash, &Map_Smash_len, 1) != 0) {
+        Map_Smash = NULL;
+        Map_Smash_len = 0;
+    }
+
+    if (load_asm_asset("maps/Spiked Pole Helix.asm", &Map_Hel, &Map_Hel_len, 1) != 0) {
+        Map_Hel = NULL;
+        Map_Hel_len = 0;
+    }
+
+    if (load_asm_asset("maps/Swinging Platforms (GHZ).asm", &Map_Swing_GHZ, &Map_Swing_GHZ_len, 1) != 0) {
+        Map_Swing_GHZ = NULL;
+        Map_Swing_GHZ_len = 0;
+    }
+
+    if (load_asm_asset("maps/Swinging Platforms (SLZ).asm", &Map_Swing_SLZ, &Map_Swing_SLZ_len, 1) != 0) {
+        Map_Swing_SLZ = NULL;
+        Map_Swing_SLZ_len = 0;
+    }
+
+    if (load_asm_asset("maps/Eggman.asm", &Map_Eggman, &Map_Eggman_len, 1) != 0) {
+        Map_Eggman = NULL;
+        Map_Eggman_len = 0;
+    }
+
+    if (load_asm_asset("maps/Boss Items.asm", &Map_BossItems, &Map_BossItems_len, 1) != 0) {
+        Map_BossItems = NULL;
+        Map_BossItems_len = 0;
+    }
+
     if (load_asset("artnem/rings.nem", &Nem_Ring, &Nem_Ring_len) != 0) {
         Nem_Ring = NULL;
         Nem_Ring_len = 0;
@@ -2093,6 +2145,11 @@ int Data_Init(void) {
         Ani_Chop_len = 0;
     }
 
+    if (load_asm_asset("anim/Eggman.asm", &Ani_Eggman, &Ani_Eggman_len, 0) != 0) {
+        Ani_Eggman = NULL;
+        Ani_Eggman_len = 0;
+    }
+
     if (load_asm_asset("anim/buzzmissile.asm", &Ani_Missile, &Ani_Missile_len, 0) != 0) {
         Ani_Missile = NULL;
         Ani_Missile_len = 0;
@@ -2117,6 +2174,12 @@ int Data_Init(void) {
         Map_Edge = NULL;
         Map_Edge_len = 0;
     }
+
+    if (load_asm_asset("maps/GHZ Ball.asm", &Map_GBall, &Map_GBall_len, 1) != 0) {
+        Map_GBall = NULL;
+        Map_GBall_len = 0;
+    }
+
 
     if (load_asset("objpos/ghz1.bin", &ObjPos_GHZ1, &ObjPos_GHZ1_len) != 0) {
         ObjPos_GHZ1 = NULL;
