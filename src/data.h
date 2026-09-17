@@ -620,6 +620,9 @@ extern size_t   Ani_Spring_len;
 extern const uint8_t *Ani_Pri;
 extern size_t   Ani_Pri_len;
 
+extern const uint8_t *Ani_Newt;
+extern size_t   Ani_Newt_len;
+
 /* GHZ bridge (id_Bridge) mappings */
 extern const uint8_t *Map_Bri;
 extern size_t   Map_Bri_len;
@@ -702,6 +705,8 @@ extern const uint8_t *Map_Animal3;
 extern size_t   Map_Animal3_len;
 extern const uint8_t *Map_Ledge;
 extern size_t   Map_Ledge_len;
+extern const uint8_t *Map_Newt;
+extern size_t   Map_Newt_len;
 
 /* Points object mappings (28, 29 Animals and Points.asm: Map_Points) */
 extern const uint8_t *Map_Points;

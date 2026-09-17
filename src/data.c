@@ -317,7 +317,7 @@ const uint8_t *Map_Animal3;         size_t Map_Animal3_len;
 const uint8_t *Map_Points;          size_t Map_Points_len;
 
 /* Mappings referenciados por DebugMode (aún sin portar en su mayoría) */
-const uint8_t *Map_Newt;
+const uint8_t *Map_Newt;            size_t Map_Newt_len;
 const uint8_t *Map_Lamp;
 const uint8_t *Map_GRing;
 const uint8_t *Map_Bonus;
@@ -387,6 +387,7 @@ const uint8_t *Ani_Chop;            size_t Ani_Chop_len;
 const uint8_t *Ani_Eggman;          size_t Ani_Eggman_len;
 const uint8_t *Ani_Monitor;         size_t Ani_Monitor_len;
 const uint8_t *Ani_Spring;          size_t Ani_Spring_len;
+const uint8_t *Ani_Newt;            size_t Ani_Newt_len;
 const uint8_t *SonicDynPLC;         size_t SonicDynPLC_len;
 
 /* ---------------- Layouts de nivel (Level_*) ---------------- */
@@ -823,6 +824,7 @@ int Data_Init(void) {
     LOAD_MAP("maps/Animals 2.asm",                  Map_Animal2);
     LOAD_MAP("maps/Animals 3.asm",                  Map_Animal3);
     LOAD_MAP("maps/points.asm",                     Map_Points);
+    LOAD_MAP("maps/Newtron.asm",                    Map_Newt);
 
     /* ---------------- Animaciones ---------------- */
     LOAD_ANIM("anim/Sonic.asm",                     Ani_Sonic);
@@ -840,6 +842,15 @@ int Data_Init(void) {
     LOAD_ANIM("anim/Eggman.asm",                    Ani_Eggman);
     LOAD_ANIM("anim/Monitor.asm",                   Ani_Monitor);
     LOAD_ANIM("anim/Springs.asm",                   Ani_Spring);
+    LOAD_ANIM("anim/Newtron.asm",                   Ani_Newt);
+    fprintf(stderr, "Ani_Newt=%p len=%zu\n",
+            (void*)Ani_Newt, Ani_Newt_len);
+    if (Ani_Newt && Ani_Newt_len >= 16) {
+        for (int i = 0; i < 8; i++) {
+            uint16_t off = Ani_Newt[i*2] | (Ani_Newt[i*2+1] << 8);
+            fprintf(stderr, "  anim[%d] offset=%04X\n", i, off);
+        }
+    }
     /* El DPLC de Sonic no es un anim script, pero comparte el parser:  */
     LOAD_ANIM("maps/Sonic - Dynamic Gfx Script.asm", SonicDynPLC);
 
@@ -1113,6 +1124,7 @@ void Data_Quit(void) {
     UNMAP(Map_Missile); UNMAP(Map_Plat_GHZ); UNMAP(Map_Ledge); UNMAP(Map_CFlo);
     UNMAP(Map_ExplodeItem); UNMAP(Map_ExplodeBomb);
     UNMAP(Map_Animal1); UNMAP(Map_Animal2); UNMAP(Map_Animal3); UNMAP(Map_Points);
+    UNMAP(Ani_Newt);
 
     /* Animaciones / DPLC */
     UNMAP(Ani_Sonic); UNMAP(Ani_TSon); UNMAP(Ani_PSBTM); UNMAP(Ani_Pri);

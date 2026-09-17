@@ -62,6 +62,7 @@ static void BossGreenHill_Main(void *obj);
 static void BossBall_Main(void *obj);
 static void SwingingPlatform_Main(void *obj);
 static void Prison_Main(void *obj);
+static void Newtron_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -111,6 +112,7 @@ void Objects_Init(void) {
     obj_dispatch[id_BossBall]           = BossBall_Main;
     obj_dispatch[id_SwingingPlatform]   = SwingingPlatform_Main;
     obj_dispatch[id_Prison] = Prison_Main;
+    obj_dispatch[id_Newtron]      = Newtron_Main;
 
 
     /* Register explosion/gray puff, fiery explosion, animals, and points */
@@ -9523,4 +9525,181 @@ static void Prison_Main(void *obj) {
         return;
     }
     DisplaySprite(o);
+}
+
+/* ===========================================================================
+ *  Object 42 — Newtron enemy (GHZ, también colocado en SYZ)
+ *  Ported verbatim from _incObj/42 Badnik - Newtron.asm (REV01, FixBugs=0).
+ *
+ *  newt_fired = objoff_32 (byte): flag que se activa cuando el Newtron verde
+ *                                  ya disparó su misil (evita re-disparar)
+ *
+ *  Subtype:
+ *    0 = Newtron azul  (cae, vuela en línea recta, no dispara)
+ *    1 = Newtron verde (dispara misiles al llegar al frame 2)
+ *
+ *  Notas de traducción:
+ *    - La rama `Newt_Action_WaitDrop → Newt_Action_Drop` es un tail-call en
+ *      el ASM (bhs.s fuera del cuerpo). Se traduce como llamada + return.
+ *    - Los dos bloques `if FixBugs=0 … endif` de Newt_Action_Drop están
+ *      deshabilitados por compilación con FixBugs=0, así que se omiten.
+ * =========================================================================== */
+
+#define newt_fired(obj) (*(uint8_t *)((uint8_t *)(obj) + 0x32)) /* objoff_32 */
+
+static void Newt_Main(uint8_t *o);
+static void Newt_Action(uint8_t *o);
+static void Newt_GreenDelete(uint8_t *o);
+static void Newt_Action_ChkDistance(uint8_t *o);
+static void Newt_Action_WaitDrop(uint8_t *o);
+static void Newt_Action_Drop(uint8_t *o);
+static void Newt_Action_MoveOnFloor(uint8_t *o);
+static void Newt_Action_MoveInAir(uint8_t *o);
+static void Newt_Action_GreenNewtron(uint8_t *o);
+
+/* Newt_Main — Routine 0 */
+static void Newt_Main(uint8_t *o) {
+    obRoutine(o) += 2;                             /* addq.b #2 → Newt_Action */
+    obMap(o)      = (uint32_t)(uintptr_t)Map_Newt; /* move.l #Map_Newt,obMap */
+    obGfx(o)      = (uint16_t)ArtTile_Newtron;     /* move.w #ArtTile_Newtron */
+    obRender(o)   = sprite_cam_field;              /* move.b #sprite_cam_field */
+    obPriority(o) = 4;                             /* move.b #4 */
+    obActWid(o)   = 40 / 2;                        /* move.b #40/2 */
+    obHeight(o)   = 32 / 2;                        /* move.b #32/2 */
+    obWidth(o)    = 16 / 2;                        /* move.b #16/2 */
+}
+
+/* Newt_Action — Routine 2: dispatch por ob2ndRout, luego anima y recuerda. */
+static void Newt_Action(uint8_t *o) {
+    switch (ob2ndRout(o)) {                        /* Newt_ActIndex */
+        case 0: Newt_Action_ChkDistance(o);  break;
+        case 2: Newt_Action_WaitDrop(o);     break;
+        case 4: Newt_Action_MoveOnFloor(o);  break;
+        case 6: Newt_Action_MoveInAir(o);    break;
+        case 8: Newt_Action_GreenNewtron(o); break;
+    }
+
+    if (Ani_Newt) AnimateSprite(o, Ani_Newt);      /* lea (Ani_Newt).l,a1 */
+        RememberState(o);                              /* bra.w RememberState */
+}
+
+/* Newt_Action_ChkDistance — ¿Sonic está a menos de 128 px? Si sí, arranca. */
+static void Newt_Action_ChkDistance(uint8_t *o) {
+    obStatus(o) |= (1 << 0);                       /* bset #0 */
+    int16_t d0 = (int16_t)(obX(RAM_ADDR(v_player)) - obX(o));
+    if (d0 < 0) {                                  /* bhs.s .chkDistance (salta si >= 0) */
+        d0 = (int16_t)(-d0);                       /* neg.w d0 */
+        obStatus(o) &= (uint8_t)~(1 << 0);         /* bclr #0 */
+    }
+    /* .chkDistance */
+    if ((uint16_t)d0 >= 128u) return;              /* cmpi.w #128 / bhs.s .return */
+
+        ob2ndRout(o) += 2;                             /* addq.b #2 → WaitDrop */
+        obAnim(o) = 1;                                 /* move.b #1,obAnim (.drop) */
+
+        if (obSubtype(o) == 0) return;                 /* tst.b obSubtype / beq.s .return */
+            obGfx(o) = (uint16_t)(ArtTile_Newtron | Tile_Pal2);
+    ob2ndRout(o) = 8;                              /* move.b #8 → GreenNewtron */
+    obAnim(o) = 4;                                 /* move.b #4,obAnim (.fires) */
+}
+
+/* Newt_Action_WaitDrop — espera que la animación de aparición llegue a frame 4 */
+static void Newt_Action_WaitDrop(uint8_t *o) {
+    if ((uint8_t)obFrame(o) >= 4u) {               /* cmpi.b #4 / bhs.s Newt_Action_Drop */
+        Newt_Action_Drop(o);
+        return;
+    }
+    obStatus(o) |= (1 << 0);                       /* bset #0 */
+    int16_t d0 = (int16_t)(obX(RAM_ADDR(v_player)) - obX(o));
+    if (d0 < 0) {                                  /* bhs.s .return (salta si >= 0) */
+        obStatus(o) &= (uint8_t)~(1 << 0);         /* bclr #0 */
+    }
+}
+
+/* Newt_Action_Drop — cae hasta el suelo, luego vuela en horizontal */
+static void Newt_Action_Drop(uint8_t *o) {
+    /* FixBugs=0: el bloque "frame 1 → col_40x32" está deshabilitado. */
+
+    ObjectFall(o);                                 /* bsr.w ObjectFall */
+    int16_t d1, d3;
+    ObjFloorDist(o, &d1, &d3);                     /* bsr.w ObjFloorDist */
+    if (d1 >= 0) return;                           /* tst.w d1 / bpl.s .return */
+        obY(o) = (int16_t)(obY(o) + d1);               /* add.w d1,obY: aterriza */
+        obVelY(o) = 0;                                 /* move.w #0,obVelY */
+        ob2ndRout(o) += 2;                             /* addq.b #2 → MoveOnFloor */
+        obAnim(o) = 2;                                 /* move.b #2,obAnim (.fly1) */
+
+        /* FixBugs=0: el bloque "Newtron verde → .fly2" está deshabilitado. */
+
+        obColType(o) = (uint8_t)(col_40x16 | col_badnik); /* destruible, 40x16 */
+        obVelX(o) = 0x200;                             /* move.w #$200: vuela a la derecha */
+        if (obStatus(o) & 1) return;                   /* btst #0 / bne.s .return */
+            obVelX(o) = (int16_t)(-obVelX(o));             /* neg.w: vuela a la izquierda */
+}
+
+/* Newt_Action_MoveOnFloor — vuela en horizontal, alineado al piso */
+static void Newt_Action_MoveOnFloor(uint8_t *o) {
+    SpeedToPos(o);                                 /* bsr.w SpeedToPos */
+
+    int16_t d1, d3;
+    ObjFloorDist(o, &d1, &d3);                     /* bsr.w ObjFloorDist */
+    if (d1 < -8 || d1 >= 0x0C) {                   /* cmpi.w #-8 blt / cmpi.w #$C bge */
+        ob2ndRout(o) += 2;                         /* .detach → MoveInAir */
+        return;
+    }
+    obY(o) = (int16_t)(obY(o) + d1);               /* add.w d1,obY: pegado al piso */
+}
+
+/* Newt_Action_MoveInAir — sigue volando sin alinearse al piso */
+static void Newt_Action_MoveInAir(uint8_t *o) {
+    SpeedToPos(o);                                 /* bsr.w SpeedToPos */
+}
+
+/* Newt_Action_GreenNewtron — comportamiento del Newtron verde */
+static void Newt_Action_GreenNewtron(uint8_t *o) {
+    if ((uint8_t)obFrame(o) == 1) {                /* cmpi.b #1 / bne.s .chkFire */
+        obColType(o) = (uint8_t)(col_40x32 | col_badnik);
+    }
+
+    /* .chkFire */
+    if ((uint8_t)obFrame(o) != 2) return;          /* cmpi.b #2 / bne.s .return */
+        if (newt_fired(o) != 0) return;                /* tst.b newt_fired / bne.s .return */
+            newt_fired(o) = 1;                             /* move.b #1,newt_fired */
+
+            uint8_t *a1 = (uint8_t *)FindFreeObj();        /* bsr.w FindFreeObj */
+            if (!a1) return;                               /* bne.s .return */
+
+                obID(a1)   = id_Missile;                       /* _move.b #id_Missile,obID */
+                obX(a1)    = obX(o);                           /* move.w obX(a0),obX(a1) */
+                obY(a1)    = obY(o);                           /* move.w obY(a0),obY(a1) */
+                obY(a1)    = (int16_t)(obY(a1) - 8);           /* subq.w #8,obY(a1) */
+                obVelX(a1) = 0x200;                            /* move.w #$200,obVelX(a1) */
+
+                int16_t d0 = 0x14;                             /* move.w #$14,d0 */
+                if ((obStatus(o) & 1) == 0) {                  /* btst #0 / bne.s .alignX */
+                    d0 = (int16_t)(-d0);                       /* neg.w d0 */
+                    obVelX(a1) = (int16_t)(-obVelX(a1));       /* neg.w obVelX(a1) */
+                }
+                /* .alignX */
+                obX(a1) = (int16_t)(obX(a1) + d0);             /* add.w d0,obX(a1) */
+
+                obStatus(a1)  = obStatus(o);                   /* copia X-flip al misil */
+                obSubtype(a1) = 1;                             /* "from Newtron" */
+}
+
+/* Newt_GreenDelete — Routine 4: el Newtron verde se autodestruye al terminar
+ *  su ciclo de animación (activado por afRoutine $FC en Ani_Newt). */
+static void Newt_GreenDelete(uint8_t *o) {
+    DeleteObject(o);                               /* bra.w DeleteObject */
+}
+
+/* Newtron dispatcher — Newt_Index: 0=Main, 2=Action, 4=GreenDelete */
+static void Newtron_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0: Newt_Main(o);        break;
+        case 2: Newt_Action(o);      break;
+        case 4: Newt_GreenDelete(o); break;
+    }
 }
