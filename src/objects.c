@@ -2758,7 +2758,7 @@ static void Sonic_FloorDown(void *obj) {
         return;
     }
     {
-        uint8_t d2 = (uint8_t)obVelY(o);
+        uint8_t d2 = (uint8_t)((uint16_t)obVelY(o) >> 8);  // byte ALTO = pixel delta
         d2 = d2 + 8;
         d2 = (uint8_t)(-d2);
         if ((int8_t)d1 < (int8_t)d2) {
@@ -2767,7 +2767,6 @@ static void Sonic_FloorDown(void *obj) {
             }
         }
     }
-
     obY(o) = (int16_t)(obY(o) + d1);
     obSubpixelY(o) = 0;                       /* clr.w obSubpixelY(a0) */
     obAngle(o) = d3;                          /* ángulo real de la superficie */
