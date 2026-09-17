@@ -52,6 +52,7 @@ static void CollapseFloor_Main(void *obj);
 static void Scenery_Main(void *obj);
 static void Platform_Main(void *obj);
 static void ShieldItem_Main(void *obj);
+static void Chopper_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -93,6 +94,7 @@ void Objects_Init(void) {
     obj_dispatch[id_Scenery] = Scenery_Main;
     obj_dispatch[id_BasicPlatform] = Platform_Main;
     obj_dispatch[id_ShieldItem] = ShieldItem_Main;
+    obj_dispatch[id_Chopper] = Chopper_Main;
 
 
     /* Register explosion/gray puff, fiery explosion, animals, and points */
@@ -3081,12 +3083,12 @@ Sonic_FindCeiling(o, NULL, &d1, NULL);
 }
 
 static void Sonic_Loops(void *obj) {
-
     uint8_t *o = (uint8_t *)obj;
     uint8_t d1;
     uint8_t d2;
     uint16_t d0;
     uint8_t *a1;
+
     /* cmpi.b #id_SLZ,(v_zone).w ; beq.s .isstarlight
      *      tst.b  (v_zone).w        ; bne.w .return
      *      Nota: tst.b mira sólo el byte bajo de v_zone. */
@@ -3102,32 +3104,24 @@ static void Sonic_Loops(void *obj) {
 
     /* move.b obX(a0),d1 ; andi.w #$7F,d1 ; add.w d1,d0
      *      OJO: move.b sólo carga el BYTE BAJO de obX. */
-    d1  = (uint8_t)obX(o);
-    d1 &= 0x7F;
+    d1 = (uint8_t)((obX(o) >> 8) & 0x7F);
     d0  = (uint16_t)(d0 + d1);
 
     /* lea (v_lvllayout_fg).w,a1 ; move.b (a1,d0.w),d1 */
     a1 = RAM_ADDR(v_lvllayout_fg);
     d1 = a1[d0];
+    static int first = 0;
+    if (!first) {
+        first = 1;
+        fprintf(stderr, "[Loops] d0=%03X d1=%02X loop1=%02X roll1=%02X\n",
+                d0, d1, v_256loop1, v_256roll1);
+    }
 
     /* cmp.b (v_256roll1).w,d1 ; beq.w Sonic_ChkRoll */
-    if (d1 == (uint8_t)v_256roll1) {
-      //  Sonic_ChkRoll(o);
-        return;
-    }
-    /* cmp.b (v_256roll2).w,d1 ; beq.w Sonic_ChkRoll */
-    if (d1 == (uint8_t)v_256roll2) {
-      //  Sonic_ChkRoll(o);
-        return;
-    }
-    /* cmp.b (v_256loop1).w,d1 ; beq.s .chkifleft */
-    if (d1 == (uint8_t)v_256loop1) {
-        goto chkifleft;
-    }
-    /* cmp.b (v_256loop2).w,d1 ; beq.s .chkifinair */
-    if (d1 == (uint8_t)v_256loop2) {
-        goto chkifinair;
-    }
+    if (d1 == (uint8_t)v_256roll1)  { Sonic_ChkRoll(o); return; }
+    if (d1 == (uint8_t)v_256roll2)  { Sonic_ChkRoll(o); return; }
+    if (d1 == (uint8_t)v_256loop1)  goto chkifleft;
+    if (d1 == (uint8_t)v_256loop2)  goto chkifinair;
 
     /* bclr #sprite_looping_bit,obRender(a0) ; rts */
     obRender(o) &= ~sprite_looping;
@@ -3142,44 +3136,37 @@ static void Sonic_Loops(void *obj) {
     return;
 
     chkifleft:
-    /* move.w obX(a0),d2 ; cmpi.b #44,d2 ; bhs.s .chkifright
-     *      cmpi.b compara SÓLO el byte bajo. */
     d2 = (uint8_t)obX(o);
-    if (d2 >= 44) {                    /* bhs = unsigned >= */
+    if (d2 >= 44) {
         goto chkifright;
     }
     obRender(o) &= ~sprite_looping;
     return;
 
     chkifright:
-    /* cmpi.b #224,d2 ; blo.s .chkangle1 */
-    if (d2 < 224) {                    /* blo = unsigned < */
+    if (d2 < 224) {
         goto chkangle1;
     }
     obRender(o) |= sprite_looping;
     return;
 
     chkangle1:
-    /* btst #sprite_looping_bit,obRender(a0) ; bne.s .chkangle2 */
     if (obRender(o) & sprite_looping) {
         goto chkangle2;
     }
-    /* move.b obAngle(a0),d1 ; beq.s .return */
     d1 = obAngle(o);
     if (d1 == 0) {
-        return;                        /* ASM: sale SIN tocar el flag */
+        return;
     }
-    /* cmpi.b #$80,d1 ; bhi.s .return */
-    if (d1 > 0x80) {                   /* bhi = unsigned > */
-        return;                        /* ASM: sale SIN tocar el flag */
+    if (d1 > 0x80) {
+        return;
     }
     obRender(o) |= sprite_looping;
     return;
 
     chkangle2:
-    /* move.b obAngle(a0),d1 ; cmpi.b #$80,d1 ; bls.s .return */
     d1 = obAngle(o);
-    if (d1 <= 0x80) {                  /* bls = unsigned <= */
+    if (d1 <= 0x80) {
         return;
     }
     obRender(o) &= ~sprite_looping;
@@ -3315,7 +3302,21 @@ static void Sonic_Animate(void *obj) {
                 obRender(o) = render;
 
                 if (status & (1 << 5)) {
-                    /* TODO: push animation */
+                    /* ASM: bne.w .push — el mismo handler que case 0xFD (Push).
+                     *      Sobreescribe los flip flags calculados arriba: el push sólo usa
+                     *      obStatus & sprite_xflip, no el angle. */
+                    int16_t d2 = obInertia(o);
+                    if (d2 >= 0) d2 = (int16_t)-d2;      /* bmi.s .negspeed / neg.w d2 */
+                        d2 = (int16_t)(d2 + 0x800);          /* addi.w #$800,d2 */
+                        if (d2 < 0) d2 = 0;                  /* bpl.s .belowmax3 / moveq #0,d2 */
+                            d2 = (int16_t)(d2 >> 6);             /* lsr.w #6,d2 */
+                            obTimeFrame(o) = (uint8_t)d2;
+
+                        const uint8_t *a1 = Ani_Sonic + ((const uint16_t *)Ani_Sonic)[id_Push];
+                    uint8_t flip = obStatus(o) & sprite_xflip;
+                    obRender(o) = (obRender(o) & ~(sprite_xflip | sprite_yflip)) | flip;
+
+                    obFrame(o) = anim_next_frame(o, a1);
                     return;
                 }
 
@@ -8021,4 +8022,74 @@ static void ShieldItem_Main(void *obj) {
         case 2: Shi_Shield(o); break;
         case 4: Shi_Stars(o);  break;
     }
+}
+
+/* ===========================================================================
+ *  Object 2B — Chopper enemy (GHZ, also used in SYZ)
+ *  Ported verbatim from _incObj/2B Badnik - Chopper.asm (REV01, FixBugs=0).
+ *
+ *  chop_origY = objoff_30 (word): Y-position the Chopper was spawned at.
+ *  Chopper launches upward at -$700, gravity (+$18/frame) slows it down,
+ *  pulls it back to origY, then relaunches. The animation depends on
+ *  how high up the Chopper currently is:
+ *    - above origY - $C0 → fast  (obAnim = 1)
+ *    - below that and rising   → slow  (obAnim = 0)
+ *    - below that and falling  → idle  (obAnim = 2)
+ *  =========================================================================== */
+
+#define chop_origY(obj) (*(int16_t *)((uint8_t *)(obj) + 0x30)) /* objoff_30 */
+
+static void Chop_Main(uint8_t *o);
+static void Chop_ChgSpeed(uint8_t *o);
+
+/* Chop_Main — Routine 0: initialize. */
+static void Chop_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                       /* addq.b #2 → Chop_ChgSpeed */
+    obMap(o)      = (uint32_t)(uintptr_t)Map_Chop;           /* move.l #Map_Chop,obMap */
+    obGfx(o)      = (uint16_t)ArtTile_Chopper;               /* move.w #ArtTile_Chopper,obGfx */
+    obRender(o)   = sprite_cam_field;                        /* move.b #sprite_cam_field,obRender */
+    obPriority(o) = 4;                                       /* move.b #4,obPriority */
+    obColType(o)  = (uint8_t)(col_24x32 | col_badnik);       /* move.b #col_24x32|col_badnik,obColType */
+    obActWid(o)   = 32 / 2;                                  /* move.b #32/2,obActWid */
+    obVelY(o)     = (int16_t)-0x700;                         /* move.w #-$700,obVelY */
+    chop_origY(o) = obY(o);                                  /* move.w obY,chop_origY */
+}
+
+/* Chop_ChgSpeed — Routine 2: bob up and down, pick animation. */
+static void Chop_ChgSpeed(uint8_t *o) {
+    if (Ani_Chop) AnimateSprite(o, Ani_Chop);                /* lea Ani_Chop / bsr.w AnimateSprite */
+
+        SpeedToPos(o);                                           /* bsr.w SpeedToPos */
+        obVelY(o) = (int16_t)(obVelY(o) + 0x18);                 /* addi.w #$18,obVelY */
+
+        /* Regresar a origY cuando el Chopper ya cayó por debajo.
+         *      El ASM usa `bhs` (unsigned >=): se toma el salto a .chganimation
+         *      cuando d0 >= obY; el cuerpo de "reset" corre sólo si d0 < obY. */
+        int16_t d0 = chop_origY(o);
+    if ((uint16_t)d0 < (uint16_t)obY(o)) {
+        obY(o)    = d0;                                      /* move.w d0,obY */
+        obVelY(o) = (int16_t)-0x700;                         /* move.w #-$700,obVelY */
+    }
+
+    /* .chganimation: elegir animación según altura y sentido de movimiento. */
+    obAnim(o) = 1;                                           /* move.b #1,obAnim (fast) */
+    d0 = (int16_t)(chop_origY(o) - 0xC0);                    /* subi.w #$C0,d0 */
+    if ((uint16_t)d0 >= (uint16_t)obY(o)) return;            /* bhs.s .return */
+
+        obAnim(o) = 0;                                           /* move.b #0,obAnim (slow) */
+        if ((int16_t)obVelY(o) < 0) return;                      /* tst.w obVelY / bmi.s .return */
+            obAnim(o) = 2;                                           /* move.b #2,obAnim (stationary) */
+}
+
+/* Chopper dispatcher — Chop_Index: 0 = Main, 2 = ChgSpeed.
+ *  El ASM hace `jsr Chop_Index` y luego `bra.w RememberState`:
+ *  la rutina se ejecuta y SIEMPRE se llama a RememberState después. */
+static void Chopper_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0: Chop_Main(o);     break;
+        case 2: Chop_ChgSpeed(o); break;
+    }
+    RememberState(obj);
 }

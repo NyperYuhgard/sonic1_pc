@@ -536,6 +536,8 @@ extern const uint8_t *SonicDynPLC;
 extern size_t   SonicDynPLC_len;
 extern const uint8_t *Ani_Sonic;
 extern size_t   Ani_Sonic_len;
+extern const uint8_t *Ani_Chop;
+extern size_t   Ani_Chop_len;
 extern const uint8_t *Ani_Monitor;
 extern size_t   Ani_Monitor_len;
 extern const uint8_t *Ani_Shield;

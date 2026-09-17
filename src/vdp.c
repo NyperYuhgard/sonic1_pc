@@ -692,7 +692,9 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
 
     /* Refresh the debug Object RAM viewer window (no-op when closed) */
     extern void ObjView_Render(void);
+    extern void RamView_Render(void);
     ObjView_Render();
+    RamView_Render();
 }
 
 void VDP_SaveScreenshot(const char *path) {

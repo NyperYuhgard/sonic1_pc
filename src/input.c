@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "vdp.h"
 #include "objview.h"
+#include "ramview.h"
 #include "freecamera.h"
 #include <SDL2/SDL.h>
 #include <string.h>
@@ -13,6 +14,7 @@ uint8_t joypad_press[2] = {0, 0};
 static uint8_t prev_state[2] = {0, 0};
 static int prev_vram_key = 0;
 static int prev_objview_key = 0;
+static int prev_ramview_key = 0;
 static int prev_f_key = 0;
 
 void Input_Init(void) {
@@ -37,6 +39,8 @@ void Input_Read(void) {
                 VDP_ToggleVRAMViewer();
             else if ((int)event.window.windowID == ObjView_WindowID())
                 ObjView_Toggle();
+            else if ((int)event.window.windowID == RamView_WindowID())   /* <-- añadir */
+                RamView_Toggle();
             else
                 running = 0;   /* main game window closed via the WM */
         }
@@ -55,6 +59,13 @@ void Input_Read(void) {
     if (keys[SDL_SCANCODE_O] && !prev_objview_key) {
         ObjView_Toggle();
     }
+
+    /* Debug: R toggles the RAM viewer window (down-edge only) */
+    if (keys[SDL_SCANCODE_R] && !prev_ramview_key) {
+        RamView_Toggle();
+    }
+    
+prev_ramview_key = keys[SDL_SCANCODE_R];
     prev_objview_key = keys[SDL_SCANCODE_O];
 
     /* Debug: F toggles free camera mode (down-edge only) */

@@ -498,6 +498,9 @@ size_t   SonicDynPLC_len = 0;
 const uint8_t *Ani_Sonic = NULL;
 size_t   Ani_Sonic_len = 0;
 
+const uint8_t *Ani_Chop = NULL;
+size_t  Ani_Chop_len = 0;
+
 const uint8_t *Ani_Monitor = NULL;
 size_t   Ani_Monitor_len = 0;
 
@@ -618,6 +621,7 @@ size_t   Nem_GhzWall1_len = 0;
 const uint8_t *Map_Monitor = NULL;
 size_t   Map_Monitor_len = 0;
 const uint8_t *Map_Chop = NULL;
+size_t   Map_Chop_len = 0;
 const uint8_t *Map_Spike = NULL;
 size_t   Map_Spike_len = 0;
 const uint8_t *Map_Plat_GHZ = NULL;
@@ -2053,6 +2057,11 @@ int Data_Init(void) {
         Map_Spike_len = 0;
     }
 
+    if (load_asm_asset("maps/Chopper.asm", &Map_Chop, &Map_Chop_len, 1) != 0) {
+        Map_Chop = NULL;
+        Map_Chop_len = 0;
+    }
+
     if (load_asm_asset("maps/Platforms (GHZ).asm", &Map_Plat_GHZ, &Map_Plat_GHZ_len, 1) != 0) {
         Map_Plat_GHZ = NULL;
         Map_Plat_GHZ_len = 0;
@@ -2077,6 +2086,11 @@ int Data_Init(void) {
     if (load_asm_asset("maps/buzzmissile.asm", &Map_Missile, &Map_Missile_len, 1) != 0) {
         Map_Missile = NULL;
         Map_Missile_len = 0;
+    }
+
+    if (load_asm_asset("anim/Chopper.asm", &Ani_Chop, &Ani_Chop_len, 0) != 0) {
+        Ani_Chop = NULL;
+        Ani_Chop_len = 0;
     }
 
     if (load_asm_asset("anim/buzzmissile.asm", &Ani_Missile, &Ani_Missile_len, 0) != 0) {

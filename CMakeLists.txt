@@ -30,6 +30,7 @@ set(SOURCES
     src/objview.c
     src/freecamera.c
     src/debugmode.c
+    src/ramview.c
 )
 
 # Executable
