@@ -244,10 +244,10 @@ static void ScrollVertical(void) {
 /* ---------------------------------------------------------------------------
    DynamicLevelEvents  (_inc/DynamicLevelEvents.asm)
    ------------------------------------------------------------------------- */
+void AddPLC(int id);
+
 static void dle_AddPLC(int plc_id) {
-    (void)plc_id;
-    /* TODO: the port's PLC runner only handles the main queue (NewPLC/RunPLC
-       in main.c); boss art load cues are not decompressed yet. */
+    AddPLC(plc_id);
 }
 
 static void DLE_SBZ2_SetBoundary(void) {

@@ -9038,28 +9038,28 @@ static void BGHZ_ShipMain(uint8_t *o) {
 /* BGHZ_FaceMain — Routine 4 */
 static void BGHZ_FaceMain(uint8_t *o) {
     uint8_t *a1 = (uint8_t *)Object_GetSlot((int)bghz_parentobj(o));
-    uint8_t d0 = ob2ndRout(a1);
-    int d1 = 1;                              /* face normal */
+    int8_t d0 = (int8_t)ob2ndRout(a1);        /* ← signed */
+    int d1 = 1;                               /* face normal */
 
     d0 -= 4;
     if (d0 == 0 && (int16_t)(obBossX(a1) >> 16) == (int16_t)(boss_ghz_x + 0xA0)) {
-        d1 = 4;                              /* face laugh at default pos */
+        d1 = 4;                               /* face laugh at default pos */
     }
     d0 -= 6;
-    if (d0 >= 0) {
-        d1 = 0xA;                            /* defeated */
+    if (d0 >= 0) {                            /* bmi.s .checkHitState */
+        d1 = 0xA;                             /* defeated */
     } else if (obColType(a1) == 0) {
-        d1 = 5;                              /* face hit */
+        d1 = 5;                               /* face hit */
     } else if (obRoutine(RAM_ADDR(v_player)) >= 4) {
-        d1 = 4;                              /* face laugh */
+        d1 = 4;                               /* face laugh */
     }
 
     obAnim(o) = (uint8_t)d1;
 
     d0 -= 2;
-    if (d0 == 0) {                           /* Escape state */
+    if (d0 == 0) {                            /* Escape state */
         obAnim(o) = 6;
-        if (!(obRender(o) & 0x80)) {         /* offscreen → delete face */
+        if (!(obRender(o) & 0x80)) {
             DeleteObject(o);
             return;
         }
