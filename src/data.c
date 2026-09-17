@@ -485,6 +485,9 @@ size_t   Art_LivesNums_len = 0;
 const uint8_t *Map_HUD = NULL;
 size_t   Map_HUD_len = 0;
 
+const uint8_t *Map_Shield = NULL;
+size_t   Map_Shield_len = 0;
+
 const uint8_t *Map_Sonic = NULL;
 size_t   Map_Sonic_len = 0;
 
@@ -497,6 +500,9 @@ size_t   Ani_Sonic_len = 0;
 
 const uint8_t *Ani_Monitor = NULL;
 size_t   Ani_Monitor_len = 0;
+
+const uint8_t *Ani_Shield = NULL;
+size_t Ani_Shield_len = 0;
 
 const uint8_t *Ani_Spring = NULL;
 size_t   Ani_Spring_len = 0;
@@ -1977,6 +1983,11 @@ int Data_Init(void) {
         Map_HUD_len = 0;
     }
 
+    if (load_asm_asset("maps/Shield and Invincibility.asm", &Map_Shield, &Map_Shield_len, 1) != 0) {
+        Map_Shield = NULL;
+        Map_Shield_len = 0;
+    }
+
     if (load_asset("artnem/rings.nem", &Nem_Ring, &Nem_Ring_len) != 0) {
         Nem_Ring = NULL;
         Nem_Ring_len = 0;
@@ -2000,6 +2011,11 @@ int Data_Init(void) {
     if (load_asm_asset("anim/signpost.asm", &Ani_Sign, &Ani_Sign_len, 0) != 0) {
         Ani_Sign = NULL;
         Ani_Sign_len = 0;
+    }
+
+    if (load_asm_asset("anim/Shield and Invincibility.asm", &Ani_Shield, &Ani_Shield_len, 0) != 0) {
+        Ani_Shield = NULL;
+        Ani_Shield_len = 0;
     }
 
     if (load_asm_asset("maps/crabmeat.asm", &Map_Crab, &Map_Crab_len, 1) != 0) {

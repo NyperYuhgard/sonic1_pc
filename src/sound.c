@@ -122,7 +122,7 @@ static int    snd_music_loop_enabled = 0;
  *                              callback de SDL_mixer (riesgo de deadlock). */
 static volatile int snd_music_fading        = 0;
 static volatile int snd_music_needs_restart = 0;
-
+static int snd_skip_poll_frames = 0;
 static Mix_Chunk *snd_chunk[SND_SFX_TABLE_MAX];
 static int        snd_ambient_channel = -1;
 
@@ -210,35 +210,27 @@ static void snd_music_finished_cb(void) {
         snd_music_needs_restart = 1;
 }
 
-/* Start playing a music file. Returns 0 on success, -1 on failure.
- *  Does not touch the current track on failure; skips if already playing. */
 static int snd_play_music_file(const char *path, bool loop) {
     Mix_Music *m;
 
     if (!path || !path[0]) return -1;
 
-    if (Mix_PlayingMusic() && strcmp(snd_music_path, path) == 0) {
-        return 0;   /* already playing this track */
-    }
 
-    m = Mix_LoadMUS(path);
+    if (Mix_PlayingMusic() && Mix_FadingMusic() == MIX_NO_FADING
+        && strcmp(snd_music_path, path) == 0) {
+        return 0;
+        }
+
+        m = Mix_LoadMUS(path);
     if (!m) {
         fprintf(stderr, "[Sound] Failed to load '%s': %s\n", path, Mix_GetError());
         return -1;
     }
 
-    /* Cargar loop points del .txt acompañante (si existe). */
+
     snd_load_loop_points(path);
 
-    /* Reset de flags: al cambiar de pista cualquier fade/restart pendiente
-     *      pertenece al tema anterior y ya no aplica. */
-    snd_music_fading        = 0;
-    snd_music_needs_restart = 0;
 
-    /* Con loop personalizado, Mix_PlayMusic debe ser 0 loops:
-     *      nosotros hacemos el loop desde Sound_Update / hook.
-     *      Con loop nativo (sin .txt), dejamos que SDL_mixer loope.
-     *      Con loop=false (one-shot), siempre 0. */
     int play_loops = 0;
     if (loop && !snd_music_loop_enabled) {
         play_loops = -1;
@@ -249,6 +241,16 @@ static int snd_play_music_file(const char *path, bool loop) {
         Mix_FreeMusic(m);
         return -1;
     }
+
+
+    snd_music_fading        = 0;
+    snd_music_needs_restart = 0;
+
+
+    Mix_SetMusicPosition(0.001);
+
+
+    snd_skip_poll_frames = 6;
 
     if (snd_music) Mix_FreeMusic(snd_music);
     snd_music = m;
@@ -376,8 +378,30 @@ void Sound_Quit(void) {
 void Sound_Update(void) {
     if (!snd_inited) return;
 
-    /* 1) Consumir el flag diferido del hook finished.
-     *         Hacemos el restart desde aquí (main thread, sin lock de audio). */
+    /* Saltar el polling durante los primeros frames tras Play: la
+     *      posición que reporta SDL_mixer aún puede ser la heredada del
+     *      tema anterior. */
+    if (snd_skip_poll_frames > 0) {
+        snd_skip_poll_frames--;
+        /* Aun así, procesa el restart diferido del hook finished por
+         *          si la pista anterior acabó justo antes del cambio. */
+    } else {
+        /* 2) Loop por polling: ... (tu código actual) */
+        if (snd_music && snd_music_loop && snd_music_loop_enabled &&
+            Mix_PlayingMusic() && Mix_FadingMusic() == MIX_NO_FADING &&
+            snd_music_loop_end > 0.0) {
+            double pos = Mix_GetMusicPosition(snd_music);
+
+        if (pos >= 0.0) {
+            double margin = 4096.0 / 44100.0;
+            if (pos >= snd_music_loop_end - margin) {
+                Mix_SetMusicPosition(snd_music_loop_start);
+            }
+        }
+            }
+    }
+
+    /* 1) Consumir el flag diferido del hook finished (sin tocar). */
     if (snd_music_needs_restart && snd_music && snd_music_loop &&
         snd_music_loop_enabled) {
         snd_music_needs_restart = 0;
@@ -386,29 +410,7 @@ void Sound_Update(void) {
             Mix_SetMusicPosition(snd_music_loop_start);
         }
     }
-    return;
         }
-
-        /* 2) Loop por polling: si pasamos el punto de loop, saltamos atrás.
-         *         Sólo aplica si hay loop personalizado activo y la música corre. */
-        if (!snd_music) return;
-        if (!snd_music_loop) return;
-        if (!snd_music_loop_enabled) return;
-        if (!Mix_PlayingMusic()) return;
-        if (Mix_FadingMusic() != MIX_NO_FADING) return;
-        if (snd_music_loop_end <= 0.0) return;
-
-        double pos = Mix_GetMusicPosition(snd_music);
-    if (pos < 0.0) return;   /* formato sin soporte de posición */
-
-        /* Margen ≈ un buffer de audio, para no llegar tarde al punto de
-         *      loop (SDL_mixer bufferiza ~4096 samples ≈ 93 ms a 44100 Hz).
-         *      Si el loop se oye corto, sube el margen; si se oye largo, bájalo. */
-        double margin = 4096.0 / 44100.0;
-
-    if (pos >= snd_music_loop_end - margin) {
-        Mix_SetMusicPosition(snd_music_loop_start);
-    }
 }
 
 void Sound_Queue(int id, bool loop) {
@@ -416,11 +418,12 @@ void Sound_Queue(int id, bool loop) {
 
     switch (id) {
         case bgm_Fade:
-            /* Marcar fade: bloquea el hook finished mientras dure.
-             *              Sin esto, al terminar el fade el callback reviviría la
-             *              música que acabamos de apagar. */
+
             snd_music_fading = 1;
             Mix_FadeOutMusic(2000);
+
+
+            snd_music_path[0] = 0;
             return;
 
         case bgm_Speedup:

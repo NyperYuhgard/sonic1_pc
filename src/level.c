@@ -1127,6 +1127,16 @@ void OscillateNumInit(void) {
    rate -= freq while falling; flip direction when the value's MSB
    (byte at 0(a1), stored big-endian) crosses the middle value d4.
    =================================================================== */
+/* ===================================================================
+ *  OscillateNumDo — from _inc/Oscillatory Routines.asm
+ *  Advance each (value, rate) pair: rate += freq while rising,
+ *  rate -= freq while falling; flip direction when the value's MSB
+ *  (byte at 0(a1), stored big-endian) crosses the middle value d4.
+ *
+ *  El flip de dirección debe decidirse con el valor YA actualizado
+ *  (el ASM hace _add.w d0,0(a1) ANTES del _cmp.b 0(a1),d4). Leer el
+ *  MSB viejo retrasa el flip un frame y acelera la oscilación.
+ *  =================================================================== */
 void OscillateNumDo(void) {
     /* cmpi.b #6,(v_player+obRoutine).w ; bhs.s .end — Sonic just died */
     if (obRoutine(RAM_ADDR(v_player)) >= 6) {
@@ -1148,32 +1158,35 @@ void OscillateNumDo(void) {
         uint32_t addr = 0xFE5E + 2 + (uint32_t)i * 4;  /* value word; rate at +2 */
         uint16_t d2 = settings[i][0];            /* frequency */
         uint16_t d4 = settings[i][1];            /* middle value */
-        int16_t rate = (int16_t)RAM_U16(addr + 2);
+        int16_t  rate = (int16_t)RAM_U16(addr + 2);
         uint16_t value = RAM_U16(addr);
-        uint16_t msb = value >> 8;               /* byte compared: 0(a1) */
 
         if (d3 & (1u << bit)) {
             /* .down: rate -= frequency; value += rate */
-            rate = (int16_t)(rate - (int16_t)d2);
+            rate  = (int16_t)(rate - (int16_t)d2);
             value = (uint16_t)(value + (uint16_t)rate);
             RAM_SET_U16(addr + 2, (uint16_t)rate);
             RAM_SET_U16(addr, value);
-            /* _cmp.b 0(a1),d4 ; bls.s .next — value still at/above middle */
+
+            /* _cmp.b 0(a1),d4 ; bls.s .next — compara con el MSB NUEVO */
+            uint16_t msb = value >> 8;
             if (d4 <= msb) {
-                continue;
+                continue;                        /* todavía no cruzó el centro */
             }
-            d3 &= (uint16_t)~(1u << bit);        /* bclr: start rising */
+            d3 &= (uint16_t)~(1u << bit);        /* bclr: empieza a subir */
         } else {
             /* .up: rate += frequency; value += rate */
-            rate = (int16_t)(rate + (int16_t)d2);
+            rate  = (int16_t)(rate + (int16_t)d2);
             value = (uint16_t)(value + (uint16_t)rate);
             RAM_SET_U16(addr + 2, (uint16_t)rate);
             RAM_SET_U16(addr, value);
-            /* _cmp.b 0(a1),d4 ; bhi.s .next — value still below middle */
+
+            /* _cmp.b 0(a1),d4 ; bhi.s .next — compara con el MSB NUEVO */
+            uint16_t msb = value >> 8;
             if (d4 > msb) {
-                continue;
+                continue;                        /* todavía no cruzó el centro */
             }
-            d3 |= (1u << bit);                   /* bset: start falling */
+            d3 |= (1u << bit);                   /* bset: empieza a bajar */
         }
     }
 

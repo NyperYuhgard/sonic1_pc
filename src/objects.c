@@ -51,6 +51,7 @@ static void CollapseLedge_Main(void *obj);
 static void CollapseFloor_Main(void *obj);
 static void Scenery_Main(void *obj);
 static void Platform_Main(void *obj);
+static void ShieldItem_Main(void *obj);
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
 /* Stub: objects not yet ported do nothing (matches NullObject -> DeleteObject) */
@@ -91,6 +92,8 @@ void Objects_Init(void) {
     obj_dispatch[id_CollapseFloor] = CollapseFloor_Main;
     obj_dispatch[id_Scenery] = Scenery_Main;
     obj_dispatch[id_BasicPlatform] = Platform_Main;
+    obj_dispatch[id_ShieldItem] = ShieldItem_Main;
+
 
     /* Register explosion/gray puff, fiery explosion, animals, and points */
     obj_dispatch[id_ExplosionItem] = ExplosionItem_Main;
@@ -847,9 +850,9 @@ chk_invincible:
                     if (v_air >= 12) {
                         uint8_t zone = v_zone;
                         if (RAM_U16(0xFE10) != id_LZ_act4) {
-                            Sound_Queue(music_list[zone], false);
+                            Sound_Queue(music_list[zone], true);
                         } else {
-                            Sound_Queue(bgm_SBZ, false);
+                            Sound_Queue(bgm_SBZ, true);
                         }
                     }
                 }
@@ -6528,14 +6531,14 @@ pow_checks:
         }
 
         /* Pow_ChkShoes */
-        if (d0 == 3) {                           /* cmpi.b #3 / bne.s Pow_ChkShield */
-            v_shoes = 1;                         /* move.b #1,(v_shoes).w */
-            RAM_WORD(v_player + 0x2A) = 20 * 60; /* move.w #20*60,(v_player+shoetime).w */
-            v_sonspeedmax = son_maxspeed * 2;    /* move.w #son_maxspeed*2 */
-            v_sonspeedacc = son_acceleration * 2;/* move.w #son_acceleration*2 */
-            v_sonspeeddec = son_deceleration;    /* move.w #son_deceleration */
-            /* FixBugs=0: no underwater fix */
-            Sound_Queue(bgm_Speedup, false);     /* jmp QueueSound1 */
+        if (d0 == 3) {
+            v_shoes = 1;
+            shoetime(RAM_ADDR(v_player)) = 20 * 60;   /* era: RAM_WORD(v_player + 0x2A) */
+
+            v_sonspeedmax = son_maxspeed * 2;
+            v_sonspeedacc = son_acceleration * 2;
+            v_sonspeeddec = son_deceleration;
+            Sound_Queue(bgm_Speedup, false);
             goto pow_display;
         }
 
@@ -6548,26 +6551,22 @@ pow_checks:
         }
 
         /* Pow_ChkInvinc */
-        if (d0 == 5) {                           /* cmpi.b #5 / bne.s Pow_ChkRings */
-            v_invinc = 1;                        /* move.b #1,(v_invinc).w */
-            RAM_WORD(v_player + 0x30) = 20 * 60; /* move.w #20*60,(v_player+invtime).w */
-            RAM_BYTE(v_starsobj1) = id_ShieldItem; /* move.b #id_ShieldItem,(v_starsobj1).w */
-            RAM_BYTE(v_starsobj1 + 0x1A) = 1;    /* move.b #1,(v_starsobj1+obAnim).w */
-            RAM_BYTE(v_starsobj2) = id_ShieldItem;
-            RAM_BYTE(v_starsobj2 + 0x1A) = 2;
-            RAM_BYTE(v_starsobj3) = id_ShieldItem;
-            RAM_BYTE(v_starsobj3 + 0x1A) = 3;
-            RAM_BYTE(v_starsobj4) = id_ShieldItem;
-            RAM_BYTE(v_starsobj4 + 0x1A) = 4;
+        if (d0 == 5) {
+            v_invinc = 1;
+            invtime(RAM_ADDR(v_player)) = 20 * 60;    /* era: RAM_WORD(v_player + 0x30) */
 
-            if (f_lockscreen) {                  /* tst.b (f_lockscreen).w / bne.s Pow_NoMusic */
-                goto pow_display;
-            }
-            /* Revision<>0 (REV01): check drowning */
-            if (v_air <= 12) {                   /* cmpi.w #12,(v_air).w / bls.s Pow_NoMusic */
-                goto pow_display;
-            }
-            Sound_Queue(bgm_Invincible, true);  /* jmp QueueSound1 */
+            RAM_BYTE(v_starsobj1)        = id_ShieldItem;
+            obAnim(RAM_ADDR(v_starsobj1)) = 1;
+            RAM_BYTE(v_starsobj2)        = id_ShieldItem;
+            obAnim(RAM_ADDR(v_starsobj2)) = 2;
+            RAM_BYTE(v_starsobj3)        = id_ShieldItem;
+            obAnim(RAM_ADDR(v_starsobj3)) = 3;
+            RAM_BYTE(v_starsobj4)        = id_ShieldItem;
+            obAnim(RAM_ADDR(v_starsobj4)) = 4;
+
+            if (f_lockscreen) goto pow_display;
+            if (v_air <= 12)  goto pow_display;
+            Sound_Queue(bgm_Invincible, true);
             goto pow_display;
         }
 
@@ -7875,7 +7874,7 @@ static void Plat_Main(uint8_t *o) {
     plat_rawY(o)  = obY(o);                               /* move.w obY,plat_rawY */
     plat_origY(o) = obY(o);                               /* move.w obY,plat_origY */
     plat_origX(o) = obX(o);                               /* move.w obX,plat_origX */
-    obAngle(o)    = 0x80;                                 /* begin oscillating at center */
+    obAngle(o)    = 0x00;                                 /* begin oscillating at center */
 
     uint8_t d1 = 0;
     uint8_t d0 = obSubtype(o);
@@ -7899,5 +7898,127 @@ static void Platform_Main(void *obj) {
         case 4: Plat_StoodOn(o); break;                   /* Plat_StoodOn    */
         case 6: Plat_Delete(o);  break;                   /* Plat_Delete     */
         case 8: Plat_Action(o);  break;                   /* Plat_Action     */
+    }
+}
+
+/* ===========================================================================
+ *  Object 38 — Shield and Invincibility Stars (id_ShieldItem = $38)
+ *  Ported verbatim from _incObj/38 Shield and Invincibility.asm
+ *  (REV01, FixBugs=0).
+ *
+ *  objoff_30 (byte) = stars_lag: index of previous recorded tracking position
+ *  that each star lags behind. Increments by 4 every frame, wraps at 6*4=24,
+ *  so each star only updates its position once every 6 frames — a subtle
+ *  jitter effect behind Sonic.
+ *
+ *  Role depends on obAnim at spawn:
+ *    - obAnim == 0 → shield     (routine 2)
+ *    - obAnim != 0 → invincibility star (routine 4), one of 4 stars; the
+ *      obAnim value (1..4) selects a fixed offset within the recorded
+ *      position trail (v_tracksonic).
+ *
+ *  Both roles share the same object slot family (v_shieldobj / v_starsobj1..4),
+ *  so the ID is the same; only obAnim at spawn tells them apart.
+ *  =========================================================================== */
+
+#define shi_stars_lag(obj) (*(uint8_t *)((uint8_t *)(obj) + 0x30)) /* objoff_30 */
+
+static void Shi_Main(uint8_t *o);
+static void Shi_Shield(uint8_t *o);
+static void Shi_Stars(uint8_t *o);
+
+/* Shi_Main — routine 0: initialize shield or star. */
+static void Shi_Main(uint8_t *o) {
+    obRoutine(o) += 2;                              /* addq.b #2 → Shi_Shield */
+    obMap(o)      = (uint32_t)(uintptr_t)Map_Shield;/* move.l #Map_Shield,obMap */
+    obRender(o)   = sprite_cam_field;               /* move.b #sprite_cam_field,obRender */
+    obPriority(o) = 1;                              /* move.b #1,obPriority */
+    obActWid(o)   = 32 / 2;                         /* move.b #32/2,obActWid */
+
+    if (obAnim(o) == 0) {                           /* tst.b obAnim / bne.s .stars */
+        obGfx(o) = (uint16_t)ArtTile_Shield;        /* move.w #ArtTile_Shield,obGfx */
+        return;                                     /* rts */
+    }
+
+    /* .stars */
+    obRoutine(o) += 2;                              /* addq.b #2 → Shi_Stars */
+    obGfx(o) = (uint16_t)ArtTile_Invincibility;     /* move.w #ArtTile_Invincibility,obGfx */
+}
+
+/* Shi_Shield — routine 2: follow Sonic while shield is active. */
+static void Shi_Shield(uint8_t *o) {
+    if (v_invinc != 0) {                            /* tst.b v_invinc / bne.s .hide */
+        return;                                     /* .hide: rts, keep object alive, don't display */
+    }
+    if (v_shield == 0) {                            /* tst.b v_shield / beq.s .delete */
+        DeleteObject(o);                            /* jmp (DeleteObject).l */
+        return;
+    }
+
+    uint8_t *player = RAM_ADDR(v_player);
+    obX(o)      = obX(player);                      /* move.w (v_player+obX),obX */
+    obY(o)      = obY(player);                      /* move.w (v_player+obY),obY */
+    obStatus(o) = obStatus(player);                 /* move.b (v_player+obStatus),obStatus */
+
+    if (Ani_Shield) {                               /* lea (Ani_Shield).l,a1 */
+        AnimateSprite(o, Ani_Shield);               /* jsr (AnimateSprite).l */
+    }
+    DisplaySprite(o);                               /* jmp (DisplaySprite).l */
+}
+
+/* Shi_Stars — routine 4: one of the four invincibility stars, trailing
+ *  behind Sonic through the recorded position buffer. */
+static void Shi_Stars(uint8_t *o) {
+    if (v_invinc == 0) {                            /* tst.b v_invinc / beq.s Shi_Start_Delete */
+        DeleteObject(o);                            /* jmp (DeleteObject).l */
+        return;
+    }
+
+    /* .trail:
+     *      d0 = low byte of v_trackpos; the ASM loads it as a word but every
+     *      subsequent op is a byte op, so only the low byte matters (v_trackpos
+     *      is bounded to $00..$FF by Sonic_RecordPosition). */
+    uint8_t d0 = (uint8_t)v_trackpos;               /* move.w (v_trackpos).w,d0 */
+    uint8_t d1 = (uint8_t)(obAnim(o) - 1);          /* move.b obAnim / subq.b #1 (1..4 → 0..3) */
+
+    d1 = (uint8_t)(d1 << 3);                        /* lsl.b #3,d1   (× 8) */
+    {
+        uint8_t d2 = d1;                            /* move.b d1,d2 */
+        d1 = (uint8_t)(d1 + d1);                    /* add.b d1,d1   (× 2) */
+        d1 = (uint8_t)(d1 + d2);                    /* add.b d2,d1   (× 3 total) */
+    }
+    d1 = (uint8_t)(d1 + 4);                         /* addq.b #4,d1 (next slot) */
+    d0 = (uint8_t)(d0 - d1);                        /* sub.b d1,d0  (base index for this star) */
+
+    /* Small jitter: only update position every 6 frames. */
+    d1 = shi_stars_lag(o);                          /* move.b stars_lag(a0),d1 */
+    d0 = (uint8_t)(d0 - d1);                        /* sub.b d1,d0  (use earlier data to create trail) */
+    d1 = (uint8_t)(d1 + 4);                         /* addq.b #4,d1 */
+    if (d1 >= 6 * 4) {                              /* cmpi.b #6*4,d1 / blo.s .updateLag */
+        d1 = 0;                                     /* moveq #0,d1 */
+    }
+    shi_stars_lag(o) = d1;                          /* move.b d1,stars_lag(a0) */
+
+    /* .updateStars */
+    uint8_t *a1 = RAM_ADDR(v_tracksonic + d0);      /* lea (v_tracksonic).w,a1 ; lea (a1,d0.w),a1 */
+    obX(o) = *(int16_t *)a1; a1 += 2;               /* move.w (a1)+,obX */
+    obY(o) = *(int16_t *)a1;                        /* move.w (a1)+,obY */
+
+    uint8_t *player = RAM_ADDR(v_player);
+    obStatus(o) = obStatus(player);                 /* move.b (v_player+obStatus),obStatus */
+
+    if (Ani_Shield) {                               /* lea (Ani_Shield).l,a1 */
+        AnimateSprite(o, Ani_Shield);               /* jsr (AnimateSprite).l */
+    }
+    DisplaySprite(o);                               /* jmp (DisplaySprite).l */
+}
+
+/* ShieldItem dispatcher — Shi_Index: 0 = Main, 2 = Shield, 4 = Stars */
+static void ShieldItem_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: Shi_Main(o);   break;
+        case 2: Shi_Shield(o); break;
+        case 4: Shi_Stars(o);  break;
     }
 }

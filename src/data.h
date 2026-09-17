@@ -527,7 +527,8 @@ extern size_t   Map_ExplodeBomb_len;
 /* Sonic sprite mappings */
 extern const uint8_t *Map_Sonic;
 extern size_t   Map_Sonic_len;
-
+extern const uint8_t *Map_Shield;
+extern size_t   Map_Shield_len;
 /* Sonic animation and dynamic PLC data (raw ASM assets) */
 extern const uint8_t *Art_Sonic;
 extern size_t   Art_Sonic_len;
@@ -537,7 +538,8 @@ extern const uint8_t *Ani_Sonic;
 extern size_t   Ani_Sonic_len;
 extern const uint8_t *Ani_Monitor;
 extern size_t   Ani_Monitor_len;
-
+extern const uint8_t *Ani_Shield;
+extern size_t   Ani_Shield_len;
 /* HUD graphics (artnem/HUD.nem = SCOR/TIME/RING text; artnem/hud_lives.nem
    = lives icon + "SONIC x N"; artunc numbers are the 8x16/8x8 digits) */
 extern const uint8_t *Nem_Hud;
