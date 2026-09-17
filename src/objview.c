@@ -79,28 +79,79 @@ static const uint8_t font8x8[96][8] = {
 };
 
 /* ---------------------------------------------------------------------------
-   Window state
-   -------------------------------------------------------------------------- */
-#define COL_W       7     /* chars per field column                  */
-#define HDR_ROWS    2     /* title + header line                     */
-#define OBJ_ROWS    128   /* one row per object slot                 */
-#define WIN_COLS    78    /* total chars wide                        */
-#define CHAR_W      8     /* glyph width in pixels                  */
-#define CHAR_H      10    /* glyph height in pixels (8 + 2 spacing) */
+ *  Window state
+ *  -------------------------------------------------------------------------- */
+#define COL_W       7      /* chars per field column                  */
+#define HDR_ROWS    2      /* title + header line (pinned, no scroll) */
+#define OBJ_ROWS    128    /* one row per object slot                 */
+#define WIN_COLS    78     /* total chars wide                        */
+#define CHAR_W      8      /* glyph width in pixels                   */
+#define CHAR_H      10      /* glyph height in pixels (8 + 2 spacing)  */
+#define VIS_ROWS    54     /* visible rows in window                  */
+#define VIS_OBJ_ROWS (VIS_ROWS - HDR_ROWS)   /* scrollable rows            */
 #define WIN_W       (WIN_COLS * CHAR_W)
-#define WIN_H       ((HDR_ROWS + OBJ_ROWS) * CHAR_H)
+#define WIN_H       (VIS_ROWS * CHAR_H)
 
 static SDL_Window   *g_win = NULL;
 static SDL_Renderer *g_ren = NULL;
 static SDL_Texture  *g_tex = NULL;
 
+static int g_scroll = 0;   /* first object row shown (0..max) */
+
+static int  objview_max_scroll(void) {
+    int m = OBJ_ROWS - VIS_OBJ_ROWS;
+    return m < 0 ? 0 : m;
+}
+
+static void objview_clamp_scroll(void) {
+    if (g_scroll < 0) g_scroll = 0;
+    int m = objview_max_scroll();
+    if (g_scroll > m) g_scroll = m;
+}
+
+static void objview_update_title(void) {
+    if (!g_win) return;
+    char buf[64];
+    snprintf(buf, sizeof buf, "Object RAM [O]  rows %d-%d / %d",
+             g_scroll, g_scroll + VIS_OBJ_ROWS - 1, OBJ_ROWS);
+    SDL_SetWindowTitle(g_win, buf);
+}
+
+/* Event watch: called by SDL for every event, without consuming it.
+ *  Filters on this window's ID so the game window keeps its input. */
+static int objview_event_watch(void *userdata, SDL_Event *e) {
+    (void)userdata;
+    if (!g_win) return 1;
+    Uint32 wid = SDL_GetWindowID(g_win);
+
+    if (e->type == SDL_MOUSEWHEEL && e->wheel.windowID == wid) {
+        if (e->wheel.y > 0)      g_scroll -= 3;
+        else if (e->wheel.y < 0) g_scroll += 3;
+        objview_clamp_scroll();
+        objview_update_title();
+    } else if (e->type == SDL_KEYDOWN && e->key.windowID == wid) {
+        switch (e->key.keysym.sym) {
+            case SDLK_UP:       g_scroll -= 1;            break;
+            case SDLK_DOWN:     g_scroll += 1;            break;
+            case SDLK_PAGEUP:   g_scroll -= VIS_OBJ_ROWS; break;
+            case SDLK_PAGEDOWN: g_scroll += VIS_OBJ_ROWS; break;
+            case SDLK_HOME:     g_scroll = 0;             break;
+            case SDLK_END:      g_scroll = objview_max_scroll(); break;
+            default: return 1;
+        }
+        objview_clamp_scroll();
+        objview_update_title();
+    }
+    return 1;
+}
+
 /* Known object ID -> name map (only IDs registered in obj_dispatch) */
 static const char *obj_id_name(uint8_t id) {
     switch (id) {
     case 0x00: return "----";          /* free slot */
-    case id_SonicPlayer:  return "Soni";
+    case id_SonicPlayer:  return "Sonic";
     case id_HUD:          return " HUD";
-    case id_TitleCard:    return "TtlC";
+    case id_TitleCard:    return "Card";
     case id_GameOverCard: return "GOvr";
     case id_Rings:        return "Ring";
     case id_RingLoss:     return "RngL";
@@ -116,14 +167,14 @@ static const char *obj_id_name(uint8_t id) {
    -------------------------------------------------------------------------- */
 void ObjView_Toggle(void) {
     if (g_win) {
+        SDL_DelEventWatch(objview_event_watch, NULL);
         SDL_DestroyTexture(g_tex);
         SDL_DestroyRenderer(g_ren);
         SDL_DestroyWindow(g_win);
-        g_tex = NULL;
-        g_ren = NULL;
-        g_win = NULL;
+        g_tex = NULL; g_ren = NULL; g_win = NULL;
         return;
     }
+    g_scroll = 0;
     g_win = SDL_CreateWindow("Object RAM [O]",
                              SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                              WIN_W, WIN_H, 0);
@@ -132,6 +183,9 @@ void ObjView_Toggle(void) {
     if (!g_ren) { SDL_DestroyWindow(g_win); g_win = NULL; return; }
     g_tex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_ARGB8888,
                               SDL_TEXTUREACCESS_STREAMING, WIN_W, WIN_H);
+
+    SDL_AddEventWatch(objview_event_watch, NULL);
+    objview_update_title();
 }
 
 int ObjView_WindowID(void) {
@@ -204,102 +258,61 @@ void ObjView_Render(void) {
     uint32_t *px = (uint32_t *)pixels;
     int pwords = pitch / 4;
 
-    /* Fill background */
+    /* Background */
     for (int y = 0; y < WIN_H; y++)
         for (int x = 0; x < WIN_W; x++)
             px[y * pwords + x] = COL_BG;
 
-    /* Header line 1: title */
+    /* ---- Pinned header (never scrolls) ---- */
     put_string(px, pwords, 0, 0,
                " #  ID  Rtn   X     Y     Vx    Vy   St  An Fr  Map  Name",
                COL_HDR_FG, COL_BG);
-
-    /* Separator */
     for (int x = 0; x < WIN_COLS; x++)
         put_char(px, pwords, x, 1, '-', COL_GRID, COL_BG);
 
-    /* Object rows */
+    /* ---- Scrollable object rows: draw only [g_scroll .. g_scroll+VIS_OBJ_ROWS) ---- */
     uint8_t *base = ObjRAM;
-    for (int i = 0; i < NUM_OBJECTS; i++) {
+
+    for (int vis = 0; vis < VIS_OBJ_ROWS; vis++) {
+        int i = g_scroll + vis;             /* real object index */
+        if (i >= OBJ_ROWS) break;
+
         uint8_t *o = &base[i * OBJECT_SIZE];
         uint8_t id = obID(o);
 
         uint32_t fg;
-        if (id == 0) {
-            fg = COL_FREE;
-        } else if (id == id_SonicPlayer) {
-            fg = COL_SONIC;
-        } else if (id == id_HUD) {
-            fg = COL_HUD;
-        } else {
-            fg = COL_ACT_FG;
-        }
+        if (id == 0)                     fg = COL_FREE;
+        else if (id == id_SonicPlayer)   fg = COL_SONIC;
+        else if (id == id_HUD)           fg = COL_HUD;
+        else                             fg = COL_ACT_FG;
 
-        int row = HDR_ROWS + i;
+        int row = HDR_ROWS + vis;           /* screen row */
         char line[WIN_COLS + 1];
         memset(line, ' ', sizeof(line));
         line[WIN_COLS] = '\0';
 
-        /* Slot number (2 digits) */
         char tmp[8];
-        sprintf(tmp, "%2d", i);
-        memcpy(&line[0], tmp, 2);
-
-        /* ID (hex) */
-        fmt_hex8(tmp, id);
-        memcpy(&line[3], tmp, 2);
-
-        /* Routine */
-        fmt_hex8(tmp, obRoutine(o));
-        memcpy(&line[6], tmp, 2);
-
-        /* X */
-        fmt_i16(tmp, obX(o));
-        memcpy(&line[9], tmp, 5);
-
-        /* Y */
-        fmt_i16(tmp, obY(o));
-        memcpy(&line[15], tmp, 5);
-
-        /* VelX */
-        fmt_i16(tmp, obVelX(o));
-        memcpy(&line[21], tmp, 5);
-
-        /* VelY */
-        fmt_i16(tmp, obVelY(o));
-        memcpy(&line[27], tmp, 5);
-
-        /* Status (hex byte) */
-        fmt_hex8(tmp, obStatus(o));
-        memcpy(&line[33], tmp, 2);
-
-        /* Animation */
-        fmt_hex8(tmp, obAnim(o));
-        memcpy(&line[36], tmp, 2);
-
-        /* Frame */
-        fmt_hex8(tmp, obFrame(o));
-        memcpy(&line[39], tmp, 2);
-
-        /* Map pointer (low 16 bits hex) */
+        sprintf(tmp, "%2d", i);             memcpy(&line[0],  tmp, 2);
+        fmt_hex8(tmp, id);                  memcpy(&line[3],  tmp, 2);
+        fmt_hex8(tmp, obRoutine(o));        memcpy(&line[6],  tmp, 2);
+        fmt_i16(tmp, obX(o));               memcpy(&line[9],  tmp, 5);
+        fmt_i16(tmp, obY(o));               memcpy(&line[15], tmp, 5);
+        fmt_i16(tmp, obVelX(o));            memcpy(&line[21], tmp, 5);
+        fmt_i16(tmp, obVelY(o));            memcpy(&line[27], tmp, 5);
+        fmt_hex8(tmp, obStatus(o));         memcpy(&line[33], tmp, 2);
+        fmt_hex8(tmp, obAnim(o));           memcpy(&line[36], tmp, 2);
+        fmt_hex8(tmp, obFrame(o));          memcpy(&line[39], tmp, 2);
         fmt_hex16(tmp, (uint16_t)((uintptr_t)obMap(o) & 0xFFFF));
         memcpy(&line[42], tmp, 4);
-
-        /* Name (if known) */
         const char *name = obj_id_name(id);
-        if (name) {
-            memcpy(&line[47], name, 4);
-        }
+        if (name) memcpy(&line[47], name, 4);
 
-        /* Render each character */
-        for (int c = 0; c < WIN_COLS; c++) {
+        for (int c = 0; c < WIN_COLS; c++)
             if (line[c] != ' ')
                 put_char(px, pwords, c, row, line[c], fg, COL_BG);
-        }
     }
 
     SDL_UnlockTexture(g_tex);
-
     SDL_SetRenderDrawColor(g_ren, 0, 0, 0, 255);
     SDL_RenderClear(g_ren);
     SDL_RenderCopy(g_ren, g_tex, NULL, NULL);

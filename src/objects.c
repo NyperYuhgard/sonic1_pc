@@ -61,6 +61,7 @@ static void Helix_Main(void *obj);
 static void BossGreenHill_Main(void *obj);
 static void BossBall_Main(void *obj);
 static void SwingingPlatform_Main(void *obj);
+static void Prison_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -109,6 +110,7 @@ void Objects_Init(void) {
     obj_dispatch[id_BossGreenHill]      = BossGreenHill_Main;
     obj_dispatch[id_BossBall]           = BossBall_Main;
     obj_dispatch[id_SwingingPlatform]   = SwingingPlatform_Main;
+    obj_dispatch[id_Prison] = Prison_Main;
 
 
     /* Register explosion/gray puff, fiery explosion, animals, and points */
@@ -9282,4 +9284,243 @@ static void BossBall_Main(void *obj) {
         case 6: GBall_Link(o);   break;
         case 8: GBall_Ball(o);   break;
     }
+}
+
+/* ===========================================================================
+ *  Object 3E — Prison Capsule (id_Prison = $3E)
+ *  Ported verbatim from _incObj/3E Prison Capsule.asm (REV01, FixBugs=0).
+ *
+ *  pri_origY = objoff_30 (word): initial Y-position
+ *
+ *  Subtypes (from Pri_Var):
+ *    0 = capsule body  (routine 2)
+ *    1 = switch        (routine 4)
+ *    2 = unused        (routine 6)
+ *    3 = unused        (routine 8)
+ * =========================================================================== */
+
+#define pri_origY(obj) (*(int16_t *)((uint8_t *)(obj) + 0x30))
+
+/* Pri_Var: routine, display width, priority, frame per subtype */
+static const uint8_t Pri_Var[4][4] = {
+    { 2, 64/2, 4, 0 },   /* subtype 0 - capsule   */
+    { 4, 24/2, 5, 1 },   /* subtype 1 - switch    */
+    { 6, 32/2, 4, 3 },   /* subtype 2 - unused    */
+    { 8, 32/2, 3, 5 },   /* subtype 3 - unused    */
+};
+
+static void Pri_Main(uint8_t *o);
+static void Pri_BodyMain(uint8_t *o);
+static void Pri_Switch(uint8_t *o);
+static void Pri_Explosion(uint8_t *o);
+static void Pri_SpawnAnimals(uint8_t *o);
+static void Pri_Animals(uint8_t *o);
+static void Pri_EndAct(uint8_t *o);
+
+/* Pri_Main — Routine 0 */
+static void Pri_Main(uint8_t *o) {
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Pri;
+    obGfx(o)     = (uint16_t)ArtTile_Prison_Capsule;
+    obRender(o)  = sprite_cam_field;
+    pri_origY(o) = obY(o);
+
+    uint8_t sub = obSubtype(o);
+    if (sub >= 4) sub = 0;                     /* host safety (unreachable) */
+        const uint8_t *v = Pri_Var[sub];
+    obRoutine(o)  = v[0];
+    obActWid(o)   = v[1];
+    obPriority(o) = v[2];
+    obFrame(o)    = v[3];
+
+    /* Leftover from the deleted subtypes — only subtype 2 (unused). */
+    if (sub == 2) {
+        obColType(o)  = (uint8_t)(col_32x32 | col_boss);
+        obBossHits(o) = 8;
+    }
+}
+
+/* Pri_BodyMain — Routine 2: capsule body */
+static void Pri_BodyMain(uint8_t *o) {
+    if ((uint8_t)v_bossstatus == 2) goto openCapsule;
+
+    {
+        int16_t d1 = (int16_t)(64/2 + sonic_solid_width);
+        int16_t d2 = 48/2;
+        int16_t d3 = 48/2;
+        int16_t d4 = obX(o);
+        int16_t out_d3 = 0, out_d5 = 0;
+        SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5);
+    }
+    return;
+
+    openCapsule:
+    /* Was Sonic standing on the capsule as it opened? */
+    if (obSolid(o) != 0) {
+        obSolid(o) = 0;
+        uint8_t *player = RAM_ADDR(v_player);
+        obStatus(player) &= ~(1 << 3);        /* clear on-platform flag */
+        obStatus(player) |=  (1 << 1);        /* set in-air flag */
+    }
+    obFrame(o) = 2;                            /* destroyed prison frame */
+}
+
+/* Pri_Switch — Routine 4: capsule switch (stepping on it opens the capsule) */
+static void Pri_Switch(uint8_t *o) {
+    {
+        int16_t d1 = (int16_t)(24/2 + sonic_solid_width);
+        int16_t d2 = 16/2;
+        int16_t d3 = 16/2;
+        int16_t d4 = obX(o);
+        int16_t out_d3 = 0, out_d5 = 0;
+        SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5);
+    }
+
+    if (Ani_Pri) AnimateSprite(o, Ani_Pri);
+    obY(o) = pri_origY(o);                     /* force Y back to initial */
+
+    if (obSolid(o) == 0) return;               /* not stepped on yet */
+
+        /* Sonic stepped on the switch — open capsule */
+        obY(o) = (int16_t)(obY(o) + 8);
+    obRoutine(o) = 0x0A;                       /* → Pri_Explosion */
+    *(uint16_t *)((uint8_t *)o + 0x1E) = 1 * 60;   /* obTimeFrame as word */
+    f_timecount  = 0;                          /* stop time counter */
+    f_lockscreen = 0;                          /* lock screen position */
+    f_lockctrl   = 1;                          /* lock controls */
+    v_jpadhold2  = btnR;                       /* simulate holding right */
+    obSolid(o)   = 0;
+    {
+        uint8_t *player = RAM_ADDR(v_player);
+        obStatus(player) &= ~(1 << 3);
+        obStatus(player) |=  (1 << 1);
+    }
+}
+
+/* Pri_Explosion — Routine $A (also 6/8, but those are unused) */
+static void Pri_Explosion(uint8_t *o) {
+    /* Spawn an explosion every 8 frames, based on VBlank frame counter */
+    if (((uint8_t)v_vblank_byte & 7) == 0) {
+        uint8_t *a1 = (uint8_t *)FindFreeObj();
+        if (a1) {
+            obID(a1) = id_Explosion;
+            obX(a1)  = obX(o);
+            obY(a1)  = obY(o);
+
+            /* Random X/Y offset around the prison */
+            uint16_t r = RandomNumber();
+            int16_t dx = (int16_t)((uint8_t)r >> 2);   /* lsr.b #2 */
+            dx = (int16_t)(dx - 32);                   /* subi.w #32 */
+            obX(a1) = (int16_t)(obX(a1) + dx);
+
+            uint8_t hi = (uint8_t)(r >> 8);            /* lsr.w #8 */
+            hi = (uint8_t)(hi >> 3);                   /* lsr.b #3 */
+            obY(a1) = (int16_t)(obY(a1) + (int16_t)hi);
+        }
+    }
+
+    /* Timer: when it expires, replace explosions with animals */
+    uint16_t *timer = (uint16_t *)((uint8_t *)o + 0x1E);
+    *timer = (uint16_t)(*timer - 1);
+    if (*timer == 0) {
+        Pri_SpawnAnimals(o);
+    }
+}
+
+/* Pri_SpawnAnimals: replaces the switch with 8 animals */
+static void Pri_SpawnAnimals(uint8_t *o) {
+    v_bossstatus = 2;                          /* mark prison as opened */
+    obRoutine(o) = 0x0C;                       /* → Pri_Animals */
+    obFrame(o)   = 6;                          /* hide switch */
+    *(uint16_t *)((uint8_t *)o + 0x1E) = (2 * 60) + 30;
+    obY(o) = (int16_t)(obY(o) + 32);           /* load animals 32px below */
+
+    /* 8 animals with staggered hop-out delays (roughly 2.5s start) */
+    int16_t  d4 = -28;                         /* start X-offset */
+    uint16_t d5 = (2 * 60) + 34;               /* start hop-out delay */
+    for (int i = 0; i < 8; i++) {
+        uint8_t *a1 = (uint8_t *)FindFreeObj();
+        if (!a1) return;                       /* object RAM full */
+            obID(a1) = id_Animals;
+        obX(a1)  = obX(o);
+        obY(a1)  = obY(o);
+        obX(a1)  = (int16_t)(obX(a1) + d4);
+        d4 = (int16_t)(d4 + 7);
+        animal_prisondelay(a1) = d5;
+        d5 = (uint16_t)(d5 - 8);
+    }
+}
+
+/* Pri_Animals — Routine $C: continue spawning animals until timer expires */
+static void Pri_Animals(uint8_t *o) {
+    /* Spawn one animal every 8 frames */
+    if (((uint8_t)v_vblank_byte & 7) == 0) {
+        uint8_t *a1 = (uint8_t *)FindFreeObj();
+        if (a1) {
+            obID(a1) = id_Animals;
+            obX(a1)  = obX(o);
+            obY(a1)  = obY(o);
+
+            uint16_t r = RandomNumber();
+            int16_t d0 = (int16_t)(r & 0x1F);  /* andi.w #$1F */
+            d0 = (int16_t)(d0 - 6);            /* subq.w #6 */
+            /* ASM: tst.w d1 ; bpl.s .setX. After RandomNumber, d1 = seed
+             *              whose low word is 0, so bpl is always taken — the neg.w d0
+             *              branch is dead code. Skipped here for the same reason. */
+            obX(a1) = (int16_t)(obX(a1) + d0);
+            animal_prisondelay(a1) = 12;       /* hop out almost instantly */
+        }
+    }
+
+    /* Timer until we start checking for remaining animals */
+    uint16_t *timer = (uint16_t *)((uint8_t *)o + 0x1E);
+    *timer = (uint16_t)(*timer - 1);
+    if (*timer != 0) return;
+
+    obRoutine(o) += 2;                         /* → Pri_EndAct */
+    /* FixBugs=0: leftover from prototype — sets a 3-second delay that is
+     *      never read. Kept for 1:1 fidelity. */
+    *timer = 3 * 60;
+}
+
+/* Pri_EndAct — Routine $E: wait for all animals to despawn, then end act */
+static void Pri_EndAct(uint8_t *o) {
+    /* FixBugs=0: the loop range is nonsensical (only covers the first half
+     *      of object RAM starting at slot 1, missing most of lvlobjspace where
+     *      animals actually live). Ported as-is for fidelity. */
+    int count = (int)((v_objspace_end - (v_objspace + object_size * 1))
+    / object_size) / 2 - 1;
+    uint8_t *a1 = RAM_ADDR(v_objspace + object_size * 1);
+
+    for (int i = 0; i <= count; i++) {
+        if (obID(a1) == id_Animals) return;    /* still has animals → wait */
+            a1 += object_size;
+    }
+
+    /* No animals left — launch end-of-level cards and delete the prison */
+    GotThroughAct();
+    DeleteObject(o);
+}
+
+/* Prison dispatcher — Pri_Index: 0/2/4/6/8/A/C/E
+ * ASM: jsr Pri_Index ; out_of_range.s .delete ; jmp DisplaySprite
+ *      .delete: jmp DeleteObject */
+static void Prison_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00: Pri_Main(o);       break;
+        case 0x02: Pri_BodyMain(o);   break;
+        case 0x04: Pri_Switch(o);     break;
+        case 0x06:
+        case 0x08:
+        case 0x0A: Pri_Explosion(o);  break;
+        case 0x0C: Pri_Animals(o);    break;
+        case 0x0E: Pri_EndAct(o);     break;
+    }
+
+    if (OutOfRange(o, -1)) {
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);
 }

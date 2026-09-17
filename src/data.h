@@ -500,6 +500,9 @@ extern size_t   Map_TSon_len;
 extern const uint8_t *Map_PSB;
 extern size_t   Map_PSB_len;
 
+extern const uint8_t *Map_Pri;
+extern size_t   Map_Pri_len;
+
 extern const uint8_t *Map_Cred;
 extern size_t   Map_Cred_len;
 
@@ -613,6 +616,9 @@ extern size_t   Ani_Missile_len;
 
 extern const uint8_t *Ani_Spring;
 extern size_t   Ani_Spring_len;
+
+extern const uint8_t *Ani_Pri;
+extern size_t   Ani_Pri_len;
 
 /* GHZ bridge (id_Bridge) mappings */
 extern const uint8_t *Map_Bri;

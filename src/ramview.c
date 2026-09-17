@@ -77,16 +77,21 @@ static const uint8_t rv_font[96][8] = {
     /* 96..127: blank (lowercase and braces not needed — we uppercase) */
 };
 
-#define RV_CHAR_W 8
-#define RV_CHAR_H 10
-#define RV_COLS   56
-#define RV_ROWS   64
+/* ---------------------------------------------------------------------------
+   Dimensions and window state
+   ------------------------------------------------------------------------- */
+#define RV_CHAR_W   8
+#define RV_CHAR_H   10
+#define RV_COLS     56
+#define RV_VIS_ROWS 54                                  /* visible rows */
 #define RV_W      (RV_COLS * RV_CHAR_W)
-#define RV_H      (RV_ROWS * RV_CHAR_H)
+#define RV_H      (RV_VIS_ROWS * RV_CHAR_H)
 
 static SDL_Window   *rv_win = NULL;
 static SDL_Renderer *rv_ren = NULL;
 static SDL_Texture  *rv_tex = NULL;
+
+static int rv_scroll = 0;
 
 /* ---------------------------------------------------------------------------
    Watch entries. Name is UPPERCASE. addr = offset into ram[]. fmt controls
@@ -223,6 +228,64 @@ static const RV_Section rv_sections[] = {
 #define RV_SECTION_COUNT (sizeof(rv_sections) / sizeof(rv_sections[0]))
 
 /* ---------------------------------------------------------------------------
+   Scroll helpers (need rv_sections + RV_SECTION_COUNT, so they live below).
+   ------------------------------------------------------------------------- */
+static int rv_total_rows(void) {
+    int rows = 2;                                  /* title + separator */
+    for (size_t s = 0; s < RV_SECTION_COUNT; s++) {
+        if (rv_sections[s].title) rows++;
+        rows += rv_sections[s].count;
+        rows += 1;                                 /* blank line between sections */
+    }
+    return rows;
+}
+
+static int rv_max_scroll(void) {
+    int m = rv_total_rows() - RV_VIS_ROWS;
+    return m < 0 ? 0 : m;
+}
+
+static void rv_clamp_scroll(void) {
+    if (rv_scroll < 0) rv_scroll = 0;
+    int m = rv_max_scroll();
+    if (rv_scroll > m) rv_scroll = m;
+}
+
+static void rv_update_title(void) {
+    if (!rv_win) return;
+    char buf[64];
+    snprintf(buf, sizeof buf, "RAM View  rows %d-%d / %d",
+             rv_scroll, rv_scroll + RV_VIS_ROWS - 1, rv_total_rows());
+    SDL_SetWindowTitle(rv_win, buf);
+}
+
+static int rv_event_watch(void *userdata, SDL_Event *e) {
+    (void)userdata;
+    if (!rv_win) return 1;
+    Uint32 wid = SDL_GetWindowID(rv_win);
+
+    if (e->type == SDL_MOUSEWHEEL && e->wheel.windowID == wid) {
+        if (e->wheel.y > 0)      rv_scroll -= 3;
+        else if (e->wheel.y < 0) rv_scroll += 3;
+        rv_clamp_scroll();
+        rv_update_title();
+    } else if (e->type == SDL_KEYDOWN && e->key.windowID == wid) {
+        switch (e->key.keysym.sym) {
+            case SDLK_UP:       rv_scroll -= 1;              break;
+            case SDLK_DOWN:     rv_scroll += 1;              break;
+            case SDLK_PAGEUP:   rv_scroll -= RV_VIS_ROWS;    break;
+            case SDLK_PAGEDOWN: rv_scroll += RV_VIS_ROWS;    break;
+            case SDLK_HOME:     rv_scroll = 0;               break;
+            case SDLK_END:      rv_scroll = rv_max_scroll(); break;
+            default: return 1;
+        }
+        rv_clamp_scroll();
+        rv_update_title();
+    }
+    return 1;
+}
+
+/* ---------------------------------------------------------------------------
    Rendering primitives
    ------------------------------------------------------------------------- */
 static inline void rv_put_char(uint32_t *px, int pitch, int cx, int cy,
@@ -311,12 +374,14 @@ static void rv_format_value(char *hexbuf, char *decbuf,
    ------------------------------------------------------------------------- */
 void RamView_Toggle(void) {
     if (rv_win) {
+        SDL_DelEventWatch(rv_event_watch, NULL);
         if (rv_tex) SDL_DestroyTexture(rv_tex);
         if (rv_ren) SDL_DestroyRenderer(rv_ren);
         SDL_DestroyWindow(rv_win);
         rv_tex = NULL; rv_ren = NULL; rv_win = NULL;
         return;
     }
+    rv_scroll = 0;
     rv_win = SDL_CreateWindow("RAM View",
                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                               RV_W, RV_H, 0);
@@ -329,7 +394,10 @@ void RamView_Toggle(void) {
         SDL_DestroyRenderer(rv_ren);
         SDL_DestroyWindow(rv_win);
         rv_ren = NULL; rv_win = NULL;
+        return;
     }
+    SDL_AddEventWatch(rv_event_watch, NULL);
+    rv_update_title();
 }
 
 int RamView_WindowID(void) {
@@ -345,7 +413,6 @@ void RamView_Render(void) {
     uint32_t *px = (uint32_t *)pixels;
     int pwords = pitch / 4;
 
-    /* Palette */
     const uint32_t BG     = 0xFF101018;
     const uint32_t HEADER = 0xFF80FFFF;
     const uint32_t NAME   = 0xFFE0E0E0;
@@ -353,18 +420,24 @@ void RamView_Render(void) {
     const uint32_t DEC    = 0xFFFFD080;
     const uint32_t SEP    = 0xFF505060;
 
-    /* Background */
     for (int y = 0; y < RV_H; y++)
         for (int x = 0; x < RV_W; x++)
             px[y * pwords + x] = BG;
 
     int cy = 0;
 
-    /* Title + separator */
-    rv_put_string(px, pwords, 0, cy++, "RAM VIEWER   HEX   DEC",
-                  HEADER, BG);
-    for (int x = 0; x < RV_COLS; x++)
-        rv_put_char(px, pwords, x, cy, '-', SEP, BG);
+    /* Title */
+    if ((cy - rv_scroll) >= 0 && (cy - rv_scroll) < RV_VIS_ROWS) {
+        rv_put_string(px, pwords, 0, cy - rv_scroll,
+                      "RAM VIEWER   HEX   DEC", HEADER, BG);
+    }
+    cy++;
+
+    /* Separator */
+    if ((cy - rv_scroll) >= 0 && (cy - rv_scroll) < RV_VIS_ROWS) {
+        for (int x = 0; x < RV_COLS; x++)
+            rv_put_char(px, pwords, x, cy - rv_scroll, '-', SEP, BG);
+    }
     cy++;
 
     /* Sections */
@@ -372,38 +445,35 @@ void RamView_Render(void) {
         const RV_Section *sec = &rv_sections[s];
 
         if (sec->title) {
-            rv_put_string(px, pwords, 0, cy++, sec->title, HEADER, BG);
-        }
-
-        for (int i = 0; i < sec->count; i++) {
-            if (cy >= RV_ROWS) goto done;
-
-            const RV_Watch *w = &sec->items[i];
-            char hexbuf[16], decbuf[24];
-            rv_format_value(hexbuf, decbuf, w->addr, w->fmt);
-
-            int col = 2;
-            rv_put_string(px, pwords, col, cy, w->name, NAME, BG);
-            col += (int)strlen(w->name);
-            while (col < 24) {
-                rv_put_char(px, pwords, col, cy, ' ', NAME, BG);
-                col++;
+            int y = cy - rv_scroll;
+            if (y >= 0 && y < RV_VIS_ROWS) {
+                rv_put_string(px, pwords, 0, y, sec->title, HEADER, BG);
             }
-            rv_put_string(px, pwords, col, cy, hexbuf, HEX, BG);
-            col += (int)strlen(hexbuf);
-            while (col < 38) {
-                rv_put_char(px, pwords, col, cy, ' ', NAME, BG);
-                col++;
-            }
-            rv_put_string(px, pwords, col, cy, decbuf, DEC, BG);
-
             cy++;
         }
 
-        cy++;   /* blank line between sections */
+        for (int i = 0; i < sec->count; i++) {
+            int y = cy - rv_scroll;
+            if (y >= 0 && y < RV_VIS_ROWS) {
+                const RV_Watch *w = &sec->items[i];
+                char hexbuf[16], decbuf[24];
+                rv_format_value(hexbuf, decbuf, w->addr, w->fmt);
+
+                int col = 2;
+                rv_put_string(px, pwords, col, y, w->name, NAME, BG);
+                col += (int)strlen(w->name);
+                while (col < 24) { rv_put_char(px, pwords, col, y, ' ', NAME, BG); col++; }
+                rv_put_string(px, pwords, col, y, hexbuf, HEX, BG);
+                col += (int)strlen(hexbuf);
+                while (col < 38) { rv_put_char(px, pwords, col, y, ' ', NAME, BG); col++; }
+                rv_put_string(px, pwords, col, y, decbuf, DEC, BG);
+            }
+            cy++;
+        }
+
+        cy++;  /* blank line between sections */
     }
 
-done:
     SDL_UnlockTexture(rv_tex);
     SDL_SetRenderDrawColor(rv_ren, 0, 0, 0, 255);
     SDL_RenderClear(rv_ren);

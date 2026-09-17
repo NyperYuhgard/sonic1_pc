@@ -1673,9 +1673,19 @@ int Data_Init(void) {
         Ani_PSBTM_len = 0;
     }
 
+    if (load_asm_asset("anim/Prison Capsule.asm", &Ani_Pri, &Ani_Pri_len, 0) != 0) {
+        Ani_Pri = NULL;
+        Ani_Pri_len = 0;
+    }
+
     if (load_asm_asset("maps/titlesonic.asm", &Map_TSon, &Map_TSon_len, 1) != 0) {
         Map_TSon = NULL;
         Map_TSon_len = 0;
+    }
+
+    if (load_asm_asset("maps/Prison Capsule.asm", &Map_Pri, &Map_Pri_len, 1) != 0) {
+        Map_Pri = NULL;
+        Map_Pri_len = 0;
     }
 
     if (load_asm_asset("maps/psbtm.asm", &Map_PSB, &Map_PSB_len, 1) != 0) {
@@ -2770,6 +2780,8 @@ size_t   Ani_TSon_len = 0;
 const uint8_t *Ani_PSBTM = NULL;
 size_t   Ani_PSBTM_len = 0;
 
+const uint8_t *Ani_Pri = NULL;
+size_t   Ani_Pri_len = 0;
 /* ===========================================================================
    Title screen sprite mappings (from _maps slash .asm)
    These are loaded at runtime from assets/
@@ -2780,6 +2792,9 @@ size_t   Map_TSon_len = 0;
 
 const uint8_t *Map_PSB = NULL;
 size_t   Map_PSB_len = 0;
+
+const uint8_t *Map_Pri = NULL;
+size_t   Map_Pri_len = 0;
 
 const uint8_t *Map_Cred = NULL;
 size_t   Map_Cred_len = 0;
