@@ -684,6 +684,8 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
     SDL_UnlockTexture(vdp.framebuffer);
 
     /* Present */
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, vdp.framebuffer, NULL, NULL);
     SDL_RenderPresent(renderer);
 

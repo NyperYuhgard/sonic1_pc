@@ -168,10 +168,18 @@ static void ProcessSDLEvents(void) {
             running = 0;
         }
         /* WM close button on the main game window */
-        if (ev.type == SDL_WINDOWEVENT &&
-            ev.window.event == SDL_WINDOWEVENT_CLOSE &&
-            (int)ev.window.windowID == SDL_GetWindowID(window)) {
-            running = 0;
+        if (ev.type == SDL_WINDOWEVENT) {
+            if (ev.window.event == SDL_WINDOWEVENT_CLOSE &&
+                (int)ev.window.windowID == SDL_GetWindowID(window)) {
+                running = 0;
+                }
+                /* Solución al bug de maximizar/redimensionar: */
+                else if (ev.window.event == SDL_WINDOWEVENT_RESIZED ||
+                    ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                    ev.window.event == SDL_WINDOWEVENT_EXPOSED) {
+                    /* Forzamos a SDL a re-aplicar el tamaño lógico y recalcular el viewport */
+                    SDL_RenderSetLogicalSize(renderer, SCREEN_WIDTH, SCREEN_HEIGHT);
+                    }
         }
     }
 }
