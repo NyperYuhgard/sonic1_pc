@@ -40,8 +40,7 @@ static int  load_asset(const char *name, const uint8_t **out_ptr, size_t *out_le
 static int  load_asm_asset(const char *name, const uint8_t **out_ptr,
                            size_t *out_len, int is_map);
 static int  load_asm_asset_named(const char *name, const char *tblname,
-                                 const uint8_t **out_ptr, size_t *out_len);
-static void stage_startpos_assets(void);
+                                  const uint8_t **out_ptr, size_t *out_len);
 
 /* ============================================================================
    ASSETS — declaraciones
@@ -514,90 +513,51 @@ static int load_asset(const char *name, const uint8_t **out_ptr, size_t *out_len
 }
 
 /* ============================================================================
-   Staging de startpos (para que stage_assets.py copie los BINs)
-   ========================================================================== */
-
-static void stage_startpos_assets(void) {
-    (void)load_asset("startpos/ghz1.bin", NULL, NULL);
-    (void)load_asset("startpos/ghz2.bin", NULL, NULL);
-    (void)load_asset("startpos/ghz3.bin", NULL, NULL);
-    (void)load_asset("startpos/lz1.bin", NULL, NULL);
-    (void)load_asset("startpos/lz2.bin", NULL, NULL);
-    (void)load_asset("startpos/lz3.bin", NULL, NULL);
-    (void)load_asset("startpos/sbz3.bin", NULL, NULL);
-    (void)load_asset("startpos/mz1.bin", NULL, NULL);
-    (void)load_asset("startpos/mz2.bin", NULL, NULL);
-    (void)load_asset("startpos/mz3.bin", NULL, NULL);
-    (void)load_asset("startpos/slz1.bin", NULL, NULL);
-    (void)load_asset("startpos/slz2.bin", NULL, NULL);
-    (void)load_asset("startpos/slz3.bin", NULL, NULL);
-    (void)load_asset("startpos/syz1.bin", NULL, NULL);
-    (void)load_asset("startpos/syz2.bin", NULL, NULL);
-    (void)load_asset("startpos/syz3.bin", NULL, NULL);
-    (void)load_asset("startpos/sbz1.bin", NULL, NULL);
-    (void)load_asset("startpos/sbz2.bin", NULL, NULL);
-    (void)load_asset("startpos/fz.bin", NULL, NULL);
-    (void)load_asset("startpos/end1.bin", NULL, NULL);
-    (void)load_asset("startpos/end2.bin", NULL, NULL);
-    (void)load_asset("startpos/Credits Demos/ghz1 (Credits demo 1).bin", NULL, NULL);
-    (void)load_asset("startpos/Credits Demos/ghz1 (Credits demo 2).bin", NULL, NULL);
-    (void)load_asset("startpos/Credits Demos/lz3 (Credits demo).bin", NULL, NULL);
-    (void)load_asset("startpos/Credits Demos/mz2 (Credits demo).bin", NULL, NULL);
-    (void)load_asset("startpos/Credits Demos/sbz1 (Credits demo).bin", NULL, NULL);
-    (void)load_asset("startpos/Credits Demos/sbz2 (Credits demo).bin", NULL, NULL);
-    (void)load_asset("startpos/Credits Demos/slz3 (Credits demo).bin", NULL, NULL);
-    (void)load_asset("startpos/Credits Demos/syz3 (Credits demo).bin", NULL, NULL);
-}
-
-/* ============================================================================
    Data_Init
    ========================================================================== */
 
 int Data_Init(void) {
-    stage_startpos_assets();
-
-    /* ---------------- Paletas ---------------- */
-    LOAD("palette/sega_bg.bin",                 Pal_SegaBG);
-    LOAD("palette/sega1.bin",                   Pal_Sega1);
-    LOAD("palette/sega2.bin",                   Pal_Sega2);
-    LOAD("palette/title.bin",                   Pal_Title);
-    LOAD("palette/cycle_water.bin",             Pal_TitleCycWater);
-    LOAD("palette/cycle_ghz.bin",               Pal_GHZCycWater);
-    LOAD("palette/level_select.bin",            Pal_LevelSel);
-    LOAD("palette/sonic.bin",                   Pal_Sonic);
-    LOAD("palette/ghz.bin",                     Pal_GHZ);
-    LOAD("palette/lz.bin",                      Pal_LZ);
-    LOAD("palette/lz_underwater.bin",           Pal_LZWater);
-    LOAD("palette/sonic_lz_underwater.bin",     Pal_LZSonWater);
-    LOAD("palette/mz.bin",                      Pal_MZ);
-    LOAD("palette/slz.bin",                     Pal_SLZ);
-    LOAD("palette/syz.bin",                     Pal_SYZ);
-    LOAD("palette/sbz1.bin",                    Pal_SBZ1);
-    LOAD("palette/sbz2.bin",                    Pal_SBZ2);
-    LOAD("palette/sbz3.bin",                    Pal_SBZ3);
-    LOAD("palette/sbz3_underwater.bin",         Pal_SBZ3Water);
-    LOAD("palette/sonic_sbz3_underwater.bin",   Pal_SBZ3SonWat);
-    LOAD("palette/special.bin",                 Pal_Special);
-    LOAD("palette/ss_result.bin",               Pal_SSResult);
-    LOAD("palette/continue.bin",                Pal_Continue);
-    LOAD("palette/ending.bin",                  Pal_Ending);
+    LOAD("palette/Sega Background.bin",                 Pal_SegaBG);
+    LOAD("palette/Sega1.bin",                   Pal_Sega1);
+    LOAD("palette/Sega2.bin",                   Pal_Sega2);
+    LOAD("palette/Title Screen.bin",                   Pal_Title);
+    LOAD("palette/Cycle - Title Screen Water.bin",             Pal_TitleCycWater);
+    LOAD("palette/Cycle - GHZ.bin",               Pal_GHZCycWater);
+    LOAD("palette/Level Select.bin",            Pal_LevelSel);
+    LOAD("palette/Sonic.bin",                   Pal_Sonic);
+    LOAD("palette/Green Hill Zone.bin",                     Pal_GHZ);
+    LOAD("palette/Labyrinth Zone.bin",                      Pal_LZ);
+    LOAD("palette/Labyrinth Zone Underwater.bin",           Pal_LZWater);
+    LOAD("palette/Sonic - LZ Underwater.bin",     Pal_LZSonWater);
+    LOAD("palette/Marble Zone.bin",                      Pal_MZ);
+    LOAD("palette/Star Light Zone.bin",                     Pal_SLZ);
+    LOAD("palette/Spring Yard Zone.bin",                     Pal_SYZ);
+    LOAD("palette/SBZ Act 1.bin",                    Pal_SBZ1);
+    LOAD("palette/SBZ Act 2.bin",                    Pal_SBZ2);
+    LOAD("palette/SBZ Act 3.bin",                    Pal_SBZ3);
+    LOAD("palette/SBZ Act 3 Underwater.bin",         Pal_SBZ3Water);
+    LOAD("palette/Sonic - SBZ3 Underwater.bin",   Pal_SBZ3SonWat);
+    LOAD("palette/Special Stage.bin",                 Pal_Special);
+    LOAD("palette/Special Stage Results.bin",               Pal_SSResult);
+    LOAD("palette/Special Stage Continue Bonus.bin",                Pal_Continue);
+    LOAD("palette/Ending.bin",                  Pal_Ending);
 
     /* ---------------- Arte: Sega / Title / Misc ---------------- */
-    LOAD("artnem/sega_logo.nem",                Nem_SegaLogo);
-    LOAD("artnem/title_fg.nem",                 Nem_TitleFg);
-    LOAD("artnem/title_sonic.nem",              Nem_TitleSonic);
-    LOAD("artnem/title_tm.nem",                 Nem_TitleTM);
-    LOAD("artnem/title_card.nem",               Nem_TitleCard);
-    LOAD("artnem/credit_text.nem",              Nem_CreditText);
-    LOAD("artnem/jap_credits.nem",              Nem_JapNames);
+    LOAD("artnem/Sega Logo (REV00).nem",                Nem_SegaLogo);
+    LOAD("artnem/Title Screen Foreground.nem",                 Nem_TitleFg);
+    LOAD("artnem/Title Screen Sonic.nem",              Nem_TitleSonic);
+    LOAD("artnem/Title Screen TM.nem",                 Nem_TitleTM);
+    LOAD("artnem/Title Cards.nem",               Nem_TitleCard);
+    LOAD("artnem/Ending - Credits.nem",              Nem_CreditText);
+    LOAD("artnem/Hidden Japanese Credits.nem",              Nem_JapNames);
     LOAD("artunc/Level Select & Debug Text.unc",Art_Text);
-    LOAD("tilemaps/sega_logo.eni",              Eni_SegaLogo);
-    LOAD("tilemaps/title.eni",                  Eni_Title);
-    LOAD("tilemaps/jap_credits.eni",            Eni_JapNames);
+    LOAD("tilemaps/Sega Logo (REV00).eni",              Eni_SegaLogo);
+    LOAD("tilemaps/Title Screen.eni",                  Eni_Title);
+    LOAD("tilemaps/Hidden Japanese Credits.eni",            Eni_JapNames);
 
     /* ---------------- Arte: Zonas (8x8) ---------------- */
-    LOAD("artnem/ghz1.nem",         Nem_GHZ_1st);
-    LOAD("artnem/ghz2.nem",         Nem_GHZ_2nd);
+    LOAD("artnem/8x8 - GHZ1.nem",         Nem_GHZ_1st);
+    LOAD("artnem/8x8 - GHZ2.nem",         Nem_GHZ_2nd);
     LOAD("artnem/8x8 - LZ.nem",     Nem_LZ);
     LOAD("artnem/8x8 - MZ.nem",     Nem_MZ);
     LOAD("artnem/8x8 - SLZ.nem",    Nem_SLZ);
@@ -605,26 +565,26 @@ int Data_Init(void) {
     LOAD("artnem/8x8 - SBZ.nem",    Nem_SBZ);
 
     /* ---------------- Arte: Objetos comunes ---------------- */
-    LOAD("artnem/rings.nem",            Nem_Ring);
-    LOAD("artnem/signpost.nem",         Nem_SignPost);
-    LOAD("artnem/hidden_bonus.nem",     Nem_Bonus);
-    LOAD("artnem/bigflash.nem",         Nem_BigFlash);
-    LOAD("artnem/shield.nem",           Nem_Shield);
-    LOAD("artnem/stars.nem",            Nem_Stars);
-    LOAD("artnem/spikes.nem",           Nem_Spikes);
-    LOAD("artnem/hspring.nem",          Nem_HSpring);
-    LOAD("artnem/vspring.nem",          Nem_VSpring);
-    LOAD("artnem/monitors.nem",         Nem_Monitors);
+    LOAD("artnem/Rings.nem",            Nem_Ring);
+    LOAD("artnem/Signpost.nem",         Nem_SignPost);
+    LOAD("artnem/Hidden Bonuses.nem",     Nem_Bonus);
+    LOAD("artnem/Giant Ring Flash.nem",         Nem_BigFlash);
+    LOAD("artnem/Shield.nem",           Nem_Shield);
+    LOAD("artnem/Invincibility Stars.nem",            Nem_Stars);
+    LOAD("artnem/Spikes.nem",           Nem_Spikes);
+    LOAD("artnem/Spring Horizontal.nem",          Nem_HSpring);
+    LOAD("artnem/Spring Vertical.nem",          Nem_VSpring);
+    LOAD("artnem/Monitors.nem",         Nem_Monitors);
     LOAD("artnem/Points.nem",           Nem_Points);
     LOAD("artnem/Prison Capsule.nem",   Nem_Prison);
-    LOAD("artnem/explosion.nem",        Nem_Explode);
+    LOAD("artnem/Explosion.nem",        Nem_Explode);
 
     /* ---------------- Arte: Enemigos ---------------- */
-    LOAD("artnem/crabmeat.nem",                     Nem_Crabmeat);
-    LOAD("artnem/motobug.nem",                      Nem_Motobug);
-    LOAD("artnem/buzz.nem",                         Nem_Buzz);
-    LOAD("artnem/chopper.nem",                      Nem_Chopper);
-    LOAD("artnem/newtron.nem",                      Nem_Newtron);
+    LOAD("artnem/Enemy Crabmeat.nem",                     Nem_Crabmeat);
+    LOAD("artnem/Enemy Motobug.nem",                      Nem_Motobug);
+    LOAD("artnem/Enemy Buzz Bomber.nem",                         Nem_Buzz);
+    LOAD("artnem/Enemy Chopper.nem",                      Nem_Chopper);
+    LOAD("artnem/Enemy Newtron.nem",                      Nem_Newtron);
     LOAD("artnem/Enemy Ball Hog.nem",               Nem_BallHog);
     LOAD("artnem/Enemy Basaran.nem",                Nem_Basaran);
     LOAD("artnem/Enemy Bomb.nem",                   Nem_Bomb);
@@ -709,17 +669,17 @@ int Data_Init(void) {
 
     /* Comunes / GHZ */
     LOAD("artnem/Lamppost.nem",                Nem_Lamp);
-    LOAD("artnem/ghz_stalk.nem",               Nem_Stalk);
-    LOAD("artnem/ghz_rock.nem",                Nem_PplRock);
+    LOAD("artnem/GHZ Flower Stalk.nem",               Nem_Stalk);
+    LOAD("artnem/GHZ Purple Rock.nem",                Nem_PplRock);
 
     /* ---------------- Arte: Animales ---------------- */
-    LOAD("artnem/rabbit.nem",   Nem_Rabbit);
-    LOAD("artnem/chicken.nem",  Nem_Chicken);
-    LOAD("artnem/penguin.nem",  Nem_Penguin);
-    LOAD("artnem/seal.nem",     Nem_Seal);
-    LOAD("artnem/pig.nem",      Nem_Pig);
-    LOAD("artnem/flicky.nem",   Nem_Flicky);
-    LOAD("artnem/squirrel.nem", Nem_Squirrel);
+    LOAD("artnem/Animal Rabbit.nem",   Nem_Rabbit);
+    LOAD("artnem/Animal Chicken.nem",  Nem_Chicken);
+    LOAD("artnem/Animal Penguin.nem",  Nem_Penguin);
+    LOAD("artnem/Animal Seal.nem",     Nem_Seal);
+    LOAD("artnem/Animal Pig.nem",      Nem_Pig);
+    LOAD("artnem/Animal Flicky.nem",   Nem_Flicky);
+    LOAD("artnem/Animal Squirrel.nem", Nem_Squirrel);
 
     /* ---------------- Arte: Special Stage ---------------- */
     LOAD("artnem/Special 1UP.nem",             Nem_SS1UpBlock);
@@ -752,8 +712,8 @@ int Data_Init(void) {
     LOAD("artnem/Special Result Emeralds.nem", Nem_ResultEm);
 
     /* ---------------- Arte: HUD ---------------- */
-    LOAD("artnem/hud.nem",                     Nem_Hud);
-    LOAD("artnem/hud_lives.nem",               Nem_Lives);
+    LOAD("artnem/HUD.nem",                     Nem_Hud);
+    LOAD("artnem/HUD - Life Counter Icon.nem",               Nem_Lives);
     LOAD("artunc/HUD Numbers.unc",             Art_Hud);
     LOAD("artunc/Lives Counter Numbers.unc",   Art_LivesNums);
 
@@ -769,80 +729,80 @@ int Data_Init(void) {
     LOAD("artunc/Giant Ring.unc",              Art_BigRing);
 
     /* ---------------- Tilemaps ---------------- */
-    LOAD("map16/ghz.eni",   Blk16_GHZ);
-    LOAD("map16/lz.eni",    Blk16_LZ);
-    LOAD("map16/mz.eni",    Blk16_MZ);
-    LOAD("map16/slz.eni",   Blk16_SLZ);
-    LOAD("map16/syz.eni",   Blk16_SYZ);
-    LOAD("map16/sbz.eni",   Blk16_SBZ);
-    LOAD("map256/ghz.kos",  Blk256_GHZ);
-    LOAD("map256/lz.kos",   Blk256_LZ);
-    LOAD("map256/mz.kos",   Blk256_MZ);
-    LOAD("map256/slz.kos",  Blk256_SLZ);
-    LOAD("map256/syz.kos",  Blk256_SYZ);
-    LOAD("map256/sbz.kos",  Blk256_SBZ);
+    LOAD("map16/GHZ.eni",   Blk16_GHZ);
+    LOAD("map16/LZ.eni",    Blk16_LZ);
+    LOAD("map16/MZ.eni",    Blk16_MZ);
+    LOAD("map16/SLZ.eni",   Blk16_SLZ);
+    LOAD("map16/SYZ.eni",   Blk16_SYZ);
+    LOAD("map16/SBZ.eni",   Blk16_SBZ);
+    LOAD("map256/GHZ.kos",  Blk256_GHZ);
+    LOAD("map256/LZ.kos",   Blk256_LZ);
+    LOAD("map256/MZ (REV01).kos",   Blk256_MZ);
+    LOAD("map256/SLZ.kos",  Blk256_SLZ);
+    LOAD("map256/SYZ.kos",  Blk256_SYZ);
+    LOAD("map256/SBZ (REV01).kos",  Blk256_SBZ);
 
     /* ---------------- Mappings ---------------- */
-    LOAD_MAP("maps/sonic.asm",                      Map_Sonic);
-    LOAD_MAP("maps/titlesonic.asm",                 Map_TSon);
-    LOAD_MAP("maps/psbtm.asm",                      Map_PSB);
-    LOAD_MAP("maps/credits.asm",                    Map_Cred);
-    LOAD_MAP("maps/titlecard.asm",                  Map_Card);
+    LOAD_MAP("_maps/Sonic.asm",                      Map_Sonic);
+    LOAD_MAP("_maps/Title Screen Sonic.asm",                 Map_TSon);
+    LOAD_MAP("_maps/Press Start and TM.asm",                      Map_PSB);
+    LOAD_MAP("_maps/Credits.asm",                    Map_Cred);
+    LOAD_MAP("_maps/Title Cards.asm",                  Map_Card);
     /* "SONIC HAS PASSED" vive en el mismo archivo, tabla propia: */
-    load_asm_asset_named("maps/titlecard.asm", "Map_Got",
+    load_asm_asset_named("_maps/Title Cards.asm", "Map_Got",
                          &Map_Got, &Map_Got_len);
-    LOAD_MAP("maps/hud.asm",                        Map_HUD);
-    LOAD_MAP("maps/rings.asm",                      Map_Ring);
-    LOAD_MAP("maps/signpost.asm",                   Map_Sign);
-    LOAD_MAP("maps/Prison Capsule.asm",             Map_Pri);
-    LOAD_MAP("maps/Shield and Invincibility.asm",   Map_Shield);
-    LOAD_MAP("maps/Smashable Walls.asm",            Map_Smash);
-    LOAD_MAP("maps/Spiked Pole Helix.asm",          Map_Hel);
-    LOAD_MAP("maps/Swinging Platforms (GHZ).asm",   Map_Swing_GHZ);
-    LOAD_MAP("maps/Swinging Platforms (SLZ).asm",   Map_Swing_SLZ);
-    LOAD_MAP("maps/Eggman.asm",                     Map_Eggman);
-    LOAD_MAP("maps/Boss Items.asm",                 Map_BossItems);
-    LOAD_MAP("maps/bridge.asm",                     Map_Bri);
-    LOAD_MAP("maps/purple rock.asm",                Map_PRock);
-    LOAD_MAP("maps/ghz edge walls.asm",             Map_Edge);
-    LOAD_MAP("maps/GHZ Ball.asm",                   Map_GBall);
-    LOAD_MAP("maps/Scenery.asm",                    Map_Scen);
-    LOAD_MAP("maps/Springs.asm",                    Map_Spring);
-    LOAD_MAP("maps/Monitor.asm",                    Map_Monitor);
-    LOAD_MAP("maps/Spikes.asm",                     Map_Spike);
-    LOAD_MAP("maps/Chopper.asm",                    Map_Chop);
-    LOAD_MAP("maps/crabmeat.asm",                   Map_Crab);
-    LOAD_MAP("maps/motobug.asm",                    Map_Moto);
-    LOAD_MAP("maps/buzzbomber.asm",                 Map_Buzz);
-    LOAD_MAP("maps/buzzmissile.asm",                Map_Missile);
-    LOAD_MAP("maps/Platforms (GHZ).asm",            Map_Plat_GHZ);
-    LOAD_MAP("maps/Collapsing Ledge.asm",           Map_Ledge);
-    LOAD_MAP("maps/Collapsing Floors.asm",          Map_CFlo);
-    LOAD_MAP("maps/explosions.asm",                 Map_ExplodeItem);
-    LOAD_MAP("maps/explosions.asm",                 Map_ExplodeBomb);
-    LOAD_MAP("maps/Animals 1.asm",                  Map_Animal1);
-    LOAD_MAP("maps/Animals 2.asm",                  Map_Animal2);
-    LOAD_MAP("maps/Animals 3.asm",                  Map_Animal3);
-    LOAD_MAP("maps/points.asm",                     Map_Points);
-    LOAD_MAP("maps/Newtron.asm",                    Map_Newt);
+    LOAD_MAP("_maps/HUD.asm",                        Map_HUD);
+    LOAD_MAP("_maps/Rings (REV00).asm",                      Map_Ring);
+    LOAD_MAP("_maps/Signpost.asm",                   Map_Sign);
+    LOAD_MAP("_maps/Prison Capsule.asm",             Map_Pri);
+    LOAD_MAP("_maps/Shield and Invincibility.asm",   Map_Shield);
+    LOAD_MAP("_maps/Smashable Walls.asm",            Map_Smash);
+    LOAD_MAP("_maps/Spiked Pole Helix.asm",          Map_Hel);
+    LOAD_MAP("_maps/Swinging Platforms (GHZ).asm",   Map_Swing_GHZ);
+    LOAD_MAP("_maps/Swinging Platforms (SLZ).asm",   Map_Swing_SLZ);
+    LOAD_MAP("_maps/Eggman.asm",                     Map_Eggman);
+    LOAD_MAP("_maps/Boss Items.asm",                 Map_BossItems);
+    LOAD_MAP("_maps/Bridge.asm",                     Map_Bri);
+    LOAD_MAP("_maps/Purple Rock.asm",                Map_PRock);
+    LOAD_MAP("_maps/GHZ Edge Walls.asm",             Map_Edge);
+    LOAD_MAP("_maps/GHZ Ball.asm",                   Map_GBall);
+    LOAD_MAP("_maps/Scenery.asm",                    Map_Scen);
+    LOAD_MAP("_maps/Springs.asm",                    Map_Spring);
+    LOAD_MAP("_maps/Monitor.asm",                    Map_Monitor);
+    LOAD_MAP("_maps/Spikes.asm",                     Map_Spike);
+    LOAD_MAP("_maps/Chopper.asm",                    Map_Chop);
+    LOAD_MAP("_maps/Crabmeat.asm",                   Map_Crab);
+    LOAD_MAP("_maps/Moto Bug.asm",                    Map_Moto);
+    LOAD_MAP("_maps/Buzz Bomber.asm",                 Map_Buzz);
+    LOAD_MAP("_maps/Buzz Bomber Missile.asm",                Map_Missile);
+    LOAD_MAP("_maps/Platforms (GHZ).asm",            Map_Plat_GHZ);
+    LOAD_MAP("_maps/Collapsing Ledge.asm",           Map_Ledge);
+    LOAD_MAP("_maps/Collapsing Floors.asm",          Map_CFlo);
+    LOAD_MAP("_maps/Explosions.asm",                 Map_ExplodeItem);
+    LOAD_MAP("_maps/Explosions.asm",                 Map_ExplodeBomb);
+    LOAD_MAP("_maps/Animals 1.asm",                  Map_Animal1);
+    LOAD_MAP("_maps/Animals 2.asm",                  Map_Animal2);
+    LOAD_MAP("_maps/Animals 3.asm",                  Map_Animal3);
+    LOAD_MAP("_maps/Points.asm",                     Map_Points);
+    LOAD_MAP("_maps/Newtron.asm",                    Map_Newt);
 
     /* ---------------- Animaciones ---------------- */
-    LOAD_ANIM("anim/Sonic.asm",                     Ani_Sonic);
-    LOAD_ANIM("anim/titlesonic.asm",                Ani_TSon);
-    LOAD_ANIM("anim/psbtm.asm",                     Ani_PSBTM);
-    LOAD_ANIM("anim/Prison Capsule.asm",            Ani_Pri);
-    LOAD_ANIM("anim/rings.asm",                     Ani_Ring);
-    LOAD_ANIM("anim/signpost.asm",                  Ani_Sign);
-    LOAD_ANIM("anim/Shield and Invincibility.asm",  Ani_Shield);
-    LOAD_ANIM("anim/crabmeat.asm",                  Ani_Crab);
-    LOAD_ANIM("anim/motobug.asm",                   Ani_Moto);
-    LOAD_ANIM("anim/buzzbomber.asm",                Ani_Buzz);
-    LOAD_ANIM("anim/buzzmissile.asm",               Ani_Missile);
-    LOAD_ANIM("anim/Chopper.asm",                   Ani_Chop);
-    LOAD_ANIM("anim/Eggman.asm",                    Ani_Eggman);
-    LOAD_ANIM("anim/Monitor.asm",                   Ani_Monitor);
-    LOAD_ANIM("anim/Springs.asm",                   Ani_Spring);
-    LOAD_ANIM("anim/Newtron.asm",                   Ani_Newt);
+    LOAD_ANIM("_anim/Sonic.asm",                     Ani_Sonic);
+    LOAD_ANIM("_anim/Title Screen Sonic.asm",                Ani_TSon);
+    LOAD_ANIM("_anim/Press Start and TM.asm",                     Ani_PSBTM);
+    LOAD_ANIM("_anim/Prison Capsule.asm",            Ani_Pri);
+    LOAD_ANIM("_anim/Rings.asm",                     Ani_Ring);
+    LOAD_ANIM("_anim/Signpost.asm",                  Ani_Sign);
+    LOAD_ANIM("_anim/Shield and Invincibility.asm",  Ani_Shield);
+    LOAD_ANIM("_anim/Crabmeat.asm",                  Ani_Crab);
+    LOAD_ANIM("_anim/Moto Bug.asm",                   Ani_Moto);
+    LOAD_ANIM("_anim/Buzz Bomber.asm",                Ani_Buzz);
+    LOAD_ANIM("_anim/Buzz Bomber Missile.asm",               Ani_Missile);
+    LOAD_ANIM("_anim/Chopper.asm",                   Ani_Chop);
+    LOAD_ANIM("_anim/Eggman.asm",                    Ani_Eggman);
+    LOAD_ANIM("_anim/Monitor.asm",                   Ani_Monitor);
+    LOAD_ANIM("_anim/Springs.asm",                   Ani_Spring);
+    LOAD_ANIM("_anim/Newtron.asm",                   Ani_Newt);
     fprintf(stderr, "Ani_Newt=%p len=%zu\n",
             (void*)Ani_Newt, Ani_Newt_len);
     if (Ani_Newt && Ani_Newt_len >= 16) {
@@ -852,7 +812,7 @@ int Data_Init(void) {
         }
     }
     /* El DPLC de Sonic no es un anim script, pero comparte el parser:  */
-    LOAD_ANIM("maps/Sonic - Dynamic Gfx Script.asm", SonicDynPLC);
+    LOAD_ANIM("_maps/Sonic - Dynamic Gfx Script.asm", SonicDynPLC);
 
     /* ---------------- Layouts de nivel ---------------- */
     LOAD("levels/ghz1.bin",     Level_GHZ1);
@@ -877,7 +837,7 @@ int Data_Init(void) {
     LOAD("levels/syz1.bin",     Level_SYZ1);
     LOAD("levels/syz2.bin",     Level_SYZ2);
     LOAD("levels/syz3.bin",     Level_SYZ3);
-    LOAD("levels/syzbg.bin",    Level_SYZbg);
+    LOAD("levels/syzbg (REV01).bin",    Level_SYZbg);
     LOAD("levels/sbz1.bin",     Level_SBZ1);
     LOAD("levels/sbz1bg.bin",   Level_SBZ1bg);
     LOAD("levels/sbz2.bin",     Level_SBZ2);
@@ -887,12 +847,12 @@ int Data_Init(void) {
     /* ---------------- Posiciones de objetos ---------------- */
     LOAD("objpos/ghz1.bin",     ObjPos_GHZ1);
     LOAD("objpos/ghz2.bin",     ObjPos_GHZ2);
-    LOAD("objpos/ghz3.bin",     ObjPos_GHZ3);
-    LOAD("objpos/lz1.bin",      ObjPos_LZ1);
+    LOAD("objpos/ghz3 (REV01).bin",     ObjPos_GHZ3);
+    LOAD("objpos/lz1 (REV01).bin",      ObjPos_LZ1);
     LOAD("objpos/lz2.bin",      ObjPos_LZ2);
-    LOAD("objpos/lz3.bin",      ObjPos_LZ3);
+    LOAD("objpos/lz3 (REV01).bin",      ObjPos_LZ3);
     LOAD("objpos/sbz3.bin",     ObjPos_SBZ3);
-    LOAD("objpos/mz1.bin",      ObjPos_MZ1);
+    LOAD("objpos/mz1 (REV01).bin",      ObjPos_MZ1);
     LOAD("objpos/mz2.bin",      ObjPos_MZ2);
     LOAD("objpos/mz3.bin",      ObjPos_MZ3);
     LOAD("objpos/slz1.bin",     ObjPos_SLZ1);
@@ -900,8 +860,8 @@ int Data_Init(void) {
     LOAD("objpos/slz3.bin",     ObjPos_SLZ3);
     LOAD("objpos/syz1.bin",     ObjPos_SYZ1);
     LOAD("objpos/syz2.bin",     ObjPos_SYZ2);
-    LOAD("objpos/syz3.bin",     ObjPos_SYZ3);
-    LOAD("objpos/sbz1.bin",     ObjPos_SBZ1);
+    LOAD("objpos/syz3 (REV01).bin",     ObjPos_SYZ3);
+    LOAD("objpos/sbz1 (REV01).bin",     ObjPos_SBZ1);
     LOAD("objpos/sbz2.bin",     ObjPos_SBZ2);
     LOAD("objpos/fz.bin",       ObjPos_FZ);
     LOAD("objpos/ending.bin",   ObjPos_End);
@@ -913,9 +873,9 @@ int Data_Init(void) {
     LOAD("collide/SLZ.bin",                     Col_SLZ);
     LOAD("collide/SYZ.bin",                     Col_SYZ);
     LOAD("collide/SBZ.bin",                     Col_SBZ);
-    LOAD("collide/Angle_Map.bin",               Col_AngleMap);
-    LOAD("collide/Collision_Array_Normal.bin",  Col_CollArray1);
-    LOAD("collide/Collision_Array_Rotated.bin", Col_CollArray2);
+    LOAD("collide/Angle Map.bin",               Col_AngleMap);
+    LOAD("collide/Collision Array (Normal).bin",  Col_CollArray1);
+    LOAD("collide/Collision Array (Rotated).bin", Col_CollArray2);
 
     /* ---------------- Start locations (concatenadas) ---------------- */
     {

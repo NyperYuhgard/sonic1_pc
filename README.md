@@ -52,16 +52,14 @@ cmake --build build -j$(nproc)
 
 ### Assets
 
-Assets are **not** committed. They are staged from the original `disasm/`
-tree into `build/assets/` (non-audio only — Music/SoundFX are never staged):
+Assets are **not** committed. The engine loads from `build/assets/` first,
+falling back to `disasm/`, so you can either:
 
-```
-python3 tools/stage_assets.py
-```
+- Run the game directly from `disasm/` (no extra copies), or
+- Copy the needed subfolders from `disasm/` into `build/assets/` if you want
+  overrides/custom assets.
 
-The game loads assets at runtime from `build/assets/`, so run it once before
-launching, and again whenever a new `load_asset(...)` path is added to
-`src/data.c`.
+`src/data.c` uses the original filenames from `disasm/` (with spaces).
 
 ## Controls
 
@@ -163,8 +161,6 @@ src/
 └── debugmode.c/.h— debug object placement (from _incObj/DebugMode.asm)
 
 disasm/           — original Sega disassembly + uncompressed assets (source of truth)
-tools/
-└── stage_assets.py — copies referenced disasm assets into build/assets/
 ```
 
 ## Architecture notes
