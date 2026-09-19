@@ -231,16 +231,25 @@ retry:
         }
     }
 
-    /* Copiar decompress -> actual, con padding de $40 bytes por fila */
+    /* Copiar decompress -> actual, con padding de $40 bytes por fila.
+     * El 68000 almacena cada palabra de EniDec como [hi, lo]; este host es
+     * little-endian, así que en memoria las palabras quedan [lo, hi].
+     * Como el layout se consume como FLUJO DE BYTES (1 byte = 1 celda),
+     * desempaquetamos cada palabra en orden 68000 para replicar el stream:
+     * bytes [hi, lo] por palabra. (Vería huecos entre piezas si se copiara
+     * la memoria cruda del host.) */
     {
-        const uint8_t *src = RAM_ADDR(v_sslayout_decompress);
+        const uint16_t *src = (const uint16_t *)RAM_ADDR(v_sslayout_decompress);
         uint8_t *dst = RAM_ADDR(v_sslayout_actual);
         int rows = (v_sslayout_end - v_sslayout_actual) / ss_layout_rowlength;
+        int words_per_row = (ss_layout_rowlength / 2) / 2;
         for (int r = 0; r < rows; r++) {
-            for (int i = 0; i < ss_layout_rowlength / 2; i++) {
-                dst[i] = src[i];
+            for (int i = 0; i < words_per_row; i++) {
+                uint16_t w = src[i];
+                dst[i * 2]     = (uint8_t)(w >> 8);   /* high byte, primero */
+                dst[i * 2 + 1] = (uint8_t)(w & 0xFF); /* low byte  */
             }
-            src += ss_layout_rowlength / 2;
+            src += words_per_row;
             dst += ss_layout_rowlength;
         }
     }
