@@ -802,6 +802,30 @@ extern size_t   StartLocArray_len;
 extern const uint8_t *EndingStLocArray;
 extern size_t   EndingStLocArray_len;
 
+/* SS: Pal Cycle and Other Maps */
+extern const uint8_t *Pal_SSCyc1;       extern size_t Pal_SSCyc1_len;
+extern const uint8_t *Pal_SSCyc2;       extern size_t Pal_SSCyc2_len;
+extern const uint8_t *Eni_SSBg1;        extern size_t Eni_SSBg1_len;
+extern const uint8_t *Eni_SSBg2;        extern size_t Eni_SSBg2_len;
+extern const uint8_t *SS_1;             extern size_t SS_1_len;
+extern const uint8_t *SS_2;             extern size_t SS_2_len;
+extern const uint8_t *SS_3;             extern size_t SS_3_len;
+extern const uint8_t *SS_4;             extern size_t SS_4_len;
+extern const uint8_t *SS_5;             extern size_t SS_5_len;
+extern const uint8_t *SS_6;             extern size_t SS_6_len;
+extern const uint8_t *SS_StartLoc;      extern size_t SS_StartLoc_len;
+
+/* SS block mappings */
+extern const uint8_t *Map_SSWalls;         extern size_t Map_SSWalls_len;
+extern const uint8_t *Map_Bump;            extern size_t Map_Bump_len;
+extern const uint8_t *Map_SS_Shared;       extern size_t Map_SS_Shared_len;
+extern const uint8_t *Map_SS_Up;           extern size_t Map_SS_Up_len;
+extern const uint8_t *Map_SS_Down;         extern size_t Map_SS_Down_len;
+extern const uint8_t *Map_SS_Glass;        extern size_t Map_SS_Glass_len;
+extern const uint8_t *Map_SS_Chaos1;       extern size_t Map_SS_Chaos1_len;
+extern const uint8_t *Map_SS_Chaos2;       extern size_t Map_SS_Chaos2_len;
+extern const uint8_t *Map_SS_Chaos3;       extern size_t Map_SS_Chaos3_len;
+
 /* Initialize all assets from the assets/ directory.
    Returns 0 on success, -1 on any failure. */
 int Data_Init(void);

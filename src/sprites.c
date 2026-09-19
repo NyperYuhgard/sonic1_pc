@@ -10,9 +10,9 @@
    Helpers
    =========================================================================== */
 
-static void build_sprite_piece(uint8_t *sprite_table, int *sprite_index,
-                               int base_y, int base_x, const uint8_t **data,
-                               uint16_t gfx, int xflip, int yflip) {
+void Sprites_EmitPiece(uint8_t *sprite_table, int *sprite_index,
+                       int base_y, int base_x, const uint8_t **data,
+                       uint16_t gfx, int xflip, int yflip) {
     //if (*sprite_index >= sprites_max) return;
 
     const uint8_t *p = *data;
@@ -137,7 +137,7 @@ void BuildSprites(void) {
                  *                  No se consulta Map_LookupLength ni la tabla de frames. */
                 const uint8_t *piece_data = map;
                 if (sprite_index < sprites_max) {
-                    build_sprite_piece(sprite_table, &sprite_index, y, x,
+                    Sprites_EmitPiece(sprite_table, &sprite_index, y, x,
                                        &piece_data, gfx, xflip, yflip);
                 }
                 obRender(obj) |= sprite_rendered;
@@ -163,7 +163,7 @@ void BuildSprites(void) {
             const uint8_t *piece_data = frame_data + 1;
 
             for (int p = 0; p < num_pieces && sprite_index < sprites_max; p++) {
-                build_sprite_piece(sprite_table, &sprite_index, y, x,
+                Sprites_EmitPiece(sprite_table, &sprite_index, y, x,
                                    &piece_data, gfx, xflip, yflip);
             }
 

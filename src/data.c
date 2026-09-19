@@ -73,6 +73,8 @@ const uint8_t *Pal_Special;         size_t Pal_Special_len;
 const uint8_t *Pal_SSResult;        size_t Pal_SSResult_len;
 const uint8_t *Pal_Continue;        size_t Pal_Continue_len;
 const uint8_t *Pal_Ending;          size_t Pal_Ending_len;
+const uint8_t *Pal_SSCyc1;          size_t Pal_SSCyc1_len;
+const uint8_t *Pal_SSCyc2;          size_t Pal_SSCyc2_len;
 
 /* ---------------- Arte: Sega / Title / Misc ---------------- */
 const uint8_t *Nem_SegaLogo;        size_t Nem_SegaLogo_len;
@@ -86,6 +88,8 @@ const uint8_t *Eni_SegaLogo;        size_t Eni_SegaLogo_len;
 const uint8_t *Eni_Title;           size_t Eni_Title_len;
 const uint8_t *Eni_JapNames;        size_t Eni_JapNames_len;
 const uint8_t *Art_Text;            size_t Art_Text_len;
+const uint8_t *Eni_SSBg1;           size_t Eni_SSBg1_len;
+const uint8_t *Eni_SSBg2;           size_t Eni_SSBg2_len;
 
 /* ---------------- Arte: Zonas (8x8) ---------------- */
 const uint8_t *Nem_GHZ_1st;         size_t Nem_GHZ_1st_len;
@@ -314,6 +318,15 @@ const uint8_t *Map_Animal1;         size_t Map_Animal1_len;
 const uint8_t *Map_Animal2;         size_t Map_Animal2_len;
 const uint8_t *Map_Animal3;         size_t Map_Animal3_len;
 const uint8_t *Map_Points;          size_t Map_Points_len;
+const uint8_t *Map_SSWalls;         size_t Map_SSWalls_len;
+const uint8_t *Map_Bump;            size_t Map_Bump_len;
+const uint8_t *Map_SS_Shared;       size_t Map_SS_Shared_len;
+const uint8_t *Map_SS_Up;           size_t Map_SS_Up_len;
+const uint8_t *Map_SS_Down;         size_t Map_SS_Down_len;
+const uint8_t *Map_SS_Glass;        size_t Map_SS_Glass_len;
+const uint8_t *Map_SS_Chaos1;       size_t Map_SS_Chaos1_len;
+const uint8_t *Map_SS_Chaos2;       size_t Map_SS_Chaos2_len;
+const uint8_t *Map_SS_Chaos3;       size_t Map_SS_Chaos3_len;
 
 /* Mappings referenciados por DebugMode (aún sin portar en su mayoría) */
 const uint8_t *Map_Newt;            size_t Map_Newt_len;
@@ -418,6 +431,12 @@ const uint8_t *Level_SBZ1bg;        size_t Level_SBZ1bg_len;
 const uint8_t *Level_SBZ2;          size_t Level_SBZ2_len;
 const uint8_t *Level_SBZ2bg;        size_t Level_SBZ2bg_len;
 const uint8_t *Level_End;           size_t Level_End_len;
+const uint8_t *SS_1;                size_t SS_1_len;
+const uint8_t *SS_2;                size_t SS_2_len;
+const uint8_t *SS_3;                size_t SS_3_len;
+const uint8_t *SS_4;                size_t SS_4_len;
+const uint8_t *SS_5;                size_t SS_5_len;
+const uint8_t *SS_6;                size_t SS_6_len;
 
 /* ---------------- Posiciones de objetos (ObjPos_*) ---------------- */
 const uint8_t *ObjPos_GHZ1;         size_t ObjPos_GHZ1_len;
@@ -455,6 +474,7 @@ const uint8_t *Col_CollArray2;      size_t Col_CollArray2_len;
 /* ---------------- Start locations ---------------- */
 const uint8_t *StartLocArray;       size_t StartLocArray_len;
 const uint8_t *EndingStLocArray;    size_t EndingStLocArray_len;
+const uint8_t *SS_StartLoc;         size_t SS_StartLoc_len;
 
 /* ============================================================================
    Macros de carga / liberación
@@ -541,6 +561,8 @@ int Data_Init(void) {
     LOAD("palette/Special Stage Results.bin",               Pal_SSResult);
     LOAD("palette/Special Stage Continue Bonus.bin",                Pal_Continue);
     LOAD("palette/Ending.bin",                  Pal_Ending);
+    LOAD("palette/Cycle - Special Stage 1.bin",  Pal_SSCyc1);
+    LOAD("palette/Cycle - Special Stage 2.bin",  Pal_SSCyc2);
 
     /* ---------------- Arte: Sega / Title / Misc ---------------- */
     LOAD("artnem/Sega Logo (REV00).nem",                Nem_SegaLogo);
@@ -554,6 +576,8 @@ int Data_Init(void) {
     LOAD("tilemaps/Sega Logo (REV00).eni",              Eni_SegaLogo);
     LOAD("tilemaps/Title Screen.eni",                  Eni_Title);
     LOAD("tilemaps/Hidden Japanese Credits.eni",            Eni_JapNames);
+    LOAD("tilemaps/SS Background 1.eni", Eni_SSBg1);
+    LOAD("tilemaps/SS Background 2.eni", Eni_SSBg2);
 
     /* ---------------- Arte: Zonas (8x8) ---------------- */
     LOAD("artnem/8x8 - GHZ1.nem",         Nem_GHZ_1st);
@@ -785,6 +809,15 @@ int Data_Init(void) {
     LOAD_MAP("_maps/Animals 3.asm",                  Map_Animal3);
     LOAD_MAP("_maps/Points.asm",                     Map_Points);
     LOAD_MAP("_maps/Newtron.asm",                    Map_Newt);
+    LOAD_MAP("_maps/SS Walls.asm",   Map_SSWalls);
+    LOAD_MAP("_maps/Bumper.asm",  Map_Bump);
+    LOAD_MAP("_maps/SS Shared Block.asm",  Map_SS_Shared);
+    LOAD_MAP("_maps/SS UP Block.asm", Map_SS_Up);
+    LOAD_MAP("_maps/SS DOWN Block.asm", Map_SS_Down);
+    LOAD_MAP("_maps/SS Glass Block.asm",   Map_SS_Glass);
+    LOAD_MAP("_maps/SS Chaos Emeralds.asm", Map_SS_Chaos1);
+    LOAD_MAP("_maps/SS Chaos Emeralds.asm", Map_SS_Chaos2);
+    LOAD_MAP("_maps/SS Chaos Emeralds.asm", Map_SS_Chaos3);
 
     /* ---------------- Animaciones ---------------- */
     LOAD_ANIM("_anim/Sonic.asm",                     Ani_Sonic);
@@ -843,6 +876,12 @@ int Data_Init(void) {
     LOAD("levels/sbz2.bin",     Level_SBZ2);
     LOAD("levels/sbz2bg.bin",   Level_SBZ2bg);
     LOAD("levels/ending.bin",   Level_End);
+    LOAD("sslayout/1.eni", SS_1);
+    LOAD("sslayout/2.eni", SS_2);
+    LOAD("sslayout/3.eni", SS_3);
+    LOAD("sslayout/4.eni", SS_4);
+    LOAD("sslayout/5 (REV01).eni", SS_5);
+    LOAD("sslayout/6 (REV01).eni", SS_6);
 
     /* ---------------- Posiciones de objetos ---------------- */
     LOAD("objpos/ghz1.bin",     ObjPos_GHZ1);
@@ -966,6 +1005,33 @@ int Data_Init(void) {
         }
     }
 
+    {
+        static const char * const ss_start_files[6] = {
+            "startpos/Special Stages/ss1.bin",
+            "startpos/Special Stages/ss2.bin",
+            "startpos/Special Stages/ss3.bin",
+            "startpos/Special Stages/ss4.bin",
+            "startpos/Special Stages/ss5.bin",
+            "startpos/Special Stages/ss6.bin",
+        };
+        uint8_t *buf = (uint8_t *)malloc(24);
+        if (buf) {
+            int ok = 1;
+            for (int i = 0; i < 6; i++) {
+                size_t len;
+                char fullpath[PATH_MAX + 512];
+                snprintf(fullpath, sizeof(fullpath), "%s/%s",
+                         assets_base_path(), ss_start_files[i]);
+                const uint8_t *tmp = Assets_Load(fullpath, &len);
+                if (!tmp || len < 4) { ok = 0; break; }
+                memcpy(buf + i * 4, tmp, 4);
+                free((void *)tmp);
+            }
+            if (ok) { SS_StartLoc = buf; SS_StartLoc_len = 24; }
+            else    { free(buf); SS_StartLoc = NULL; SS_StartLoc_len = 0; }
+        }
+    }
+
     Palette_Init();
     LevelHeaders_Init();
     return 0;
@@ -985,12 +1051,14 @@ void Data_Quit(void) {
     FREE(Pal_SBZ1); FREE(Pal_SBZ2); FREE(Pal_SBZ3);
     FREE(Pal_SBZ3Water); FREE(Pal_SBZ3SonWat);
     FREE(Pal_Special); FREE(Pal_SSResult); FREE(Pal_Continue); FREE(Pal_Ending);
+    FREE(Pal_SSCyc1); FREE(Pal_SSCyc2);
 
     /* Sega / Title / Misc */
     FREE(Nem_SegaLogo); FREE(Nem_TitleFg); FREE(Nem_TitleSonic);
     FREE(Nem_TitleTM); FREE(Nem_TitleCard); FREE(Nem_CreditText);
     FREE(Nem_JapNames); FREE(Art_Text);
     FREE(Eni_SegaLogo); FREE(Eni_Title); FREE(Eni_JapNames);
+    FREE(Eni_SSBg1); FREE(Eni_SSBg2);
 
     /* Zonas */
     FREE(Nem_GHZ_1st); FREE(Nem_GHZ_2nd);
@@ -1085,6 +1153,9 @@ void Data_Quit(void) {
     UNMAP(Map_ExplodeItem); UNMAP(Map_ExplodeBomb);
     UNMAP(Map_Animal1); UNMAP(Map_Animal2); UNMAP(Map_Animal3); UNMAP(Map_Points);
     UNMAP(Ani_Newt);
+    UNMAP(Map_SSWalls); UNMAP(Map_Bump); UNMAP(Map_SS_Shared);
+    UNMAP(Map_SS_Up); UNMAP(Map_SS_Down); UNMAP(Map_SS_Glass);
+    UNMAP(Map_SS_Chaos1); UNMAP(Map_SS_Chaos2); UNMAP(Map_SS_Chaos3);
 
     /* Animaciones / DPLC */
     UNMAP(Ani_Sonic); UNMAP(Ani_TSon); UNMAP(Ani_PSBTM); UNMAP(Ani_Pri);
@@ -1103,6 +1174,7 @@ void Data_Quit(void) {
     FREE(Level_SYZ1); FREE(Level_SYZ2);  FREE(Level_SYZ3); FREE(Level_SYZbg);
     FREE(Level_SBZ1); FREE(Level_SBZ1bg);FREE(Level_SBZ2); FREE(Level_SBZ2bg);
     FREE(Level_End);
+    FREE(SS_1); FREE(SS_2); FREE(SS_3); FREE(SS_4); FREE(SS_5); FREE(SS_6);
 
     /* ObjPos */
     FREE(ObjPos_GHZ1); FREE(ObjPos_GHZ2); FREE(ObjPos_GHZ3);
@@ -1118,7 +1190,7 @@ void Data_Quit(void) {
     FREE(Col_AngleMap); FREE(Col_CollArray1); FREE(Col_CollArray2);
 
     /* Start locations */
-    FREE(StartLocArray); FREE(EndingStLocArray);
+    FREE(StartLocArray); FREE(EndingStLocArray); FREE(SS_StartLoc);
 }
 
 #undef FREE

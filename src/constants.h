@@ -158,6 +158,27 @@
 #define layout_row              (layout_row_interlaced * 2)
 
 /* ---------------------------------------------------------------------------
+ Game modes (GM_*) — los usan main.c, level.c y special.c
+ --------------------------------------------------------------------------- */
+#define GM_Sega      0x00
+#define GM_Title     0x04
+#define GM_Level     0x0C
+#define GM_Special   0x10
+#define GM_Continue  0x14
+#define GM_Ending    0x18
+#define GM_Credits   0x1C
+
+/* VBlank routines (id_VBlank_*) */
+#define id_VBlank_Lag          0x00
+#define id_VBlank_Sega         0x02
+#define id_VBlank_Title        0x04
+#define id_VBlank_Levels       0x08
+#define id_VBlank_SpecialStage 0x0A
+#define id_VBlank_Paused       0x10
+#define id_VBlank_PaletteFade  0x12
+#define id_VBlank_SegaPCM      0x14
+
+/* ---------------------------------------------------------------------------
    Zone IDs
    --------------------------------------------------------------------------- */
 enum {
@@ -1006,5 +1027,61 @@ enum {
 
 /* -- Error Handler ------------------------------------------------------- */
 #define ArtTile_Error_Handler_Font        0x7C0
+/* -- Special Stage Area -------------------------------------------------- */
+/* Special Stage layout / matrix */
+#define ss_layout_padding   0x20
+#define ss_layout_rowlength 0x80
+#define ss_layout_rows      0x40
+#define ss_matrixsize       16
 
+/* SS block IDs — de SS_MapIndex en SpecCode.asm */
+#define id_SS_Blank             0x00
+#define id_SS_WallBlue_0        0x01
+#define id_SS_WallBlue_8        0x09
+#define id_SS_WallYellow_0      0x0A
+#define id_SS_WallYellow_8      0x12
+#define id_SS_WallPink_0        0x13
+#define id_SS_WallPink_8        0x1B
+#define id_SS_WallGreen_0       0x1C
+#define id_SS_WallGreen_8       0x24
+#define id_SS_Bumper            0x25
+#define id_SS_W                 0x26
+#define id_SS_GOAL              0x27
+#define id_SS_1Up               0x28
+#define id_SS_UP                0x29
+#define id_SS_DOWN              0x2A
+#define id_SS_R                 0x2B
+#define id_SS_RedWhite          0x2C
+#define id_SS_Glass1_Blue       0x2D
+#define id_SS_Glass2_Green      0x2E
+#define id_SS_Glass3_Yellow     0x2F
+#define id_SS_Glass4_Pink       0x30
+#define id_SS_R_Ani             0x31
+#define id_SS_Bumper_Ani1       0x32
+#define id_SS_Bumper_Ani2       0x33
+#define id_SS_ZONE1             0x34
+#define id_SS_ZONE6             0x39
+#define id_SS_Ring              0x3A
+#define id_SS_Emerald1_Blue     0x3B
+#define id_SS_Emerald2_Yellow   0x3C
+#define id_SS_Emerald3_Pink     0x3D
+#define id_SS_Emerald4_Green    0x3E
+#define id_SS_Emerald5_Red      0x3F
+#define id_SS_Emerald6_Grey     0x40
+#define id_SS_Ghost             0x41
+#define id_SS_Ring_Ani1         0x42
+#define id_SS_Ring_Ani2         0x43
+#define id_SS_Ring_Ani3         0x44
+#define id_SS_Emerald_Ani2      0x47
+#define id_SS_Emerald_Ani3      0x48
+#define id_SS_Glass_Ani2        0x4C
+#define id_SS_Glass_Ani3        0x4D
+#define id_SS_Ring_Ani4         0x45
+#define id_SS_Emerald_Ani1      0x46
+#define id_SS_Emerald_Ani4      0x49
+#define id_SS_InvGhostTrigger   0x4A
+#define id_SS_Glass_Ani1        0x4B
+#define id_SS_Glass_Ani4        0x4E
+
+/* ---------------------------------------------------------------- */
 #endif /* SONIC1_CONSTANTS_H */

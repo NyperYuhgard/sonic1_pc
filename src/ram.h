@@ -699,6 +699,21 @@ static inline void RAM_SET_U32(uint32_t addr, uint32_t v) {
 #define v_ring_speaker          (RAM_BYTE(0xF000 + 0x2B))
 #define f_push_playing          (RAM_BYTE(0xF000 + 0x2C))
 
+/* ---------------------------------------------------------------------------
+ Special Stage Area Things
+ --------------------------------------------------------------------------- */
+#define v_sslayout_base        0x0000
+#define v_sslayout_actual      0x1020
+#define v_sslayout_end         0x3020
+#define v_ss_spritesettings    0x3020
+#define v_sslayout_decompress  0x3020
+#define v_ss_animations        0x3420
+#define v_ss_animations_end    0x3520
+
+#define v_ss_rotationmatrix    0x8000
+#define v_ss_scroll_bubbles    0xAA00
+#define v_ss_scroll_clouds     0xAB00
+
 #ifdef __cplusplus
 }
 #endif

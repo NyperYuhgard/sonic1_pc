@@ -494,6 +494,19 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
         pix[i] = bg_color; /* Color de fondo real de la Mega Drive */
     }
 
+    /* ---------------------------------------------------------------------
+       Dynamic plane addresses.
+       Registro $02 (FG/plane A): bits 5-3 = A15..A13 del nametable.
+       Registro $04 (BG/plane B): bits 2-0 = A15..A13 del nametable.
+       En Sonic 1 los niveles usan $30/$07 (0xC000 / 0xE000), pero el
+       Special Stage los reescribe para apuntar a planos 1..6 ($2000..$E000),
+       así que hay que decodificarlos del registro, no hardcodearlos.
+       --------------------------------------------------------------------- */
+    uint32_t plane_a_addr = ((uint32_t)(vdp.registers[2] & 0x38)) << 10;
+    uint32_t plane_b_addr = ((uint32_t)(vdp.registers[4] & 0x07)) << 13;
+    if (plane_a_addr >= VRAM_SIZE) plane_a_addr &= (VRAM_SIZE - 1);
+    if (plane_b_addr >= VRAM_SIZE) plane_b_addr &= (VRAM_SIZE - 1);
+
     /* Vertical scroll is per-plane (MD VSRAM); horizontal scroll is
        per-scanline from the 224-row hscroll table. The hscroll buffer holds
        4 bytes per row: word 0 = FG plane scroll, word 2 = BG plane scroll. */
@@ -523,10 +536,7 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
 
         /* Sprites crossing this scanline, in table order. The first to fill
            either the 20-sprite or the 320px budget win; anything later on the
-           line is dropped. Off-screen sprites still count, which is exactly
-           how the title screen's 32px-wide "sprite line limiter" fillers hide
-           Sonic's lower body behind the ribbon: 10 fillers x 32px = the full
-           320px budget for that scanline. */
+           line is dropped. */
         int list[20], list_len = 0;
         int px_budget = 0;
         for (int i = 0; i < n && list_len < 20; i++) {
@@ -538,17 +548,17 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
         }
 
         /* MD priority stack, low to high:
-             1. Plane A tiles, priority 0 (BG nametable)
-             2. Plane B tiles, priority 0 (FG nametable)
+             1. Plane A tiles, priority 0 (uses $02 nametable)
+             2. Plane B tiles, priority 0 (uses $04 nametable)
              3. Sprites,  priority 0
              4. Plane A tiles, priority 1
              5. Plane B tiles, priority 1
              6. Sprites,  priority 1
            Later layers overwrite earlier ones; transparent pixels are never
-           written. */
-        render_plane_scanline(&vdp.vram[vram_bg], palette_main,
+           written. Note the ASM's "FG"/"BG" naming is swapped versus plane A/B. */
+        render_plane_scanline(&vdp.vram[plane_b_addr], palette_main,
                               bg_scroll_x, bg_scroll_y, row, pix, pitch, 0);
-        render_plane_scanline(&vdp.vram[vram_fg], palette_main,
+        render_plane_scanline(&vdp.vram[plane_a_addr], palette_main,
                               fg_scroll_x, fg_scroll_y, row, pix, pitch, 0);
 
         /* Blit surviving sprites tail-to-head so the first table entry
@@ -565,12 +575,9 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             int pal_line = (pattern >> 13) & 3;
             int x = ((int)(entry[6] | (entry[7] << 8)) & 0x1FF) - 0x80;
 
-            /* Pattern word bits 11/12 are the VDP X/Y flip flags; they flip
-               the whole sprite piece (tile order AND per-tile pixels). */
             int xflip = (pattern >> 11) & 1;
             int yflip = (pattern >> 12) & 1;
 
-            /* Only the tile-row that covers this scanline */
             int dy = row - y;
             int ty;
             int prow;
@@ -585,8 +592,6 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             if (ty < 0 || ty >= height_tiles) continue;
 
             for (int tx = 0; tx < width_tiles; tx++) {
-                /* MD sprite pattern indices run down a column first,
-                   then to the right (stride = height) */
                 int txx = xflip ? (width_tiles - 1 - tx) : tx;
                 int tile_idx = tile + txx * height_tiles + ty;
                 if (tile_idx >= 0x800) continue;
@@ -605,9 +610,9 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             }
         }
 
-        render_plane_scanline(&vdp.vram[vram_bg], palette_main,
+        render_plane_scanline(&vdp.vram[plane_b_addr], palette_main,
                               bg_scroll_x, bg_scroll_y, row, pix, pitch, 1);
-        render_plane_scanline(&vdp.vram[vram_fg], palette_main,
+        render_plane_scanline(&vdp.vram[plane_a_addr], palette_main,
                               fg_scroll_x, fg_scroll_y, row, pix, pitch, 1);
 
         /* Pass 1 = priority sprites, above everything. */
@@ -623,8 +628,6 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             int pal_line = (pattern >> 13) & 3;
             int x = ((int)(entry[6] | (entry[7] << 8)) & 0x1FF) - 0x80;
 
-            /* Pattern word bits 11/12 are the VDP X/Y flip flags; they flip
-               the whole sprite piece (tile order AND per-tile pixels). */
             int xflip = (pattern >> 11) & 1;
             int yflip = (pattern >> 12) & 1;
 

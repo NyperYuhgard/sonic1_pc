@@ -18,27 +18,7 @@
 #include "level.h"
 #include "plc.h"
 #include "hud.h"
-
-/* ===================================================================
-   Game Mode IDs (from sonic.asm GameModeArray)
-   =================================================================== */
-#define GM_Sega      0x00
-#define GM_Title     0x04
-#define GM_Level     0x0C
-#define GM_Special   0x10
-#define GM_Continue  0x14
-#define GM_Ending    0x18
-#define GM_Credits   0x1C
-
-/* VBlank routine IDs (from sonic.asm) */
-#define id_VBlank_Lag          0x00
-#define id_VBlank_Sega         0x02
-#define id_VBlank_Title        0x04
-#define id_VBlank_Levels       0x08
-#define id_VBlank_SpecialStage 0x0A
-#define id_VBlank_Paused       0x10
-#define id_VBlank_PaletteFade  0x12
-#define id_VBlank_SegaPCM      0x14
+#include "special.h"
 
 /* ===================================================================
    Display scaling
@@ -224,6 +204,11 @@ void WaitForVBlank(void) {
         AnimateLevelAct();
         HUD_Update();
         break;
+    case id_VBlank_SpecialStage:    
+        VBlank_StandardTransfers();
+        PalCycle_SS();
+        if (v_generictimer != 0) v_generictimer--;
+        break;    
     default:                     VBlank_StandardTransfers(); break;
     }
 
@@ -724,7 +709,7 @@ static void GM_Level_Process(void) {
 }
 
 static void GM_Special_Stage(void) {
-    /* TODO: Implement Special Stage */
+    GM_Special_Stage_Main();
 }
 
 static void GM_Continue_Screen(void) {

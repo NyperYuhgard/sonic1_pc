@@ -6,6 +6,7 @@
 #include "collision.h"
 #include "plc.h"
 #include "debugmode.h"
+#include "special.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,6 +64,7 @@ static void BossBall_Main(void *obj);
 static void SwingingPlatform_Main(void *obj);
 static void Prison_Main(void *obj);
 static void Newtron_Main(void *obj);
+static void SonicSpecial_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -113,6 +115,7 @@ void Objects_Init(void) {
     obj_dispatch[id_SwingingPlatform]   = SwingingPlatform_Main;
     obj_dispatch[id_Prison] = Prison_Main;
     obj_dispatch[id_Newtron]      = Newtron_Main;
+    obj_dispatch[id_SonicSpecial] = SonicSpecial_Main;
 
 
     /* Register explosion/gray puff, fiery explosion, animals, and points */
@@ -9701,5 +9704,621 @@ static void Newtron_Main(void *obj) {
         case 0: Newt_Main(o);        break;
         case 2: Newt_Action(o);      break;
         case 4: Newt_GreenDelete(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 09 — Sonic in Special Stage
+ *  Ported from _incObj/09 Sonic in Special Stage.asm (REV01, FixBugs=0).
+ *
+ *  Física propia del SS:
+ *    - Sin slope resist, sin air drag, sin cap de jump height
+ *    - Movimiento D-pad es relativo a la rotación del stage
+ *    - La gravedad tira en la dirección de la rotación del stage
+ *    - La colisión con el layout usa block IDs, no FindFloor
+ *    - Los ítems se recogen leyendo el bloque sobre el que está Sonic
+ * =========================================================================== */
+
+#define sonss_maxspeed      0x800
+#define sonss_acceleration  0x0C
+#define sonss_deceleration  0x40
+#define sonss_jumpspeed     0x680
+#define sonss_gravity       (gravity - 0x0E)   /* $38 - $0E = $2A */
+
+/* Campos específicos del objeto 09 */
+#define sonss_touchedblock_id(o)  (*(uint8_t  *)((uint8_t *)(o) + 0x30))
+#define sonss_touchedblock_ram(o) (*(uint32_t *)((uint8_t *)(o) + 0x32))
+#define sonss_timeout_updown(o)   (*(uint8_t  *)((uint8_t *)(o) + 0x36))
+#define sonss_timeout_r(o)        (*(uint8_t  *)((uint8_t *)(o) + 0x37))
+#define sonss_exittimer(o)        (*(uint16_t *)((uint8_t *)(o) + 0x38))
+#define sonss_ghoststate(o)       (*(uint8_t  *)((uint8_t *)(o) + 0x3A))
+
+/* El offset 0x3C–0x3F queda libre; el bloque empieza en 0x30 (16 bytes). */
+
+static void SonicSpecial_Main(void *obj);
+
+static void SonicSS_Main(uint8_t *o);
+static void SonicSS_Control(uint8_t *o);
+static void SonicSS_ExitStage(uint8_t *o);
+static void SonicSS_ExitStage_Unused(uint8_t *o);
+static void SonicSS_OnWall(uint8_t *o);
+static void SonicSS_InAir(uint8_t *o);
+static void SonicSS_Display(uint8_t *o);
+static void SonicSS_Move(uint8_t *o);
+static void SonicSS_MoveLeft(uint8_t *o);
+static void SonicSS_MoveRight(uint8_t *o);
+static void SonicSS_CheckDpadLetGo(uint8_t *o);
+static void SonicSS_AngleSpeed(uint8_t *o);
+static void SonicSS_Jump(uint8_t *o);
+static void SonicSS_Fall(uint8_t *o);
+static int  SonicSS_FindWall(uint8_t *o, int32_t y_fp, int32_t x_fp);
+static void SonicSS_FindWall_CheckType(uint8_t *o, uint8_t block_id,
+                                       uint8_t *block_addr, uint8_t *flag);
+static void SonicSS_ChkItems_NonSolidActionBlock(uint8_t *o);
+static void SonicSS_ChkItems_SolidActionBlock(uint8_t *o);
+static void SonicSS_MakeGhostSolid(uint8_t *o);
+static void SS_FixCamera(uint8_t *o);
+
+/* --- Dispatcher principal (Object 09 entry). --- */
+static void SonicSpecial_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    if (v_debuguse) {
+        SS_FixCamera(o);             /* keep camera centered while in debug mode */
+        DebugMode_Main(o);           /* run debug mode instead of Sonic */
+        return;
+    }
+
+    switch (obRoutine(o)) {
+        case 0: SonicSS_Main(o);              break;
+        case 2: SonicSS_Control(o);           break;
+        case 4: SonicSS_ExitStage(o);         break;
+        case 6: SonicSS_ExitStage_Unused(o);  break;
+    }
+}
+
+/* --- Routine 0: initialization. --- */
+static void SonicSS_Main(uint8_t *o) {
+    obRoutine(o) += 2;                              /* → SonicSS_Control */
+    obHeight(o)  = sonic_roll_height;
+    obWidth(o)   = sonic_roll_width;
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Sonic;
+    obGfx(o)     = ArtTile_Sonic;
+    obRender(o)  = sprite_cam_field;
+    obPriority(o)= 0;
+
+    obAnim(o)    = id_Roll;
+    obStatus(o) |= (1 << 2);                        /* rolling flag */
+    obStatus(o) |= (1 << 1);                        /* in-air flag */
+}
+
+/* --- Routine 2: main control loop. --- */
+static void SonicSS_Control(uint8_t *o) {
+    /* Debug mode toggle: B while f_debugmode set. FixBugs=0 lacks the rts
+       after the flag is set (comment in ASM says the original jumps when
+       entering debug — we replicate it by just setting the flag). */
+    if (f_debugmode) {
+        if (v_jpadpress1 & btnB) {
+            v_debuguse = 1;
+            /* no return — matches FixBugs=0 */
+        }
+    }
+
+    sonss_touchedblock_id(o) = 0;                   /* no block touched yet */
+
+    uint8_t status = obStatus(o) & 0x02;            /* in-air flag only */
+    if (status == 0) SonicSS_OnWall(o);
+    else             SonicSS_InAir(o);
+
+    Sonic_LoadGfx(o);
+    DisplaySprite(o);
+}
+
+/* --- Routine 4: spin stage while exiting. --- */
+static void SonicSS_ExitStage(uint8_t *o) {
+    v_ssrotate += ss_rotatespeed;
+    if ((uint16_t)v_ssrotate == (uint16_t)(0x60 * ss_rotatespeed)) {
+        v_gamemode = GM_Level;                      /* signal main loop to exit */
+    }
+    /* The second cmp never fires in practice (the game mode change above
+       short-circuits before v_ssrotate reaches $3000). Kept verbatim. */
+    if (v_ssrotate >= (int16_t)(2 * 0x60 * ss_rotatespeed)) {
+        v_ssrotate = 0;
+        v_ssangle  = 0x4000;
+        obRoutine(o) += 2;
+        sonss_exittimer(o) = 60;
+    }
+
+    v_ssangle += v_ssrotate;
+    Sonic_Animate(o);
+    Sonic_LoadGfx(o);
+    SS_FixCamera(o);
+    DisplaySprite(o);
+}
+
+/* --- Routine 6: secondary exit (unreachable in-game). --- */
+static void SonicSS_ExitStage_Unused(uint8_t *o) {
+    sonss_exittimer(o) -= 1;
+    if (sonss_exittimer(o) == 0) {
+        v_gamemode = GM_Level;
+    }
+    Sonic_Animate(o);
+    Sonic_LoadGfx(o);
+    SS_FixCamera(o);
+    DisplaySprite(o);
+}
+
+/* --- Mode 0: touching a solid block. --- */
+static void SonicSS_OnWall(uint8_t *o) {
+    SonicSS_Jump(o);
+    SonicSS_Move(o);
+    SonicSS_Fall(o);
+    SonicSS_Display(o);
+}
+
+/* --- Mode 2: airborne from jumping or falling. --- */
+static void SonicSS_InAir(uint8_t *o) {
+    /* SonicSS_JumpHeight_Unused is a bare rts in REV01. */
+    SonicSS_Move(o);
+    SonicSS_Fall(o);
+    /* fall through to display */
+    SonicSS_Display(o);
+}
+
+/* --- Common display / movement / item-pickup tail. --- */
+static void SonicSS_Display(uint8_t *o) {
+    SonicSS_ChkItems_NonSolidActionBlock(o);
+    SonicSS_ChkItems_SolidActionBlock(o);
+
+    SpeedToPos(o);
+    SS_FixCamera(o);
+
+    v_ssangle += v_ssrotate;
+
+    Sonic_Animate(o);
+}
+
+/* --- D-pad → inertia. --- */
+static void SonicSS_Move(uint8_t *o) {
+    if (v_jpadhold2 & btnL) SonicSS_MoveLeft(o);
+    if (v_jpadhold2 & btnR) SonicSS_MoveRight(o);
+    SonicSS_CheckDpadLetGo(o);
+}
+
+static void SonicSS_MoveLeft(uint8_t *o) {
+    obStatus(o) |= (1 << 0);                        /* face left */
+
+    int16_t d0 = obInertia(o);
+    if (d0 > 0) {
+        /* .changeddirection */
+        d0 -= sonss_deceleration;
+        obInertia(o) = d0;
+        return;
+    }
+    /* .accelerate */
+    d0 -= sonss_acceleration;
+    if (d0 <= -sonss_maxspeed) d0 = -sonss_maxspeed;
+    obInertia(o) = d0;
+}
+
+static void SonicSS_MoveRight(uint8_t *o) {
+    obStatus(o) &= ~(1 << 0);                       /* face right */
+
+    int16_t d0 = obInertia(o);
+    if (d0 < 0) {
+        /* .changedirection */
+        d0 += sonss_deceleration;
+        obInertia(o) = d0;
+        return;
+    }
+    /* .accelerate */
+    d0 += sonss_acceleration;
+    if (d0 >= sonss_maxspeed) d0 = sonss_maxspeed;
+    obInertia(o) = d0;
+}
+
+static void SonicSS_CheckDpadLetGo(uint8_t *o) {
+    if (v_jpadhold2 & (btnL | btnR)) {
+        SonicSS_AngleSpeed(o);
+        return;
+    }
+    int16_t d0 = obInertia(o);
+    if (d0 == 0) {
+        SonicSS_AngleSpeed(o);
+        return;
+    }
+    if (d0 < 0) {
+        d0 += sonss_acceleration;
+        if (d0 < 0) obInertia(o) = d0;
+        else        obInertia(o) = 0;
+    } else {
+        d0 -= sonss_acceleration;
+        if (d0 > 0) obInertia(o) = d0;
+        else        obInertia(o) = 0;
+    }
+    SonicSS_AngleSpeed(o);
+}
+
+/* --- Apply inertia in the rotated frame. --- */
+static void SonicSS_AngleSpeed(uint8_t *o) {
+    uint8_t angle = (uint8_t)((v_ssangle >> 8) + 0x20);
+    angle &= 0xC0;
+    angle = (uint8_t)(-angle);                      /* neg.b */
+
+    int16_t s0, s1;
+    CalcSine(angle, &s0, &s1);
+
+    int32_t dx = (int32_t)s1 * obInertia(o);        /* cos * inertia */
+    int32_t dy = (int32_t)s0 * obInertia(o);        /* sin * inertia */
+
+    /* ASM: add.l d1,obX(a0) / add.l d0,obY(a0) — the .l read covers pixel+subpixel */
+    int32_t x_fp = ((uint32_t)obX(o) << 16) | (uint16_t)obSubpixelX(o);
+    int32_t y_fp = ((uint32_t)obY(o) << 16) | (uint16_t)obSubpixelY(o);
+    x_fp += dx;
+    y_fp += dy;
+
+    /* Check the *target* position for wall collision before committing. */
+    if (SonicSS_FindWall(o, y_fp, x_fp)) {
+        /* Hit a wall: undo, zero inertia. */
+        obInertia(o) = 0;
+        return;
+    }
+
+    obX(o)         = (int16_t)((uint32_t)x_fp >> 16);
+    obSubpixelX(o) = (int16_t)(x_fp & 0xFFFF);
+    obY(o)         = (int16_t)((uint32_t)y_fp >> 16);
+    obSubpixelY(o) = (int16_t)(y_fp & 0xFFFF);
+}
+
+/* --- Jump from a wall. --- */
+static void SonicSS_Jump(uint8_t *o) {
+    if (!(v_jpadpress2 & btnABC)) return;
+
+    uint8_t angle = (uint8_t)((v_ssangle >> 8) & 0xFC);
+    angle = (uint8_t)(-angle);
+    angle -= 0x40;
+
+    int16_t s0, s1;
+    CalcSine(angle, &s0, &s1);
+
+    int32_t vx = ((int32_t)s1 * sonss_jumpspeed) >> 8;
+    int32_t vy = ((int32_t)s0 * sonss_jumpspeed) >> 8;
+    obVelX(o) = (int16_t)vx;
+    obVelY(o) = (int16_t)vy;
+    obStatus(o) |= (1 << 1);                        /* in-air */
+
+    Sound_Queue(sfx_Jump, false);
+}
+
+/* --- Gravity in the rotated frame. --- */
+static void SonicSS_Fall(uint8_t *o) {
+    uint8_t angle = (uint8_t)((v_ssangle >> 8) & 0xFC);
+    int16_t s0, s1;
+    CalcSine(angle, &s0, &s1);
+
+    /* d0 = sin * gravity; d1 = cos * gravity */
+    int32_t d0 = (int32_t)s0 * sonss_gravity;
+    int32_t d1 = (int32_t)s1 * sonss_gravity;
+
+    /* d0 += (velX << 8); d1 += (velY << 8) */
+    d0 += (int32_t)obVelX(o) << 8;
+    d1 += (int32_t)obVelY(o) << 8;
+
+    int32_t x_fp = ((uint32_t)obX(o) << 16) | (uint16_t)obSubpixelX(o);
+    int32_t y_fp = ((uint32_t)obY(o) << 16) | (uint16_t)obSubpixelY(o);
+
+    /* Try X first. */
+    x_fp += d0;
+    if (SonicSS_FindWall(o, y_fp, x_fp)) {
+        x_fp -= d0;
+        obVelX(o) = 0;
+        obStatus(o) &= ~(1 << 1);                   /* landed */
+
+        /* Re-check Y with original X. */
+        y_fp += d1;
+        if (SonicSS_FindWall(o, y_fp, x_fp)) {
+            y_fp -= d1;
+            obVelY(o) = 0;
+        }
+        obVelX(o) = (int16_t)(d0 >> 8);
+        obVelY(o) = (int16_t)(d1 >> 8);
+        return;
+    }
+
+    /* X move is fine: try Y. */
+    y_fp += d1;
+    if (SonicSS_FindWall(o, y_fp, x_fp)) {
+        y_fp -= d1;
+        obVelY(o) = 0;
+        obStatus(o) &= ~(1 << 1);                   /* landed */
+        obVelX(o) = (int16_t)(d0 >> 8);
+        obVelY(o) = (int16_t)(d1 >> 8);
+        return;
+    }
+
+    /* Both moves fit: commit and stay airborne. */
+    obVelX(o) = (int16_t)(d0 >> 8);
+    obVelY(o) = (int16_t)(d1 >> 8);
+    obStatus(o) |= (1 << 1);
+}
+
+/* --- Collision with SS layout: check the 4 blocks around (x_fp, y_fp). --- */
+static int SonicSS_FindWall(uint8_t *o, int32_t y_fp, int32_t x_fp) {
+    uint8_t *a1 = RAM_ADDR(v_sslayout_base);
+
+    uint16_t d4 = (uint16_t)(int16_t)(y_fp >> 16);
+    d4 += 20 + (ss_blocksize * 2);
+    d4  = (uint16_t)(d4 / ss_blocksize);
+    d4  = (uint16_t)(d4 * ss_layout_rowlength);
+    a1 += d4;
+
+    d4  = (uint16_t)(int16_t)(x_fp >> 16);
+    d4 += 20;
+    d4  = (uint16_t)(d4 / ss_blocksize);
+    a1 += d4;
+
+    uint8_t flag = 0;
+    uint8_t block;
+
+    block = *a1++;  SonicSS_FindWall_CheckType(o, block, a1 - 1, &flag);
+    block = *a1++;  SonicSS_FindWall_CheckType(o, block, a1 - 1, &flag);
+    a1 += ss_layout_rowlength - 2;
+    block = *a1++;  SonicSS_FindWall_CheckType(o, block, a1 - 1, &flag);
+    block = *a1++;  SonicSS_FindWall_CheckType(o, block, a1 - 1, &flag);
+
+    return flag != 0;
+}
+
+static void SonicSS_FindWall_CheckType(uint8_t *o, uint8_t block_id,
+                                       uint8_t *block_addr, uint8_t *flag) {
+    if (block_id == 0) return;                      /* blank */
+    if (block_id == id_SS_1Up) return;              /* 1-Up is not solid */
+    if (block_id < id_SS_Ring) goto solid;          /* $01-$39 are solid */
+    if (block_id >= id_SS_Glass_Ani1) goto solid;   /* $4B-$4E (broken glass) solid */
+    return;
+
+solid:
+    sonss_touchedblock_id(o)  = block_id;
+    sonss_touchedblock_ram(o) = (uint32_t)(block_addr - ram);
+    *flag = 0xFF;
+}
+
+/* --- Non-solid items (rings, emeralds, 1-Ups, ghost tags). --- */
+static void SonicSS_ChkItems_NonSolidActionBlock(uint8_t *o) {
+    uint8_t *a1 = RAM_ADDR(v_sslayout_base);
+
+    uint16_t d4 = (uint16_t)obY(o);
+    d4 += 80;
+    d4  = (uint16_t)(d4 / ss_blocksize);
+    d4  = (uint16_t)(d4 * ss_layout_rowlength);
+    a1 += d4;
+
+    d4  = (uint16_t)obX(o);
+    d4 += 32;
+    d4  = (uint16_t)(d4 / ss_blocksize);
+    a1 += d4;
+
+    uint8_t block = *a1;
+    if (block == 0) {
+        /* No item here. If ghost state was armed (==2), make the ghost
+           blocks solid. */
+        if (sonss_ghoststate(o) != 0) {
+            SonicSS_MakeGhostSolid(o);
+        }
+        return;
+    }
+
+    /* Ring? ($3A) */
+    if (block == id_SS_Ring) {
+        uint8_t *a2 = SS_FindFreeAnimationSlot();
+        ss_ani_id(a2) = SS_ANI_ID_RINGSPARKS;
+        ss_ani_block(a2) = (uint32_t)(a1 - ram);
+
+        CollectRing(o);
+        if (v_rings >= ss_continue_rings) {
+            if (!(v_lifecount & 1)) {
+                v_lifecount |= 1;
+                v_continues++;
+                Sound_Queue(sfx_Continue, false);
+            }
+        }
+        return;
+    }
+
+    /* 1-Up? ($28) */
+    if (block == id_SS_1Up) {
+        uint8_t *a2 = SS_FindFreeAnimationSlot();
+        ss_ani_id(a2) = SS_ANI_ID_1UP;
+        ss_ani_block(a2) = (uint32_t)(a1 - ram);
+
+        v_lives++;
+        f_lifecount++;
+        Sound_Queue(bgm_ExtraLife, false);
+        return;
+    }
+
+    /* Emerald? ($3B-$40) */
+    if (block >= id_SS_Emerald1_Blue && block <= id_SS_Emerald6_Grey) {
+        uint8_t *a2 = SS_FindFreeAnimationSlot();
+        ss_ani_id(a2) = SS_ANI_ID_EMERALDSPARKS;
+        ss_ani_block(a2) = (uint32_t)(a1 - ram);
+
+        if (v_emeralds != ss_emeralds_num) {
+            uint8_t d4 = (uint8_t)(block - id_SS_Emerald1_Blue);
+            RAM_ADDR(v_emldlist)[v_emeralds] = d4;
+            v_emeralds++;
+        }
+        Sound_Queue(bgm_Emerald, false);
+        return;
+    }
+
+    /* Ghost block? ($41) */
+    if (block == id_SS_Ghost) {
+        sonss_ghoststate(o) = 1;
+        return;
+    }
+
+    /* Ghost trigger? ($4A) */
+    if (block == id_SS_InvGhostTrigger) {
+        if (sonss_ghoststate(o) == 1) {
+            sonss_ghoststate(o) = 2;
+        }
+    }
+    /* Anything else: nothing to do. */
+}
+
+/* --- Make every ghost block solid (replace $41 with $2C). --- */
+static void SonicSS_MakeGhostSolid(uint8_t *o) {
+    if (sonss_ghoststate(o) == 2) {
+        /* Convertir ghost blocks en solid (el bucle actual) */
+        uint8_t *p = RAM_ADDR(v_sslayout_actual);
+        int rows = (v_sslayout_end - v_sslayout_actual) / ss_layout_rowlength;
+        for (int r = 0; r < rows; r++) {
+            for (int i = 0; i < ss_layout_rowlength / 2; i++) {
+                if (p[i] == id_SS_Ghost) {
+                    p[i] = id_SS_RedWhite;
+                }
+            }
+            p += ss_layout_rowlength;
+        }
+    }
+    /* .GhostNotSolid: se ejecuta SIEMPRE */
+    sonss_ghoststate(o) = 0;
+}
+
+/* --- Solid action blocks (bumper, GOAL, UP/DOWN, R, glass). --- */
+static void SonicSS_ChkItems_SolidActionBlock(uint8_t *o) {
+    uint8_t id = sonss_touchedblock_id(o);
+
+    if (id == 0) {
+        /* Decrement timeouts. */
+        if (sonss_timeout_updown(o) != 0) {
+            sonss_timeout_updown(o)--;
+            if ((int8_t)sonss_timeout_updown(o) < 0) {
+                sonss_timeout_updown(o) = 0;
+            }
+        }
+        if (sonss_timeout_r(o) != 0) {
+            sonss_timeout_r(o)--;
+            if ((int8_t)sonss_timeout_r(o) < 0) {
+                sonss_timeout_r(o) = 0;
+            }
+        }
+        return;
+    }
+
+    /* Bumper? */
+    if (id == id_SS_Bumper) {
+        uint32_t off = sonss_touchedblock_ram(o) - 1;
+        uint16_t col = off & (ss_layout_rowlength - 1);
+        int16_t bumper_x = (int16_t)(col * ss_blocksize) - 20;
+        uint16_t row = off >> 7;
+        int16_t bumper_y = (int16_t)(row * ss_blocksize) - (20 + ss_blocksize * 2);
+
+        int16_t dx = (int16_t)(bumper_x - obX(o));
+        int16_t dy = (int16_t)(bumper_y - obY(o));
+        uint8_t angle = CalcAngle(dx, dy);
+
+        int16_t s0, s1;
+        CalcSine(angle, &s0, &s1);
+        int16_t vx = (int16_t)(((int32_t)s1 * -0x700) >> 8);
+        int16_t vy = (int16_t)(((int32_t)s0 * -0x700) >> 8);
+        obVelX(o) = vx;
+        obVelY(o) = vy;
+        obStatus(o) |= (1 << 1);
+
+        uint8_t *a2 = SS_FindFreeAnimationSlot();
+        ss_ani_id(a2) = SS_ANI_ID_BUMPER;
+        ss_ani_block(a2) = sonss_touchedblock_ram(o) - 1;
+        Sound_Queue(sfx_Bumper, false);
+        return;
+    }
+
+    /* GOAL? */
+    if (id == id_SS_GOAL) {
+        obRoutine(o) += 2;                          /* → SonicSS_ExitStage */
+        Sound_Queue(sfx_SSGoal, false);
+        return;
+    }
+
+    /* UP block? */
+    if (id == id_SS_UP) {
+        if (sonss_timeout_updown(o) != 0) return;
+        sonss_timeout_updown(o) = ss_timeout;
+
+        if (!(v_ssrotate & 0x0040)) {               /* bit 6 not set: slow speed */
+            v_ssrotate <<= 1;
+            uint8_t *p = RAM_ADDR(sonss_touchedblock_ram(o) - 1);
+            *p = id_SS_DOWN;
+        }
+        Sound_Queue(sfx_SSItem, false);
+        return;
+    }
+
+    /* DOWN block? */
+    if (id == id_SS_DOWN) {
+        if (sonss_timeout_updown(o) != 0) return;
+        sonss_timeout_updown(o) = ss_timeout;
+
+        if (v_ssrotate & 0x0040) {                  /* bit 6 set: fast speed */
+            v_ssrotate >>= 1;
+            uint8_t *p = RAM_ADDR(sonss_touchedblock_ram(o) - 1);
+            *p = id_SS_UP;
+        }
+        Sound_Queue(sfx_SSItem, false);
+        return;
+    }
+
+    /* R block? */
+    if (id == id_SS_R) {
+        if (sonss_timeout_r(o) != 0) return;
+        sonss_timeout_r(o) = ss_timeout;
+
+        uint8_t *a2 = SS_FindFreeAnimationSlot();
+        ss_ani_id(a2) = SS_ANI_ID_REVERSE;
+        ss_ani_block(a2) = sonss_touchedblock_ram(o) - 1;
+
+        v_ssrotate = (int16_t)(-v_ssrotate);
+        Sound_Queue(sfx_SSItem, false);
+        return;
+    }
+
+    /* Glass block? */
+    if (id >= id_SS_Glass1_Blue && id <= id_SS_Glass4_Pink) {
+        uint8_t *a2 = SS_FindFreeAnimationSlot();
+        ss_ani_id(a2) = SS_ANI_ID_GLASSBLOCK;
+        uint8_t *block = RAM_ADDR(sonss_touchedblock_ram(o) - 1);
+        ss_ani_block(a2) = (uint32_t)(uintptr_t)block;
+
+        uint8_t next_id = (uint8_t)(*block + 1);
+        if (next_id > id_SS_Glass4_Pink) next_id = 0;
+        /* SS_AniGlassBlock lee este valor en su tercer byte del slot. */
+        ss_ani_frame(a2) = next_id;
+
+        Sound_Queue(sfx_SSGlass, false);
+    }
+}
+
+/* --- Camera follows Sonic (SS version). --- */
+static void SS_FixCamera(uint8_t *o) {
+    int16_t d2 = obY(o);
+    int16_t d3 = obX(o);
+    int16_t d0 = (int16_t)RAM_WORD(0xF700);         /* v_screenposx low word */
+
+    d3 = (int16_t)(d3 - 320 / 2);
+    if ((uint16_t)d3 < (uint16_t)(320 / 2)) {
+        /* Borrow would have been set: Sonic is left of x=160, skip X. */
+    } else {
+        d0 = (int16_t)(d0 - d3);
+        RAM_WORD(0xF700) = (uint16_t)((int16_t)RAM_WORD(0xF700) - d0);
+    }
+
+    d0 = (int16_t)RAM_WORD(0xF704);                 /* v_screenposy low word */
+    d2 = (int16_t)(d2 - 224 / 2);
+    if ((uint16_t)d2 < (uint16_t)(224 / 2)) {
+        /* Skip Y. */
+    } else {
+        d0 = (int16_t)(d0 - d2);
+        RAM_WORD(0xF704) = (uint16_t)((int16_t)RAM_WORD(0xF704) - d0);
     }
 }
