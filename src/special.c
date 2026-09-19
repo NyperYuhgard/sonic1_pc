@@ -449,7 +449,7 @@ void PalCycle_SS(void) {
         /* Ramo PalCycle_SS_2 */
         if (!Pal_SSCyc2) return;
         uint16_t idx = v_palss_index;
-        if (pal_off < (0x80 | 0x0A)) idx += 1;
+        if (pal_off >= (0x80 | 0x0A)) idx += 1; /* ASM: cmpi.w #$8A,d0 / blo.s / addq.w #1,d1 */
         idx *= 0x2A;
         if (idx + 0x2A > Pal_SSCyc2_len) return;
         const uint8_t *cyc = Pal_SSCyc2 + idx;
@@ -457,10 +457,11 @@ void PalCycle_SS(void) {
         int extra = sub & 1;
         sub &= 0xFE;
         if (extra) {
+            /* ASM: lea (v_palette_line_4+$E).w,a2 / 3× move.l (a1),(a1+4),(a1+8) -> (a2)+
+             * = 6 colores (12 bytes) en big-endian → ensamblar a palabras host. */
             uint16_t *p4 = (uint16_t *)RAM_ADDR(v_palette_line_4 + 0x0E);
-            p4[0] = (uint16_t)((cyc[0] << 8) | cyc[1]);
-            p4[1] = (uint16_t)((cyc[4] << 8) | cyc[5]);
-            p4[2] = (uint16_t)((cyc[8] << 8) | cyc[9]);
+            for (int i = 0; i < 6; i++)
+                p4[i] = (uint16_t)((cyc[i * 2] << 8) | cyc[i * 2 + 1]);
         }
         cyc += 0x0C;
         uint16_t *dst;
@@ -475,9 +476,15 @@ void PalCycle_SS(void) {
         dst[1] = (uint16_t)((cyc[off+2] << 8) | cyc[off+3]);
         dst[2] = (uint16_t)((cyc[off+4] << 8) | cyc[off+5]);
     } else {
-        /* Pal_SSCyc1 path: 12 bytes a v_palette_line_3+$E */
-        if (!Pal_SSCyc1 || Pal_SSCyc1_len < 12) return;
-        memcpy(RAM_ADDR(v_palette_line_3 + 0x0E), Pal_SSCyc1, 12);
+        /* Pal_SSCyc1 path: 6 colores a v_palette_line_3+$E.
+         * ASM: lea (Pal_SSCyc1).l,a1 / adda.w d0,a1 — palette offset applied.
+         * Los assets son big-endian; v_palette guarda palabras host (igual
+         * que PalLoad / palcycle_ghz), así que hay que ensamblar cada color. */
+        if (!Pal_SSCyc1 || pal_off + 12 > Pal_SSCyc1_len) return;
+        const uint8_t *c1 = Pal_SSCyc1 + pal_off;
+        uint16_t *dst = (uint16_t *)RAM_ADDR(v_palette_line_3 + 0x0E);
+        for (int i = 0; i < 6; i++)
+            dst[i] = (uint16_t)((c1[i * 2] << 8) | c1[i * 2 + 1]);
     }
 }
 
