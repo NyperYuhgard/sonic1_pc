@@ -213,6 +213,15 @@ retry:
         obY(player) = (int16_t)((SS_StartLoc[d0*4+2] << 8) | SS_StartLoc[d0*4+3]);
     }
 
+    uint8_t *pl = RAM_ADDR(v_player);
+    fprintf(stderr, "[SS_Load] Sonic start: X=%d Y=%d\n", obX(pl), obY(pl));
+    fprintf(stderr, "[SS_Load] layout ptr=%p actual=%p\n",
+            RAM_ADDR(v_sslayout_base), RAM_ADDR(v_sslayout_actual));
+    fprintf(stderr, "[SS_Load] first 16 bytes of actual: ");
+    for (int k = 0; k < 16; k++)
+       fprintf(stderr, "%02X ", RAM_ADDR(v_sslayout_actual)[k]);
+    fprintf(stderr, "\n");
+
     /* EniDec del layout a v_sslayout_decompress (=$3020) */
     const uint8_t *const layouts[6] = { SS_1, SS_2, SS_3, SS_4, SS_5, SS_6 };
     if (d0 < 6 && layouts[d0]) {
@@ -282,41 +291,75 @@ retry:
  * =========================================================================== */
 void SS_BGLoad(void) {
     /* --- Birds & Fish ---
-       En el ASM son 7 canvases (8x8 cells each) que se alternan para
-       animar el morphing. El canvas 0 usa el tilemap "checkerboard". */
+       Eni_SSBg1 produce 8 tilemaps de 8x8 celdas (una por canvas + checkerboard).
+       Buffer layout:
+         +0x000: checkerboard    (canvas 6, celda par)
+         +0x080: canvas d7=6     (bird frame 1)
+         +0x100: canvas d7=5     (bird frame 2)
+         ...
+         +0x380: canvas d7=0     (fish frame 6)
+    */
     if (Eni_SSBg1) {
-        static uint16_t bg_buf[8 * 8 * 8 + 64];
+        static uint16_t bg_buf[1024];   /* 8 canvases × 64 celdas */
         EniDec(Eni_SSBg1, bg_buf, ArtTile_SS_Background_Fish | Tile_Pal3);
 
-        uint32_t vram_addr = ArtTile_SS_Plane_1 * tile_size + 0x1000;
-        const uint16_t *canvas = bg_buf;
+        uint32_t vram_addr = ArtTile_SS_Plane_1 * tile_size;
 
-        for (int canvas_i = 6; canvas_i >= 0; canvas_i--) {
-            uint32_t d3 = vram_addr;
-            for (int row = 3; row >= 0; row--) {
-                int d4 = (canvas_i >= 3) ? 0 : 1;
-                for (int col = 7; col >= 0; col--) {
-                    d4 ^= 1;
-                    if (!d4) {
-                        const uint16_t *src = (canvas_i == 6) ? bg_buf : canvas;
-                        VDP_CopyTilemapToVRAM(src, d3, 8, 8);
+        /* ASM: lea (v_ram_start + 8*8*2).l,a2
+           a2 apunta al canvas 1 (se salta el checkerboard en +0x000). */
+        const uint16_t *a2 = bg_buf + 64;
+
+        for (int d7 = 7 - 1; d7 >= 0; d7--) {
+            uint32_t d0 = vram_addr;
+
+            /* ASM: cmpi.w #4-1,d7 / bhs.s .loop_rows
+               d4 = 0 si d7 >= 3 (bird), d4 = 1 si d7 < 3 (fish). */
+            int d4 = (d7 >= 4 - 1) ? 0 : 1;
+
+            /* 4 filas visibles */
+            for (int d6 = 4 - 1; d6 >= 0; d6--) {
+                /* 8 celdas por fila */
+                for (int d5 = 8 - 1; d5 >= 0; d5--) {
+                    const uint16_t *a1 = a2;   /* ASM: movea.l a2,a1 */
+
+                    d4 ^= 1;                    /* ASM: eori.b #1,d4 */
+                    if (d4 != 0) {
+                        /* .is_birdfish: dibuja el animal actual */
+                        VDP_CopyTilemapToVRAM(a1, d0, 8, 8);
+                    } else if (d7 == 7 - 1) {
+                        /* ASM: cmpi.w #7-1,d7 / bne.s .skip
+                                 lea (v_ram_start).l,a1 (checkerboard) */
+                        VDP_CopyTilemapToVRAM(bg_buf, d0, 8, 8);
                     }
-                    d3 += 8 * 2;   /* skip 8 cells ($10 bytes) */
+                    /* else: skip (blank) */
+
+                    /* ASM: addi.l #(8*2)<<16,d0  → +$10 bytes */
+                    d0 += 8 * 2;
                 }
-                d3 += 7 * 0x80;    /* skip 7 rows ($380 bytes) */
+
+                /* ASM: addi.l #((8-1)*$80)<<16,d0  → +$380 bytes */
+                d0 += (8 - 1) * 0x80;
+
+                /* ASM: eori.b #1,d4  (stagger para la próxima fila) */
                 d4 ^= 1;
             }
+
+            /* ASM: addi.l #$1000<<16,d3  → siguiente canvas en VRAM */
             vram_addr += 0x1000;
-            canvas += 8 * 8;
+
+            /* ASM: adda.w #8*8*2,a2  → siguiente canvas en RAM */
+            a2 += 8 * 8;
         }
     }
 
-    /* --- Clouds & Bubbles --- */
+    /* --- Clouds & Bubbles --- (igual que antes) */
     if (Eni_SSBg2) {
         static uint16_t cloud_buf[64 * 64];
         EniDec(Eni_SSBg2, cloud_buf, ArtTile_SS_Background_Clouds | Tile_Pal3);
-        VDP_CopyTilemapToVRAM(cloud_buf, ArtTile_SS_Plane_5 * tile_size,       64, 32);
-        VDP_CopyTilemapToVRAM(cloud_buf, ArtTile_SS_Plane_5 * tile_size + 0x1000, 64, 64);
+        VDP_CopyTilemapToVRAM(cloud_buf,
+                              ArtTile_SS_Plane_5 * tile_size,        64, 32);
+        VDP_CopyTilemapToVRAM(cloud_buf,
+                              ArtTile_SS_Plane_5 * tile_size + 0x1000, 64, 64);
     }
 }
 
@@ -461,78 +504,94 @@ static const int8_t SS_Bubble_WobbleData[20] = {
 };
 
 void SS_BGAnimate(void) {
+    /* ASM: move.w (v_ssbganim).w,d0 / bne.s .not_0 */
     uint16_t d0 = v_ssbganim;
 
     if (d0 == 0) {
-        v_bgscreenposy = 0;
-        v_bgscrposy_vdp = 0;
-        //VDP_SetVSRAM(0, 0);
+        v_bgscreenposy   = 0;
+        v_bgscrposy_vdp  = 0;
     }
-    if (d0 == 6) {
-        v_bg3screenposx++;
-        v_bgscreenposy++;
-        v_bgscrposy_vdp = (uint16_t)v_bgscreenposy;
-        //VDP_SetVSRAM(0, (uint16_t)v_bgscreenposy);
-    }
-    if (d0 < 8) {
-        /* Bubbles wobble */
+
+    const uint8_t *a2;
+    const uint8_t *a3;
+
+    /* ASM: cmpi.w #8,d0 / bhs.s SS_BGBirdCloud */
+    if (d0 >= 8) {
+        /* ---- SS_BGBirdCloud ---- */
+
+        /* ASM: cmpi.w #$C,d0 / bne.s .not_C */
+        if (d0 == 0x0C) {
+            v_bg3screenposx--;
+            uint32_t *clouds = (uint32_t *)RAM_ADDR(v_ss_scroll_clouds);
+            uint32_t dd = 0x18000;
+            for (int i = 0; i < 7; i++) {
+                clouds[i] -= dd;
+                dd        -= 0x2000;
+            }
+        }
+
+        a2 = SS_Cloud_ScrollBlocks;
+        a3 = (const uint8_t *)RAM_ADDR(v_ss_scroll_clouds);
+    } else {
+        /* ---- SS_BGWobble ---- */
+
+        /* ASM: cmpi.w #6,d0 / bne.s .not_6 */
+        if (d0 == 6) {
+            v_bg3screenposx++;
+            v_bgscreenposy++;
+            v_bgscrposy_vdp = (uint16_t)v_bgscreenposy;
+        }
+
+        /* ASM: SS_BGWobbleLoop */
         int8_t *buf = (int8_t *)RAM_ADDR(v_ss_scroll_bubbles);
         for (int i = 0; i < 10; i++) {
-            int16_t *w0 = (int16_t *)(buf + i * 4);
-            int16_t *w1 = (int16_t *)(buf + i * 4 + 2);
+            int16_t *w0 = (int16_t *)(buf + i * 4);       /* amplitude*sin */
+            int16_t *w1 = (int16_t *)(buf + i * 4 + 2);   /* accumulated angle */
             int16_t s0, s1;
-            CalcSine((uint8_t)*w1, &s0, &s1);
+            CalcSine((uint8_t)*w1, &s0, &s1);              /* sin=s0, cos=s1 */
             int8_t amp  = SS_Bubble_WobbleData[i * 2];
             int8_t offv = SS_Bubble_WobbleData[i * 2 + 1];
             int32_t prod = (int32_t)amp * s0;
             *w0 = (int16_t)(prod >> 8);
             *w1 = (int16_t)(*w1 + offv);
         }
+
+        a2 = SS_Bubble_ScrollBlocks;
+        a3 = (const uint8_t *)RAM_ADDR(v_ss_scroll_bubbles);
     }
-    if (d0 >= 8) {
-        if (d0 == 0x0C) {
-            v_bg3screenposx--;
-            uint32_t *clouds = (uint32_t *)RAM_ADDR(v_ss_scroll_clouds);
-            uint32_t d2 = 0x18000;
-            for (int i = 0; i < 7; i++) {
-                clouds[i] -= d2;
-                d2 -= 0x2000;
-            }
-        }
-        /* Aplicar a v_hscrolltablebuffer */
-        const uint8_t *a2 = SS_Cloud_ScrollBlocks;
-        const uint8_t *a3 = (const uint8_t *)RAM_ADDR(v_ss_scroll_clouds);
-        uint16_t *a1 = (uint16_t *)RAM_ADDR(v_hscrolltablebuffer);
-        uint16_t bg3x = v_bg3screenposx;
-        int d2_off = (-(int16_t)v_bgscreenposy) & 0xFF;
-        d2_off <<= 2;
-        int block_count = *a2++;
-        for (int b = 0; b <= block_count; b++) {
-            int16_t val = *(const int16_t *)a3; a3 += 2;
-            a3 += 2;   /* skip next word */
-            int line_count = *a2++;
-            for (int l = 0; l < line_count; l++) {
-                a1[d2_off / 2] = (uint16_t)(val + bg3x);
-                d2_off = (d2_off + 4) & 0x3FC;
-            }
-        }
-    } else {
-        /* Bubbles path: similar pero con SS_Bubble_ScrollBlocks */
-        const uint8_t *a2 = SS_Bubble_ScrollBlocks;
-        const uint8_t *a3 = (const uint8_t *)RAM_ADDR(v_ss_scroll_bubbles);
-        uint16_t *a1 = (uint16_t *)RAM_ADDR(v_hscrolltablebuffer);
-        uint16_t bg3x = v_bg3screenposx;
-        int d2_off = (-(int16_t)v_bgscreenposy) & 0xFF;
-        d2_off <<= 2;
-        int block_count = *a2++;
-        for (int b = 0; b <= block_count; b++) {
-            int16_t val = *(const int16_t *)a3; a3 += 2;
-            a3 += 2;
-            int line_count = *a2++;
-            for (int l = 0; l < line_count; l++) {
-                a1[d2_off / 2] = (uint16_t)(val + bg3x);
-                d2_off = (d2_off + 4) & 0x3FC;
-            }
+
+    /* ---- SS_Scroll_CloudsBubbles (tail común) ----
+       ASM:
+           lea (v_hscrolltablebuffer).w,a1
+           move.w (v_bg3screenposx).w,d0
+           neg.w d0
+           swap d0                 ; d0 = (-bg3x << 16) | 0
+           ...
+           .loop_line:
+               move.l d0,(a1,d2.w) ; escribe AMBOS words (plane A = -bg3x, plane B = word0)
+               addq.w #4,d2
+               andi.w #$3FC,d2
+               dbf d1,.loop_line
+    */
+    uint8_t *a1 = RAM_ADDR(v_hscrolltablebuffer);
+    int16_t bg3x_neg = -(int16_t)v_bg3screenposx;
+    int d2_off = (-(int16_t)v_bgscreenposy) & 0xFF;
+    d2_off <<= 2;                        /* byte offset = row * 4 */
+
+    int block_count = *a2++;
+    for (int b = 0; b <= block_count; b++) {
+        /* ASM: move.w (a3)+,d0 ; addq.w #2,a3 */
+        uint16_t word0 = *(const uint16_t *)a3;
+        a3 += 4;
+
+        int line_count = *a2++;
+        for (int l = 0; l < line_count; l++) {
+            /* Escribe el par de words (little-endian en el host) */
+            int16_t *row = (int16_t *)(a1 + d2_off);
+            row[0] = bg3x_neg;              /* plane A / FG scroll */
+            row[1] = (int16_t)word0;        /* plane B / BG scroll */
+
+            d2_off = (d2_off + 4) & 0x3FC;
         }
     }
 }
@@ -677,10 +736,10 @@ uint8_t *SS_FindFreeAnimationSlot(void) {
 /* --- Handlers de animación --- */
 
 static void SS_AniRingSparks(uint8_t *a0) {
-    if (--a0[2] >= 0) return;   /* bpl.s .return */
+    if ((int8_t)(--a0[2]) >= 0) return;   /* ← fix */
     a0[2] = 5;
     uint8_t d0 = a0[3]++;
-    uint8_t *block = (uint8_t *)(uintptr_t)ss_ani_block(a0);
+    uint8_t *block = RAM_ADDR(ss_ani_block(a0));
     uint8_t new_id = SS_AniRingData[d0];
     *block = new_id;
     if (new_id == 0) {
@@ -690,10 +749,10 @@ static void SS_AniRingSparks(uint8_t *a0) {
 }
 
 static void SS_AniBumper(uint8_t *a0) {
-    if (--a0[2] >= 0) return;
+    if ((int8_t)(--a0[2]) >= 0) return;   /* ← fix */
     a0[2] = 7;
     uint8_t d0 = a0[3]++;
-    uint8_t *block = (uint8_t *)(uintptr_t)ss_ani_block(a0);
+    uint8_t *block = RAM_ADDR(ss_ani_block(a0));
     uint8_t new_id = SS_AniBumpData[d0];
     if (new_id == 0) {
         *(uint32_t *)a0 = 0;
@@ -705,10 +764,10 @@ static void SS_AniBumper(uint8_t *a0) {
 }
 
 static void SS_Ani1Up(uint8_t *a0) {
-    if (--a0[2] >= 0) return;
+    if ((int8_t)(--a0[2]) >= 0) return;   /* ← fix */
     a0[2] = 5;
     uint8_t d0 = a0[3]++;
-    uint8_t *block = (uint8_t *)(uintptr_t)ss_ani_block(a0);
+    uint8_t *block = RAM_ADDR(ss_ani_block(a0));
     uint8_t new_id = SS_Ani1UpData[d0];
     *block = new_id;
     if (new_id == 0) {
@@ -718,10 +777,10 @@ static void SS_Ani1Up(uint8_t *a0) {
 }
 
 static void SS_AniReverse(uint8_t *a0) {
-    if (--a0[2] >= 0) return;
+    if ((int8_t)(--a0[2]) >= 0) return;   /* ← fix */
     a0[2] = 7;
     uint8_t d0 = a0[3]++;
-    uint8_t *block = (uint8_t *)(uintptr_t)ss_ani_block(a0);
+    uint8_t *block = RAM_ADDR(ss_ani_block(a0));
     uint8_t new_id = SS_AniRevData[d0];
     if (new_id == 0) {
         *(uint32_t *)a0 = 0;
@@ -733,30 +792,29 @@ static void SS_AniReverse(uint8_t *a0) {
 }
 
 static void SS_AniEmeraldSparks(uint8_t *a0) {
-    if (--a0[2] >= 0) return;
+    if ((int8_t)(--a0[2]) >= 0) return;   /* ← fix */
     a0[2] = 5;
     uint8_t d0 = a0[3]++;
-    uint8_t *block = (uint8_t *)(uintptr_t)ss_ani_block(a0);
+    uint8_t *block = RAM_ADDR(ss_ani_block(a0));
     uint8_t new_id = SS_AniEmerData[d0];
     *block = new_id;
     if (new_id == 0) {
         *(uint32_t *)a0 = 0;
         ss_ani_block(a0) = 0;
-        /* Trigger exit: pone routine 4 en Sonic 09 */
         obRoutine(RAM_ADDR(v_player)) = 4;
         Sound_Queue(sfx_SSGoal, false);
     }
 }
 
 static void SS_AniGlassBlock(uint8_t *a0) {
-    if (--a0[2] >= 0) return;
+    if ((int8_t)(--a0[2]) >= 0) return;
     a0[2] = 1;
-    uint8_t d0 = a0[3]++;
-    uint8_t *block = (uint8_t *)(uintptr_t)ss_ani_block(a0);
+    uint8_t d0 = a0[3]++;                       /* frame index 0..8 */
+    uint8_t *block = RAM_ADDR(ss_ani_block(a0));
     uint8_t new_id = SS_AniGlassData[d0];
     *block = new_id;
     if (new_id == 0) {
-        *block = id_SS_Glass_Ani1;   /* vuelve a estado débil */
+        *block = a0[1];                         /* ← restaurar el next_id guardado */
         *(uint32_t *)a0 = 0;
         ss_ani_block(a0) = 0;
     }

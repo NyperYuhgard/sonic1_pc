@@ -9996,47 +9996,50 @@ static void SonicSS_Fall(uint8_t *o) {
     int16_t s0, s1;
     CalcSine(angle, &s0, &s1);
 
-    /* d0 = sin * gravity; d1 = cos * gravity */
     int32_t d0 = (int32_t)s0 * sonss_gravity;
     int32_t d1 = (int32_t)s1 * sonss_gravity;
-
-    /* d0 += (velX << 8); d1 += (velY << 8) */
     d0 += (int32_t)obVelX(o) << 8;
     d1 += (int32_t)obVelY(o) << 8;
 
     int32_t x_fp = ((uint32_t)obX(o) << 16) | (uint16_t)obSubpixelX(o);
     int32_t y_fp = ((uint32_t)obY(o) << 16) | (uint16_t)obSubpixelY(o);
 
-    /* Try X first. */
+    /* ---- Try X first. ---- */
     x_fp += d0;
     if (SonicSS_FindWall(o, y_fp, x_fp)) {
+        /* X collision: d0 = 0 (matches ASM `moveq #0,d0`) */
         x_fp -= d0;
         obVelX(o) = 0;
-        obStatus(o) &= ~(1 << 1);                   /* landed */
+        obStatus(o) &= ~(1 << 1);
 
-        /* Re-check Y with original X. */
+        /* Try Y with the original X. */
         y_fp += d1;
         if (SonicSS_FindWall(o, y_fp, x_fp)) {
+            /* Both collisions: early rts in ASM.
+             * obVelX stays 0, obVelY stays 0. */
             y_fp -= d1;
             obVelY(o) = 0;
+            return;
         }
-        obVelX(o) = (int16_t)(d0 >> 8);
+        /* Only X collision: fall-through to .nofloor in ASM.
+         * obVelX = d0>>8 = 0, obVelY = d1>>8 (still moving vertically). */
         obVelY(o) = (int16_t)(d1 >> 8);
         return;
     }
 
-    /* X move is fine: try Y. */
+    /* ---- X move is fine: try Y. ---- */
     y_fp += d1;
     if (SonicSS_FindWall(o, y_fp, x_fp)) {
+        /* Only Y collision: obVelX = d0>>8, obVelY = 0.
+         * IMPORTANT: do NOT overwrite obVelY with d1>>8 after zeroing it. */
         y_fp -= d1;
-        obVelY(o) = 0;
-        obStatus(o) &= ~(1 << 1);                   /* landed */
         obVelX(o) = (int16_t)(d0 >> 8);
-        obVelY(o) = (int16_t)(d1 >> 8);
+        obVelY(o) = 0;
+        obStatus(o) &= ~(1 << 1);
         return;
     }
 
-    /* Both moves fit: commit and stay airborne. */
+    /* ---- Both moves fit: commit and stay airborne. ---- */
     obVelX(o) = (int16_t)(d0 >> 8);
     obVelY(o) = (int16_t)(d1 >> 8);
     obStatus(o) |= (1 << 1);
@@ -10044,6 +10047,11 @@ static void SonicSS_Fall(uint8_t *o) {
 
 /* --- Collision with SS layout: check the 4 blocks around (x_fp, y_fp). --- */
 static int SonicSS_FindWall(uint8_t *o, int32_t y_fp, int32_t x_fp) {
+    int dbg = 1;  // cambialo a 0 después de debuggear
+    if (dbg) {
+       fprintf(stderr, "[FW] y=%d x=%d (pix)\n",
+               (int)(int16_t)(y_fp >> 16), (int)(int16_t)(x_fp >> 16));
+    }
     uint8_t *a1 = RAM_ADDR(v_sslayout_base);
 
     uint16_t d4 = (uint16_t)(int16_t)(y_fp >> 16);
@@ -10066,6 +10074,16 @@ static int SonicSS_FindWall(uint8_t *o, int32_t y_fp, int32_t x_fp) {
     block = *a1++;  SonicSS_FindWall_CheckType(o, block, a1 - 1, &flag);
     block = *a1++;  SonicSS_FindWall_CheckType(o, block, a1 - 1, &flag);
 
+    if (dbg) {
+        fprintf(stderr, "[FW] offset=%04X (row=%d col=%d) flags=%02X first_blk=%02X\n",
+                (unsigned)(a1 - RAM_ADDR(v_sslayout_base)),
+                (int)((int16_t)(y_fp >> 16) + 68) / 24,
+                (int)((int16_t)(x_fp >> 16) + 20) / 24,
+                flag,
+                RAM_ADDR(v_sslayout_base)[(int)((int16_t)(y_fp >> 16) + 68) / 24 * 0x80
+                                        + (int)((int16_t)(x_fp >> 16) + 20) / 24]);
+    }
+
     return flag != 0;
 }
 
@@ -10079,7 +10097,7 @@ static void SonicSS_FindWall_CheckType(uint8_t *o, uint8_t block_id,
 
 solid:
     sonss_touchedblock_id(o)  = block_id;
-    sonss_touchedblock_ram(o) = (uint32_t)(block_addr - ram);
+    sonss_touchedblock_ram(o) = (uint32_t)(block_addr + 1 - ram);
     *flag = 0xFF;
 }
 
@@ -10246,10 +10264,12 @@ static void SonicSS_ChkItems_SolidActionBlock(uint8_t *o) {
         if (sonss_timeout_updown(o) != 0) return;
         sonss_timeout_updown(o) = ss_timeout;
 
-        if (!(v_ssrotate & 0x0040)) {               /* bit 6 not set: slow speed */
+        /* ASM: btst #6,(v_ssrotate+1).w ; beq.s SonicSS_UPsnd
+         * Traducido: shift SOLO si bit 6 = 1 (base $40). */
+        if (v_ssrotate & 0x0040) {
             v_ssrotate <<= 1;
             uint8_t *p = RAM_ADDR(sonss_touchedblock_ram(o) - 1);
-            *p = id_SS_DOWN;
+        *p = id_SS_DOWN;
         }
         Sound_Queue(sfx_SSItem, false);
         return;
@@ -10258,9 +10278,11 @@ static void SonicSS_ChkItems_SolidActionBlock(uint8_t *o) {
     /* DOWN block? */
     if (id == id_SS_DOWN) {
         if (sonss_timeout_updown(o) != 0) return;
-        sonss_timeout_updown(o) = ss_timeout;
+       sonss_timeout_updown(o) = ss_timeout;
 
-        if (v_ssrotate & 0x0040) {                  /* bit 6 set: fast speed */
+        /* ASM: btst #6,(v_ssrotate+1).w ; bne.s SonicSS_DOWNsnd
+         * Traducido: shift SOLO si bit 6 = 0 (ya estás en fast $80). */
+        if (!(v_ssrotate & 0x0040)) {
             v_ssrotate >>= 1;
             uint8_t *p = RAM_ADDR(sonss_touchedblock_ram(o) - 1);
             *p = id_SS_UP;
@@ -10287,15 +10309,14 @@ static void SonicSS_ChkItems_SolidActionBlock(uint8_t *o) {
     if (id >= id_SS_Glass1_Blue && id <= id_SS_Glass4_Pink) {
         uint8_t *a2 = SS_FindFreeAnimationSlot();
         ss_ani_id(a2) = SS_ANI_ID_GLASSBLOCK;
+        ss_ani_block(a2) = sonss_touchedblock_ram(o) - 1;
+
         uint8_t *block = RAM_ADDR(sonss_touchedblock_ram(o) - 1);
-        ss_ani_block(a2) = (uint32_t)(uintptr_t)block;
+       uint8_t next_id = (uint8_t)(*block + 1);
+       if (next_id > id_SS_Glass4_Pink) next_id = 0;
+        a2[1] = next_id;        /* ← guardar en el byte "unused", NO en a2[3] */
 
-        uint8_t next_id = (uint8_t)(*block + 1);
-        if (next_id > id_SS_Glass4_Pink) next_id = 0;
-        /* SS_AniGlassBlock lee este valor en su tercer byte del slot. */
-        ss_ani_frame(a2) = next_id;
-
-        Sound_Queue(sfx_SSGlass, false);
+       Sound_Queue(sfx_SSGlass, false);
     }
 }
 
