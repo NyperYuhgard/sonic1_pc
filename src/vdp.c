@@ -131,7 +131,15 @@ void VDP_CopyTilemapToVRAM(const uint16_t *source, uint32_t vram_dest,
         }
     }
 }
-
+/* Bits 4-5 del registro $10 codifican el alto del plano:
+   00 = 32 filas, 01 = 64 filas, 11 = 128 filas (10 se trata como 32) */
+static int vdp_plane_height_mask(void) {
+    int height_bits = (vdp.registers[16] >> 4) & 0x3;
+    int rows = (height_bits == 1) ? 64
+             : (height_bits == 3) ? 128
+             : 32;
+    return rows * 8 - 1;   /* máscara en píxeles: 0xFF, 0x1FF o 0x3FF */
+}
 /* Render one screen row of a plane, drawing only tiles whose priority bit
    matches `pri` (0 or 1). The caller merges layers in MD priority order, so
    priority plane tiles can overlay non-priority sprites and planes.
@@ -142,9 +150,10 @@ static void render_plane_scanline(const uint8_t *nametable, uint16_t *palette,
                                   int scroll_x, int scroll_y, int screen_y,
                                   uint32_t *pixels, int pitch, int pri) {
     uint32_t *out = pixels + screen_y * (pitch / 4);
-    int plane_y = (screen_y + scroll_y) & 0xFF;      /* wrap 0..255 */
-    int ty = plane_y >> 3;                           /* tile row */
-    int py = plane_y & 7;                            /* pixel within tile */
+    int y_mask = vdp_plane_height_mask();          /* antes: hardcoded */
+    int plane_y = (screen_y + scroll_y) & y_mask;  /* antes: & 0xFF */
+    int ty = plane_y >> 3;
+    int py = plane_y & 7;
 
     for (int sx = 0; sx < SCREEN_WIDTH; sx++) {
         int plane_x = (sx - scroll_x) & 0x1FF;       /* wrap 0..511 */

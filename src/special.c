@@ -213,14 +213,7 @@ retry:
         obY(player) = (int16_t)((SS_StartLoc[d0*4+2] << 8) | SS_StartLoc[d0*4+3]);
     }
 
-    uint8_t *pl = RAM_ADDR(v_player);
-    fprintf(stderr, "[SS_Load] Sonic start: X=%d Y=%d\n", obX(pl), obY(pl));
-    fprintf(stderr, "[SS_Load] layout ptr=%p actual=%p\n",
-            RAM_ADDR(v_sslayout_base), RAM_ADDR(v_sslayout_actual));
-    fprintf(stderr, "[SS_Load] first 16 bytes of actual: ");
-    for (int k = 0; k < 16; k++)
-       fprintf(stderr, "%02X ", RAM_ADDR(v_sslayout_actual)[k]);
-    fprintf(stderr, "\n");
+    
 
     /* EniDec del layout a v_sslayout_decompress (=$3020) */
     const uint8_t *const layouts[6] = { SS_1, SS_2, SS_3, SS_4, SS_5, SS_6 };
@@ -303,7 +296,7 @@ void SS_BGLoad(void) {
         static uint16_t bg_buf[1024];   /* 8 canvases × 64 celdas */
         EniDec(Eni_SSBg1, bg_buf, ArtTile_SS_Background_Fish | Tile_Pal3);
 
-        uint32_t vram_addr = ArtTile_SS_Plane_1 * tile_size;
+        uint32_t vram_addr = ArtTile_SS_Plane_1 * tile_size + 0x1000;
 
         /* ASM: lea (v_ram_start + 8*8*2).l,a2
            a2 apunta al canvas 1 (se salta el checkerboard en +0x000). */
@@ -361,6 +354,7 @@ void SS_BGLoad(void) {
         VDP_CopyTilemapToVRAM(cloud_buf,
                               ArtTile_SS_Plane_5 * tile_size + 0x1000, 64, 64);
     }
+    
 }
 
 /* ===========================================================================
@@ -444,7 +438,7 @@ void PalCycle_SS(void) {
     /* FG VRAM register $02: bits 6-7 = FG nametable */
     VDP_SetRegister(0x02, (uint16_t)a1[0]);
     /* Y scroll en VSRAM */
-    v_scrposy_vdp = a1[1];
+    v_scrposy_vdp = (uint16_t)(a1[1] << 8);
     //VDP_SetVSRAM(0, (uint16_t)v_scrposy_vdp);
     /* BG VRAM register $04 */
     VDP_SetRegister(0x04, (uint16_t)a0[2]);
@@ -1041,8 +1035,8 @@ void GM_Special_Stage_Main(void) {
 
     /* Clear nametables Plane 1..4 */
     VDP_FillVRAM(0,
-                 ArtTile_SS_Plane_1 * tile_size,
-                 (ArtTile_SS_Plane_5 - ArtTile_SS_Plane_1) * tile_size);
+             ArtTile_SS_Plane_1 * tile_size + plane_size_64x32,
+             (ArtTile_SS_Plane_5 - ArtTile_SS_Plane_1) * tile_size - plane_size_64x32);
 
     SS_BGLoad();
 

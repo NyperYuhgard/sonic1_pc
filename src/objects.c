@@ -10047,7 +10047,7 @@ static void SonicSS_Fall(uint8_t *o) {
 
 /* --- Collision with SS layout: check the 4 blocks around (x_fp, y_fp). --- */
 static int SonicSS_FindWall(uint8_t *o, int32_t y_fp, int32_t x_fp) {
-    int dbg = 1;  // cambialo a 0 después de debuggear
+    int dbg = 0;  // cambialo a 0 después de debuggear
     if (dbg) {
        fprintf(stderr, "[FW] y=%d x=%d (pix)\n",
                (int)(int16_t)(y_fp >> 16), (int)(int16_t)(x_fp >> 16));
