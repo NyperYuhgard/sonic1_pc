@@ -1,5 +1,7 @@
 # sonic1_pc
 
+**Idioma / Language:** [English](README.md) | [Español](README.es.md)
+
 A **1:1 PC port** of the *Sonic the Hedgehog* (Sega Mega Drive) 68000 disassembly,
 written in **C11** and rendered/played through **SDL2** and **SDL2_mixer**.
 No retro engine — the game logic is a faithful translation of the original
