@@ -182,6 +182,147 @@ disasm/           — original Sega disassembly + uncompressed assets (source of
 - **PLC queue.** Graphics are loaded on demand through a 16-slot pattern load
   cue queue (`NewPLC`/`RunPLC`, one entry per frame) — same as the original.
 
+## RAM modding
+
+`src/ram.h` models the 68k address space as a flat byte array (`ram[]`).
+Every RAM address is an **offset** into that array, and `RAM_BYTE/RAM_WORD/
+RAM_LONG(addr)` read or write 1/2/4 bytes at that offset — exactly like
+`move.b`/`move.w`/`move.l` on the 68000. `RAM_ADDR(addr)` yields a raw
+pointer (`&ram[addr]`) for callers that need an address instead of a value.
+
+Because the original ASM freely mixes access widths (e.g. it writes `v_zone`
+as a byte and `v_zone_act` as a word — same two bytes, different views), the
+port must be able to do the same. That is why the `RAM_*` macros exist at
+all, and why some identifiers are declared in two flavours.
+
+### Two declaration styles
+
+Every `v_*` name is one of:
+
+| Style | Example | Meaning |
+|---|---|---|
+| **Offset** | `#define v_objspace 0xD000` | The name *is* an address. |
+| **Lvalue** | `#define v_invinc (RAM_BYTE(0xFE2D))` | The name *is* a variable at that address. |
+
+They are both valid, but **you must match the access style to the declaration**:
+
+| Style | Correct write | Correct read | Address-taking |
+|---|---|---|---|
+| Offset | `RAM_BYTE(v_x) = n;` | `RAM_BYTE(v_x)` | `RAM_ADDR(v_x)` |
+| Offset (derived) | `RAM_WORD(v_y) = n;` | `RAM_WORD(v_y)` | `RAM_ADDR(v_y)` |
+| Lvalue | `v_z = n;` | `v_z` | `&(v_z)` (rare) |
+
+Mixing them is the source of the **double-deref bug** below.
+
+### The double-deref pitfall
+
+If `v_x` is an lvalue macro, wrapping it in `RAM_*` compiles but is wrong:
+
+```
+#define v_invinc (RAM_BYTE(0xFE2D))    /* lvalue: reads RAM when used */
+
+v_invinc = 1;              /* ✅  ram[0xFE2D] = 1                          */
+RAM_BYTE(v_invinc) = 0;    /* ❌  expands to ram[ ram[0xFE2D] ] = 0       */
+```
+
+The second form reads the current value at 0xFE2D and uses it as an index,
+silently writing to the wrong address (often ram[0] or ram[1], which is why
+it can look like nothing happened at all). No compiler warning: the resulting
+index is a perfectly valid uint16_t.
+
+Rule of thumb: if v_x = n; compiles, then RAM_BYTE(v_x) = n; is a bug.
+
+### Cross-size access
+
+Sometimes the original ASM writes a wider or narrower value than the natural
+width of a variable. Example from the disasm:
+
+```
+
+move.w  #id_GHZ_act1,(v_zone_act).w   ; writes v_zone (byte) + v_act (byte)
+move.b  #$04,(v_zone).w                ; writes only v_zone
+
+```
+
+When the port needs the same freedom, use the raw address, not the
+lvalue macro. Two common approaches:
+
+1) Take the address directly with a literal (simplest):
+
+```
+
+v_zone = 0x04;                          /* natural-width write */
+RAM_WORD(0xFE10) = id_GHZ_act1;         /* cross-size write    */
+
+```
+2) Declare both views of the same byte pair:
+
+```
+
+#define v_zone_act_a   0xFE10
+#define v_zone_act     (*(uint16_t *)&ram[v_zone_act_a])
+#define v_zone         (*(uint8_t  *)&ram[v_zone_act_a + 0])   /* check endianness */
+#define v_act          (*(uint8_t  *)&ram[v_zone_act_a + 1])
+
+v_zone = 0x04;                          /* ✅  single byte        */
+RAM_WORD(v_zone_act_a) = id_GHZ_act1;   /* ✅  both bytes, swapped */
+
+```
+
+The _a (or _addr) suffix convention marks the raw address; the name without
+it is the typed access. This makes the intent obvious at every call site and
+lets the RAM viewer (which reads ram[] directly) keep working unchanged.
+
+### Endianness
+
+On the 68k, words and longs are stored big-endian. In this port ram[]
+holds the same byte sequence the 68k would produce, but is indexed as a
+flat array, so reading a uint16_t from ram[] gives little-endian on
+x86-64. That is why writes that cross byte boundaries go through
+RAM_SET_U16 / RAM_SET_U32 (or RAM_WORD for the byte-swapped view): they
+swap to match the 68k layout.
+
+When in doubt, follow the pattern the disasm uses:
+
+```
+    move.b → RAM_BYTE(addr)
+
+    move.w → RAM_WORD(addr) or RAM_SET_U16(addr, v)
+
+    move.l → RAM_LONG(addr) or RAM_SET_U32(addr, v)
+    
+```
+
+### Quick audit for mixed styles
+
+From the project root:
+
+```
+grep -nE 'RAM_(BYTE|WORD|LONG)\(v_[A-Za-z0-9_]+\)' src/*.c
+
+```
+
+Each hit is a bug iff the corresponding v_* is declared as an lvalue
+macro in ram.h. The proper fix is to drop the RAM_* wrapper:
+
+```
+RAM_BYTE(v_invinc) = 0;   →   v_invinc  = 0;
+RAM_BYTE(v_shield) = 0;   →   v_shield  = 0;
+RAM_BYTE(f_bigring) = 1;  →   f_bigring = 1;
+
+```
+and to keep RAM_* only for literal addresses or arithmetic on addresses:
+
+```
+RAM_BYTE(0xFE2D) = 0;             /* ✅ literal              */
+RAM_BYTE(v_sslayout_base + d4) = x; /* ✅ arithmetic on address */
+
+```
+
+If a v_* needs both natural-width and cross-size access, apply the _a
+suffix convention above rather than mixing styles ad hoc.
+
+
 ## Debugging
 
 - **Env-var probes** are used so debug output never ships in normal runs, e.g.

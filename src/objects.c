@@ -67,6 +67,8 @@ static void SwingingPlatform_Main(void *obj);
 static void Prison_Main(void *obj);
 static void Newtron_Main(void *obj);
 static void SonicSpecial_Main(void *obj);
+static void GiantRing_Main(void *obj);
+static void RingFlash_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -118,6 +120,8 @@ void Objects_Init(void) {
     obj_dispatch[id_Prison] = Prison_Main;
     obj_dispatch[id_Newtron]      = Newtron_Main;
     obj_dispatch[id_SonicSpecial] = SonicSpecial_Main;
+    obj_dispatch[id_GiantRing] = GiantRing_Main;
+    obj_dispatch[id_RingFlash] = RingFlash_Main;
 
     /* Register Special Stage results screen objects */
     obj_dispatch[id_SSResult]  = SSResult_Main;
@@ -10587,5 +10591,180 @@ static void SS_FixCamera(uint8_t *o) {
     } else {
         d0 = (int16_t)(d0 - d2);
         RAM_WORD(0xF704) = (uint16_t)((int16_t)RAM_WORD(0xF704) - d0);
+    }
+}
+
+/* ===========================================================================
+   Object 4B — Giant Ring (entry to Special Stage)
+   Object 7C — Giant Ring flash
+   Ported from _incObj/4B, 7C Giant Ring and Flash.asm (REV01, FixBugs=0).
+
+   gring_parent = objoff_3C (long): 4-byte field. Igual que msl_parent en
+   el port de Buzz Bomber, almacenamos el ÍNDICE DE SLOT del padre (word,
+   < 128) porque los punteros de x86-64 no caben en un campo de 32 bits.
+   =========================================================================== */
+
+#define gring_parent(obj) (*(uint32_t *)((uint8_t *)(obj) + 0x3C)) /* objoff_3C */
+
+static void GRing_Main(uint8_t *o);
+static void GRing_Animate(uint8_t *o);
+static void GRing_Collect(uint8_t *o);
+static void GRing_Delete(uint8_t *o);
+static void Flash_Main(uint8_t *o);
+static void Flash_ChkDel(uint8_t *o);
+static void Flash_Delete(uint8_t *o);
+static void Flash_Collect(uint8_t *o);
+
+/* --- GRing_Main (Routine 0) --------------------------------------------- */
+static void GRing_Main(uint8_t *o) {
+    obMap(o) = (uint32_t)(uintptr_t)Map_GRing;          /* move.l #Map_GRing */
+    obGfx(o) = (uint16_t)(ArtTile_Giant_Ring | Tile_Pal2);
+    obRender(o) |= sprite_cam_field;                    /* ori.b #sprite_cam_field */
+    obActWid(o) = 128 / 2;                              /* move.b #128/2 */
+
+    /* tst.b obRender / bpl.s GRing_Animate: ring off-screen, just animate */
+    if (!(obRender(o) & sprite_rendered)) {
+        GRing_Animate(o);
+        return;
+    }
+    /* cmpi.b #ss_emeralds_num,(v_emeralds).w / beq.w GRing_Delete */
+    if (v_emeralds == ss_emeralds_num) {
+        GRing_Delete(o);
+        return;
+    }
+    /* cmpi.w #ss_giantring_rings,(v_rings).w / bhs.s GRing_Okay
+     *   bhs → rings >= 50 → mostrar; si no, rts (no mostrar). */
+    if ((uint16_t)v_rings < (uint16_t)ss_giantring_rings) {
+        return;
+    }
+
+    /* --- GRing_Okay --- */
+    obRoutine(o) += 2;                                  /* addq.b #2 → GRing_Animate */
+    obPriority(o) = 2;                                  /* move.b #2 */
+    obColType(o) = (uint8_t)(col_16x32 | col_item);     /* move.b #col_16x32|col_item */
+    v_gfxbigring = (uint16_t)Art_BigRing_size;          /* trigger AniArt_GiantRing */
+
+    /* ASM cae a GRing_Animate */
+    GRing_Animate(o);
+}
+
+/* --- GRing_Animate (Routine 2) ------------------------------------------ */
+static void GRing_Animate(uint8_t *o) {
+    obFrame(o) = (uint8_t)v_ani1_frame;                 /* move.b (v_ani1_frame).w */
+    if (OutOfRange(o, -1)) {                            /* out_of_range.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);                                   /* bra.w DisplaySprite */
+}
+
+/* --- GRing_Collect (Routine 4) ----------------------------------------- */
+static void GRing_Collect(uint8_t *o) {
+    obRoutine(o) -= 2;                                  /* subq.b #2 → GRing_Animate */
+    obColType(o) = col_none;                            /* move.b #col_none */
+
+    uint8_t *a1 = (uint8_t *)FindFreeObj();             /* bsr.w FindFreeObj */
+    if (a1) {                                           /* bne.w GRing_PlaySnd: RAM llena */
+        obID(a1) = id_RingFlash;                        /* _move.b #id_RingFlash */
+        obX(a1)  = obX(o);                              /* copia X */
+        obY(a1)  = obY(o);                              /* copia Y */
+        gring_parent(a1) = (uint32_t)Object_GetIndex(o);/* move.l a0,gring_parent(a1) */
+
+        /* move.w (v_player+obX).w,d0 / cmp.w obX(a0),d0 / blo.s GRing_PlaySnd
+         *   Sonic X < ring X → no flip; Sonic X >= ring X → bset xflip. */
+        if ((uint16_t)obX(RAM_ADDR(v_player)) >= (uint16_t)obX(o)) {
+            obRender(a1) |= sprite_xflip;               /* bset #sprite_xflip_bit */
+        }
+    }
+
+    /* GRing_PlaySnd: */
+    Sound_Queue(sfx_GiantRing, false);                  /* jsr QueueSound2 */
+
+    /* bra.s GRing_Animate: mantiene la animación hasta que el flash lo borre */
+    GRing_Animate(o);
+}
+
+/* --- GRing_Delete (Routine 6) ------------------------------------------ */
+static void GRing_Delete(uint8_t *o) {
+    DeleteObject(o);                                    /* bra.w DeleteObject */
+}
+
+/* --- Dispatcher Object 4B ---------------------------------------------- */
+static void GiantRing_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                             /* GRing_Index */
+        case 0: GRing_Main(o);    break;
+        case 2: GRing_Animate(o); break;
+        case 4: GRing_Collect(o); break;
+        case 6: GRing_Delete(o);  break;
+    }
+}
+
+/* ===========================================================================
+   Object 7C — Giant Ring flash
+   =========================================================================== */
+
+/* --- Flash_Main (Routine 0) -------------------------------------------- */
+static void Flash_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                  /* addq.b #2 → Flash_ChkDel */
+    obMap(o) = (uint32_t)(uintptr_t)Map_Flash;          /* move.l #Map_Flash */
+    obGfx(o) = (uint16_t)(ArtTile_Giant_Ring_Flash | Tile_Pal2);
+    obRender(o) |= sprite_cam_field;                    /* ori.b #sprite_cam_field */
+    obPriority(o) = 0;                                  /* move.b #0: máxima prioridad */
+    obActWid(o) = 64 / 2;                               /* move.b #64/2 */
+    obFrame(o) = 0xFF;                                  /* move.b #-1: primer Flash_Collect lo pasa a 0 */
+}
+
+/* --- Flash_Collect ------------------------------------------------------ */
+/* Avanza la animación del flash; en el frame 3 borra el Giant Ring padre
+   y oculta a Sonic; en el frame 8 borra a Sonic del todo.                */
+static void Flash_Collect(uint8_t *o) {
+    /* subq.b #1,obTimeFrame ; bpl.s .return
+     *   Trabajamos con bytes: un valor de 0-1 = $FF → N=1 → NO se salta. */
+    int8_t tf = (int8_t)(uint8_t)(obTimeFrame(o) - 1);
+    obTimeFrame(o) = (uint8_t)tf;
+    if (tf >= 0) return;                                /* bpl.s .return */
+
+    obTimeFrame(o) = 1;                                 /* move.b #1: reset a 2 frames */
+    uint8_t frame = (uint8_t)(obFrame(o) + 1);          /* addq.b #1 */
+    obFrame(o) = frame;
+    if (frame >= 8) {                                   /* cmpi.b #8 / bhs.s .deleteSonic */
+        obRoutine(o) += 2;                              /* addq.b #2 → Flash_Delete */
+        RAM_WORD(v_player) = 0;                         /* move.w #0,(v_player).w: borrar Sonic */
+        return;
+    }
+    if (frame != 3) return;                             /* cmpi.b #3 / bne.s .return */
+
+    /* 3er frame: matar el giant ring padre y ocultar a Sonic */
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)gring_parent(o)); /* movea.l gring_parent(a0),a1 */
+    obRoutine(a1) = 6;                                  /* move.b #6,obRoutine(a1): borrar el ring */
+    obAnim(RAM_ADDR(v_player)) = id_Null;               /* move.b #id_Null,(v_player+obAnim).w */
+    f_bigring = 1;                            /* move.b #1,(f_bigring).w */
+    v_invinc  = 0;                            /* clr.b (v_invinc).w */
+    v_shield  = 0;                            /* clr.b (v_shield).w */
+}
+
+/* --- Flash_ChkDel (Routine 2) ------------------------------------------ */
+static void Flash_ChkDel(uint8_t *o) {
+    Flash_Collect(o);                                   /* bsr.s Flash_Collect */
+    if (OutOfRange(o, -1)) {                            /* out_of_range.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);                                   /* bra.w DisplaySprite */
+}
+
+/* --- Flash_Delete (Routine 4) ------------------------------------------ */
+static void Flash_Delete(uint8_t *o) {
+    DeleteObject(o);                                    /* bra.w DeleteObject */
+}
+
+/* --- Dispatcher Object 7C ---------------------------------------------- */
+static void RingFlash_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                             /* Flash_Index */
+        case 0: Flash_Main(o);   break;
+        case 2: Flash_ChkDel(o); break;
+        case 4: Flash_Delete(o); break;
     }
 }

@@ -806,6 +806,7 @@ enum {
 /* -- End of Level -------------------------------------------------------- */
 #define ArtTile_Giant_Ring                0x400
 #define ArtTile_Giant_Ring_Flash          0x462
+#define Art_BigRing_size ((int)Art_BigRing_len)
 #define ArtTile_Prison_Capsule            0x49D
 #define ArtTile_Hidden_Points             0x4B6
 #define ArtTile_Warp                      0x541

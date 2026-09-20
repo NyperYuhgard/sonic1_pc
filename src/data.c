@@ -329,11 +329,12 @@ const uint8_t *Map_SS_Glass;        size_t Map_SS_Glass_len;
 const uint8_t *Map_SS_Chaos1;       size_t Map_SS_Chaos1_len;
 const uint8_t *Map_SS_Chaos2;       size_t Map_SS_Chaos2_len;
 const uint8_t *Map_SS_Chaos3;       size_t Map_SS_Chaos3_len;
+const uint8_t *Map_Flash;           size_t Map_Flash_len;
 
 /* Mappings referenciados por DebugMode (aún sin portar en su mayoría) */
 const uint8_t *Map_Newt;            size_t Map_Newt_len;
 const uint8_t *Map_Lamp;
-const uint8_t *Map_GRing;
+const uint8_t *Map_GRing;           size_t Map_GRing_len;
 const uint8_t *Map_Bonus;
 const uint8_t *Map_Jaws;
 const uint8_t *Map_Burro;
@@ -826,6 +827,8 @@ int Data_Init(void) {
     LOAD_MAP("_maps/SS Chaos Emeralds.asm", Map_SS_Chaos1);
     LOAD_MAP("_maps/SS Chaos Emeralds.asm", Map_SS_Chaos2);
     LOAD_MAP("_maps/SS Chaos Emeralds.asm", Map_SS_Chaos3);
+    LOAD_MAP("_maps/Ring Flash.asm", Map_Flash);
+    LOAD_MAP("_maps/Giant Ring.asm", Map_GRing);
 
     /* ---------------- Animaciones ---------------- */
     LOAD_ANIM("_anim/Sonic.asm",                     Ani_Sonic);
@@ -1164,6 +1167,7 @@ void Data_Quit(void) {
     UNMAP(Map_SSWalls); UNMAP(Map_Bump); UNMAP(Map_SS_Shared);
     UNMAP(Map_SS_Up); UNMAP(Map_SS_Down); UNMAP(Map_SS_Glass);
     UNMAP(Map_SS_Chaos1); UNMAP(Map_SS_Chaos2); UNMAP(Map_SS_Chaos3);
+    UNMAP(Map_Flash); UNMAP(Map_GRing);
 
     /* Animaciones / DPLC */
     UNMAP(Ani_Sonic); UNMAP(Ani_TSon); UNMAP(Ani_PSBTM); UNMAP(Ani_Pri);

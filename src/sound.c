@@ -75,7 +75,7 @@ static const snd_map_t sfx_map[] = {
     { sfx_Warning,      "assets/SoundFX/Stage/DrownAlert.wav" },
     { sfx_GiantRing,    "assets/SoundFX/Global/SpecialRing.wav" },
     { sfx_Bomb,         "assets/SoundFX/Global/Explosion.wav" },
-    { sfx_Cash,         "assets/SoundFX/Global/ScoreAdd.wav" },
+    { sfx_Cash,         "assets/SoundFX/Global/ScoreTotal.wav" },
     { sfx_RingLoss,     "assets/SoundFX/Global/LoseRings.wav" },
     { sfx_ChainRise,    "assets/SoundFX/Stage/ChainPull.wav" },
     { sfx_Burning,      "assets/SoundFX/Stage/FireBurn.wav" },
