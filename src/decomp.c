@@ -193,128 +193,100 @@ done_table:
    Decompresses to a RAM word buffer (uint16_t array)
    =========================================================================== */
 
-/* Bit reader helpers following the 68k Enigma decoder's rol-based model.
-   Compute in uint32 so the << 16 promotion doesn't overflow signed int. */
-static inline uint16_t eni_rol16(uint16_t x, int n) {
-    n &= 15;
-    uint32_t u = x;
-    return (uint16_t)((u << n) | (u >> (16 - n)));
-}
-static inline uint16_t eni_ror16(uint16_t x, int n) {
-    n &= 15;
-    uint32_t u = x;
-    return (uint16_t)((u >> n) | (u << (16 - n)));
-}
-
 void EniDec(const uint8_t *source, uint16_t *dest, uint16_t starting_art_tile) {
     const uint8_t *src = source;
     uint16_t *dst = dest;
-    uint16_t a2 = starting_art_tile; /* base tile properties */
 
-    /* Get number of tile bits (unsigned header byte) */
-    int d4 = *src++;
-
-    /* Get tile flags (PCCVH << 3) */
-    int a3 = (*src++) << 3;
-
-    /* Get incrementing tile and static tile, offset by base properties */
-    uint16_t a4 = (uint16_t)(((uint16_t)src[0] << 8) | src[1]);
+    int inline_bits = *src++;
+    uint8_t flags = *src++;
+    uint16_t inc_tile = (uint16_t)(((uint16_t)src[0] << 8) | src[1]);
     src += 2;
-    a4 = (uint16_t)(a4 + a2);
-    uint16_t a5 = (uint16_t)(((uint16_t)src[0] << 8) | src[1]);
+    uint16_t static_tile = (uint16_t)(((uint16_t)src[0] << 8) | src[1]);
     src += 2;
-    a5 = (uint16_t)(a5 + a2);
 
-    /* Get first word */
-    uint16_t d5 = (uint16_t)(((uint16_t)src[0] << 8) | src[1]);
+    inc_tile = (uint16_t)(inc_tile + starting_art_tile);
+    static_tile = (uint16_t)(static_tile + starting_art_tile);
+
+    uint32_t bitbuf = ((uint32_t)src[0] << 8) | src[1];
     src += 2;
-    int d6 = 16; /* bit count remaining in d5 */
+    int bits = 16;
 
-    /* Fetch another byte when 8 or fewer bits remain (asm: cmpi #8,bhi) */
-    #define ENI_REFILL()                                                  \
-        do {                                                             \
-            if (d6 <= 8) {                                               \
-                int dd = 8 - d6;                                         \
-                d5 = eni_ror16(d5, dd);                                  \
-                d5 = (uint16_t)((d5 & 0xFF00) | (*src++));               \
-                d5 = eni_rol16(d5, dd);                                  \
-                d6 += 8;                                                 \
-            }                                                            \
-        } while (0)
+#define ENI_NEED_BITS(n)                             \
+    do {                                             \
+        while (bits < (n)) {                         \
+            bitbuf = (bitbuf << 8) | *src++;         \
+            bits += 8;                               \
+        }                                            \
+    } while (0)
 
-    /* Read one inline tile (GetEnigmaInline). Returns the tile value. */
-    #define ENI_INLINE()                                                 \
-        ({                                                               \
-            uint16_t d3 = a2;                                            \
-            int d7 = a3;                                                 \
-            if (d7 & 0x80) { d6--; d5 = eni_rol16(d5, 1); if (d5 & 1) d3 |= 0x8000; } d7 = (d7 << 1) & 0xFF; \
-            if (d7 & 0x80) { d6--; d5 = eni_rol16(d5, 1); if (d5 & 1) d3 |= 0x4000; } d7 = (d7 << 1) & 0xFF; \
-            if (d7 & 0x80) { d6--; d5 = eni_rol16(d5, 1); if (d5 & 1) d3 |= 0x2000; } d7 = (d7 << 1) & 0xFF; \
-            if (d7 & 0x80) { d6--; d5 = eni_rol16(d5, 1); if (d5 & 1) d3 |= 0x1000; } d7 = (d7 << 1) & 0xFF; \
-            if (d7 & 0x80) { d6--; d5 = eni_rol16(d5, 1); if (d5 & 1) d3 |= 0x800;  } d7 = (d7 << 1) & 0xFF; \
-            ENI_REFILL();                                                \
-            int d1 = d4;                                                 \
-            int d2 = 0;                                                  \
-            if (d1 > 8) {                                                \
-                d2 = (int)((d5 >> 8) & 0xFF); d5 = eni_rol16(d5, 8);     \
-                d1 -= 8; d2 <<= d1;                                      \
-                { int x = 16 - d6; d5 = eni_ror16(d5, x);                \
-                  d5 = (uint16_t)((d5 & 0xFF00) | (*src++));            \
-                  d5 = eni_rol16(d5, x); }                               \
-            }                                                            \
-            d6 -= d1; d5 = eni_rol16(d5, d1);                            \
-            uint16_t val = (uint16_t)((d5 & ((1 << d1) - 1)) | d2 | d3); \
-            ENI_REFILL();                                                \
-            val;                                                         \
-        })
+#define ENI_PEEK_BITS(n)                             \
+    ({                                               \
+        ENI_NEED_BITS(n);                            \
+        (uint32_t)(bitbuf >> (bits - (n))) & ((1u << (n)) - 1u); \
+    })
+#define ENI_DROP_BITS(n) do { bits -= (n); } while (0)
+#define ENI_READ_BITS(n)                       \
+    ({                                         \
+        uint32_t v = ENI_PEEK_BITS(n);         \
+        ENI_DROP_BITS(n);                      \
+        v;                                     \
+    })
 
     for (;;) {
-        /* GetEnigmaCode: good bit -> static/incrementing, else inline code */
-        d6--;
-        d5 = eni_rol16(d5, 1);
-        if (d5 & 1) {
-            /* InlineTileCode */
-            d6 -= 2; int code = (int)((d5 >> 14) & 3); d5 = eni_rol16(d5, 2);
-            d6 -= 4; int cnt = (int)((d5 >> 12) & 0xF); d5 = eni_rol16(d5, 4);
-            ENI_REFILL();
+        uint32_t entry = ENI_PEEK_BITS(7);
+        int count;
+        int mode;
 
-            if (code == 0) {      /* Mode00: constant inline */
-                uint16_t v = ENI_INLINE();
-                for (int i = 0; i <= cnt; i++) *dst++ = v;
-            } else if (code == 1) { /* Mode01: incrementing inline */
-                uint16_t v = ENI_INLINE();
-                for (int i = 0; i <= cnt; i++) *dst++ = v++;
-            } else if (code == 2) { /* Mode10: decrementing inline */
-                uint16_t v = ENI_INLINE();
-                for (int i = 0; i <= cnt; i++) *dst++ = v--;
-            } else {              /* Mode11: inline per entry */
-                if (cnt == 0xF) {
-                    /* EnigmaDone: end of data */
-                    if (d6 >= 16) src--;  /* discard trailing byte(s) */
-                    break;
-                }
-                for (int i = 0; i <= cnt; i++) {
-                    *dst++ = ENI_INLINE();
-                }
-            }
+        if (entry < 0x40) {
+            ENI_DROP_BITS(6);
+            count = (int)((entry >> 1) & 0x0F);
+            mode = (int)(entry >> 4);
         } else {
-            /* static vs incrementing copy */
-            d6--;
-            d5 = eni_rol16(d5, 1);
-            if (d5 & 1) { /* Mode01: static copy */
-                d6 -= 4; int cnt = (int)((d5 >> 12) & 0xF); d5 = eni_rol16(d5, 4);
-                ENI_REFILL();
-                for (int i = 0; i <= cnt; i++) *dst++ = a5;
-            } else {        /* Mode00: incrementing copy */
-                d6 -= 4; int cnt = (int)((d5 >> 12) & 0xF); d5 = eni_rol16(d5, 4);
-                ENI_REFILL();
-                for (int i = 0; i <= cnt; i++) *dst++ = a4++;
-            }
+            ENI_DROP_BITS(7);
+            count = (int)(entry & 0x0F);
+            mode = (int)(entry >> 4);
         }
+
+#define ENI_INLINE_VALUE()                                             \
+        ({                                                             \
+            uint16_t value = starting_art_tile;                        \
+            if ((flags & 0x10) && ENI_READ_BITS(1)) value |= 0x8000;   \
+            if ((flags & 0x08) && ENI_READ_BITS(1)) value |= 0x4000;   \
+            if ((flags & 0x04) && ENI_READ_BITS(1)) value |= 0x2000;   \
+            if ((flags & 0x02) && ENI_READ_BITS(1)) value |= 0x1000;   \
+            if ((flags & 0x01) && ENI_READ_BITS(1)) value |= 0x0800;   \
+            if (inline_bits > 0)                                       \
+                value = (uint16_t)(value | ENI_READ_BITS(inline_bits));\
+            value;                                                     \
+        })
+
+        if (mode < 2) {
+            for (int i = 0; i <= count; i++) *dst++ = inc_tile++;
+        } else if (mode < 4) {
+            for (int i = 0; i <= count; i++) *dst++ = static_tile;
+        } else if (mode == 4) {
+            uint16_t v = ENI_INLINE_VALUE();
+            for (int i = 0; i <= count; i++) *dst++ = v;
+        } else if (mode == 5) {
+            uint16_t v = ENI_INLINE_VALUE();
+            for (int i = 0; i <= count; i++) *dst++ = v++;
+        } else if (mode == 6) {
+            uint16_t v = ENI_INLINE_VALUE();
+            for (int i = 0; i <= count; i++) *dst++ = v--;
+        } else {
+            if (count == 0x0F) {
+                break;
+            }
+            for (int i = 0; i <= count; i++) *dst++ = ENI_INLINE_VALUE();
+        }
+
+#undef ENI_INLINE_VALUE
     }
 
-    #undef ENI_REFILL
-    #undef ENI_INLINE
+#undef ENI_READ_BITS
+#undef ENI_DROP_BITS
+#undef ENI_PEEK_BITS
+#undef ENI_NEED_BITS
 }
 
 

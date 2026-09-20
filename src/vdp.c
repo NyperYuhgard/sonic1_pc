@@ -106,8 +106,12 @@ void VDP_ClearScreen(void) {
     VDP_FillVRAM(0, vram_bg, 64 * 32 * 2);
 
     /* Clear scroll position buffers */
-    v_scrposy_vdp = 0;
-    v_scrposx_vdp = 0;
+    v_scrposy_vdp    = 0;
+    v_bgscrposy_vdp  = 0;
+    v_scrposx_vdp    = 0;
+    v_bgscrposx_vdp  = 0;
+    v_bg3scrposy_vdp = 0;
+    v_bg3scrposx_vdp = 0;
 
     /* Clear sprite table buffer */
     memset(&ram[v_spritetablebuffer], 0, 0x400);
@@ -124,10 +128,12 @@ void VDP_CopyTilemapToVRAM(const uint16_t *source, uint32_t vram_dest,
     for (int row = 0; row < height; row++) {
         uint32_t dest = vram_dest + (row * 128); /* 64 cells * 2 bytes = 128 bytes per row */
         for (int col = 0; col < width; col++) {
+            uint32_t addr = dest + (uint32_t)col * 2;
+            if (addr + 1 >= VRAM_SIZE) continue;
             uint16_t tile_entry = source[row * width + col];
             /* Store big-endian into VRAM (MSB first, like the MD VDP) */
-            vdp.vram[dest + col * 2]     = (uint8_t)(tile_entry >> 8);
-            vdp.vram[dest + col * 2 + 1] = (uint8_t)(tile_entry & 0xFF);
+            vdp.vram[addr]     = (uint8_t)(tile_entry >> 8);
+            vdp.vram[addr + 1] = (uint8_t)(tile_entry & 0xFF);
         }
     }
 }
@@ -143,7 +149,8 @@ static int vdp_plane_height_mask(void) {
 /* Render one screen row of a plane, drawing only tiles whose priority bit
    matches `pri` (0 or 1). The caller merges layers in MD priority order, so
    priority plane tiles can overlay non-priority sprites and planes.
-   MD semantics: the 64x32-tile nametable (512x256 px) is cyclic on both axes,
+   MD semantics: the nametable is cyclic on both axes; Sonic 1 normally uses
+   64 columns, while register $10 selects 32/64/128 rows for vertical wrap.
    horizontal scroll is per-scanline (from the hscroll table) and vertical
    scroll is per-plane. screen_y selects the output row in [0,224). */
 static void render_plane_scanline(const uint8_t *nametable, uint16_t *palette,
