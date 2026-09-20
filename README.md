@@ -81,8 +81,9 @@ falling back to `disasm/`, so you can either:
 
 | Key | Effect |
 |---|---|
-| `P` | Toggle the VRAM viewer (tiles + CRAM strip, second SDL window) |
+| `P` | Toggle the VRAM viewer (tile sheet with VRAM address labels, OSD of plane bases/scrolls, palette_main + CRAM strips) |
 | `O` | Toggle the Object RAM viewer (live object slots) |
+| `G` | Toggle the Plane A/B viewer (full nametables, adapts to window size without stretching: side-by-side or stacked, wheel/drag scroll) |
 | `F` | Toggle free camera |
 | `HOME / END / PAGE UP / PAGE DOWN` | Move the free camera; `DELETE` scrolls left |
 | `ESC` (window title bar) | Quit |

@@ -31,6 +31,7 @@ set(SOURCES
     src/freecamera.c
     src/debugmode.c
     src/ramview.c
+    src/planeview.c
     src/special.c
 )
 

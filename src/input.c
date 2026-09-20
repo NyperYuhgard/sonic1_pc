@@ -4,6 +4,7 @@
 #include "vdp.h"
 #include "objview.h"
 #include "ramview.h"
+#include "planeview.h"
 #include "freecamera.h"
 #include <SDL2/SDL.h>
 #include <string.h>
@@ -15,6 +16,7 @@ static uint8_t prev_state[2] = {0, 0};
 static int prev_vram_key = 0;
 static int prev_objview_key = 0;
 static int prev_ramview_key = 0;
+static int prev_planeview_key = 0;
 static int prev_f_key = 0;
 
 void Input_Init(void) {
@@ -41,8 +43,31 @@ void Input_Read(void) {
                 ObjView_Toggle();
             else if ((int)event.window.windowID == RamView_WindowID())   /* <-- añadir */
                 RamView_Toggle();
+            else if ((int)event.window.windowID == PlaneView_WindowID())
+                PlaneView_Toggle();
             else
                 running = 0;   /* main game window closed via the WM */
+        }
+        /* Plane viewer: mouse wheel scrolls, left-drag pans (only when the
+           pointer is inside that window) */
+        if (event.type == SDL_MOUSEWHEEL) {
+            if ((int)event.wheel.windowID == PlaneView_WindowID()) {
+                PlaneView_Scroll(event.wheel.x * 40, -event.wheel.y * 40);
+            }
+        } else if (event.type == SDL_MOUSEBUTTONDOWN) {
+            if ((int)event.button.windowID == PlaneView_WindowID() &&
+                event.button.button == SDL_BUTTON_LEFT) {
+                PlaneView_DragStart(event.button.x, event.button.y);
+            }
+        } else if (event.type == SDL_MOUSEBUTTONUP) {
+            if ((int)event.button.windowID == PlaneView_WindowID() &&
+                event.button.button == SDL_BUTTON_LEFT) {
+                PlaneView_DragEnd();
+            }
+        } else if (event.type == SDL_MOUSEMOTION) {
+            if ((int)event.motion.windowID == PlaneView_WindowID()) {
+                PlaneView_DragMove(event.motion.x, event.motion.y);
+            }
         }
     }
 
@@ -64,9 +89,15 @@ void Input_Read(void) {
     if (keys[SDL_SCANCODE_R] && !prev_ramview_key) {
         RamView_Toggle();
     }
+
+    /* Debug: G toggles the Plane A/B viewer window (down-edge only) */
+    if (keys[SDL_SCANCODE_G] && !prev_planeview_key) {
+        PlaneView_Toggle();
+    }
     
 prev_ramview_key = keys[SDL_SCANCODE_R];
     prev_objview_key = keys[SDL_SCANCODE_O];
+    prev_planeview_key = keys[SDL_SCANCODE_G];
 
     /* Debug: F toggles free camera mode (down-edge only) */
     if (keys[SDL_SCANCODE_F] && !prev_f_key) {

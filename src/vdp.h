@@ -57,6 +57,10 @@ void VDP_ToggleVRAMViewer(void);
 /* SDL window ID of the open VRAM viewer (-1 when closed). */
 int VDP_ViewerWindowID(void);
 
+/* Number of rows (in tiles) of a plane from register $10
+   (plane_b: 0 = plane A, 1 = plane B). */
+int VDP_PlaneRows(int plane_b);
+
 /* Debug/test overlay: when >= 0, draw a counter bar in VDP_RenderFrame.
    Set to -1 to disable (normal operation). */
 extern int vdp_test_counter;

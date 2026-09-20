@@ -3,6 +3,8 @@
 #include "palette.h"
 #include "collision.h"
 #include "data.h"
+#include "planeview.h"
+#include "font8x8.h"
 #include <SDL2/SDL.h>
 #include <stdlib.h>
 #include <string.h>
@@ -137,14 +139,19 @@ void VDP_CopyTilemapToVRAM(const uint16_t *source, uint32_t vram_dest,
         }
     }
 }
-/* Bits 4-5 del registro $10 codifican el alto del plano:
-   00 = 32 filas, 01 = 64 filas, 11 = 128 filas (10 se trata como 32) */
-static int vdp_plane_height_mask(void) {
-    int height_bits = (vdp.registers[16] >> 4) & 0x3;
-    int rows = (height_bits == 1) ? 64
-             : (height_bits == 3) ? 128
-             : 32;
-    return rows * 8 - 1;   /* máscara en píxeles: 0xFF, 0x1FF o 0x3FF */
+/* El registro $10 codifica el alto de cada plano: bits 4-5 para plane A y
+   bits 6-7 para plane B. 00 = 32 filas, 01 = 64 filas, 11 = 128 filas
+   (10 se trata como 32). El Special Stage usa $11 (A = 64, B = 32 filas);
+   si se aplicara el alto de A a los dos planos, B leería VRAM por encima de
+   su área (basura). */
+int VDP_PlaneRows(int plane_b) {
+    int height_bits = (vdp.registers[16] >> (plane_b ? 6 : 4)) & 0x3;
+    return (height_bits == 1) ? 64
+         : (height_bits == 3) ? 128
+         : 32;
+}
+static int vdp_plane_height_mask(int plane_b) {
+    return VDP_PlaneRows(plane_b) * 8 - 1;   /* 0xFF, 0x1FF o 0x3FF */
 }
 /* Render one screen row of a plane, drawing only tiles whose priority bit
    matches `pri` (0 or 1). The caller merges layers in MD priority order, so
@@ -155,9 +162,9 @@ static int vdp_plane_height_mask(void) {
    scroll is per-plane. screen_y selects the output row in [0,224). */
 static void render_plane_scanline(const uint8_t *nametable, uint16_t *palette,
                                   int scroll_x, int scroll_y, int screen_y,
-                                  uint32_t *pixels, int pitch, int pri) {
+                                  uint32_t *pixels, int pitch, int pri, int plane_b) {
     uint32_t *out = pixels + screen_y * (pitch / 4);
-    int y_mask = vdp_plane_height_mask();          /* antes: hardcoded */
+    int y_mask = vdp_plane_height_mask(plane_b);       /* antes: hardcoded */
     int plane_y = (screen_y + scroll_y) & y_mask;  /* antes: & 0xFF */
     int ty = plane_y >> 3;
     int py = plane_y & 7;
@@ -188,17 +195,20 @@ static void render_plane_scanline(const uint8_t *nametable, uint16_t *palette,
 /* ------------------------------------------------------------------ */
 /* Real-time VRAM viewer window                                       */
 /* ------------------------------------------------------------------ */
-#define VRAM_VIEW_COLS   128   /* 128 cols x 16 rows = 2048 tiles      */
-#define VRAM_VIEW_ROWS   16
-#define VRAM_VIEW_SCALE  2     /* 8x8 tile x2 = 16 px per cell         */
-#define VRAM_VIEW_CELL   (8 * VRAM_VIEW_SCALE)
-#define VRAM_VIEW_STRIP  32    /* CRAM strip height (bottom of window) */
-#define VRAM_VIEW_W      (VRAM_VIEW_COLS * VRAM_VIEW_CELL)
-#define VRAM_VIEW_H      (VRAM_VIEW_ROWS * VRAM_VIEW_CELL + VRAM_VIEW_STRIP)
+/* The sheet is not fixed-size anymore: every frame the number of
+   columns/rows and the tile cell size (integer scale, 8..64 px) are
+   recomputed from the CURRENT window size so the 2048 tiles always fit
+   without being stretched or cropped. The backing texture is recreated at
+   the window size, so SDL renders everything 1:1. */
+#define VRAM_VIEW_TILES  2048 /* tiles $000..$7FF                          */
+#define VRAM_VIEW_LABEL  56   /* left margin for VRAM address labels       */
+#define VRAM_VIEW_HDR    16   /* top OSD band                              */
+#define VRAM_VIEW_STRIP  67   /* palette: 4 square-swatch palette lines    */
 
 static SDL_Window   *g_vram_win = NULL;
 static SDL_Renderer *g_vram_ren = NULL;
 static SDL_Texture  *g_vram_tex = NULL;
+static int g_vram_tex_w = 0, g_vram_tex_h = 0;
 
 void VDP_ToggleVRAMViewer(void) {
     if (g_vram_win) {
@@ -208,12 +218,13 @@ void VDP_ToggleVRAMViewer(void) {
         g_vram_tex = NULL;
         g_vram_ren = NULL;
         g_vram_win = NULL;
+        g_vram_tex_w = 0;
+        g_vram_tex_h = 0;
         return;
     }
     g_vram_win = SDL_CreateWindow("VRAM Viewer [P]",
                                 SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                                VRAM_VIEW_W, VRAM_VIEW_H,
-                                SDL_WINDOW_RESIZABLE);
+                                1200, 760, SDL_WINDOW_RESIZABLE);
     if (!g_vram_win) return;
     g_vram_ren = SDL_CreateRenderer(g_vram_win, -1, 0);
     if (!g_vram_ren) {
@@ -222,8 +233,9 @@ void VDP_ToggleVRAMViewer(void) {
         return;
     }
     g_vram_tex = SDL_CreateTexture(g_vram_ren, SDL_PIXELFORMAT_ARGB8888,
-                                 SDL_TEXTUREACCESS_STREAMING,
-                                 VRAM_VIEW_W, VRAM_VIEW_H);
+                                 SDL_TEXTUREACCESS_STREAMING, 1200, 760);
+    g_vram_tex_w = 1200;
+    g_vram_tex_h = 760;
 }
 
 /* SDL window ID of the viewer (-1 when closed). Lets the event loop
@@ -232,26 +244,128 @@ int VDP_ViewerWindowID(void) {
     return g_vram_win ? (int)SDL_GetWindowID(g_vram_win) : -1;
 }
 
+/* Draw one palette section: 4 lines x 16 colors as SQUARE swatches that
+   never stretch and adapt like the tile grid (integer swatch size), lines
+   stacked with 1 px separators, per-line labels just left of the section
+   (e.g. "PAL P0", "P1".."P3"). */
+static void render_pal_section(uint32_t *px, int stride, int pitch, int ww,
+                               int wh, int sx, int sy, int cell,
+                               const uint32_t rgba[64], const char *cap,
+                               char lch) {
+    int pitch_h = cell + 1;                     /* line pitch (1 px sep) */
+    for (int li = 0; li < 4; li++) {
+        int ry = sy + li * pitch_h;
+        for (int i = 0; i < 16; i++) {
+            int rx = sx + i * (cell + 1);
+            uint32_t c = rgba[li * 16 + i];
+            for (int y = ry; y < ry + cell; y++) {
+                for (int x = rx; x < rx + cell; x++) {
+                    if (x >= 0 && x < ww && y >= 0 && y < wh) {
+                        px[y * stride + x] = c;
+                    }
+                }
+            }
+        }
+        if (li < 3) {                           /* separator under the line */
+            int y = ry + cell;
+            for (int x = sx; x < sx + 16 * (cell + 1); x++) {
+                if (x >= 0 && x < ww && y >= 0 && y < wh) {
+                    px[y * stride + x] = 0xFF101010;
+                }
+            }
+        }
+        char lab[16];
+        if (li == 0) snprintf(lab, sizeof lab, "%s %c0", cap, lch);
+        else         snprintf(lab, sizeof lab, "%c%d", lch, li);
+        font8x8_blit_shadow(px, pitch, ww, wh, sx - 44,
+                            ry + (cell - 8) / 2, lab, 0xFFC0C0C0);
+    }
+}
+
 static void render_vram_viewer(void) {
     if (!g_vram_win) return;
+
+    int ww, wh;
+    SDL_GetWindowSize(g_vram_win, &ww, &wh);
+    if (ww < 120 || wh < 120) return;
+
+    int avail_w = ww - VRAM_VIEW_LABEL;
+    int avail_h = wh - VRAM_VIEW_HDR - VRAM_VIEW_STRIP;
+    if (avail_w < 16 || avail_h < 16) return;
+
+    /* Largest integer cell (8..64 px) whose column/row split still fits the
+       whole sheet in the grid area. Small windows get small cells and more
+       rows; maximized windows get big cells and fewer rows. */
+    int cell = 8, cols = 1, rows = VRAM_VIEW_TILES;
+    for (int c = 8; c <= 64; c += 8) {
+        int cc = avail_w / c;
+        if (cc < 2) break;
+        int rr = (VRAM_VIEW_TILES + cc - 1) / cc;
+        if (rr * c > avail_h) break;
+        cell = c;
+        cols = cc;
+        rows = rr;
+    }
+    int grid_w = cols * cell;
+    int grid_h = rows * cell;
+    int gx = VRAM_VIEW_LABEL + (avail_w - grid_w) / 2;
+    int gy = VRAM_VIEW_HDR + (avail_h - grid_h) / 2;
+    /* When the window is too small for even the 8 px cell the sheet would
+       overflow the area: clamp the grid origin so no write ever leaves the
+       texture (the extra rows are simply clipped at the bottom). */
+    if (gx < VRAM_VIEW_LABEL) gx = VRAM_VIEW_LABEL;
+    if (gy < VRAM_VIEW_HDR) gy = VRAM_VIEW_HDR;
+
+    /* Keep the backing texture at the window size so RenderCopy is 1:1. */
+    if (!g_vram_tex || g_vram_tex_w != ww || g_vram_tex_h != wh) {
+        if (g_vram_tex) SDL_DestroyTexture(g_vram_tex);
+        g_vram_tex = SDL_CreateTexture(g_vram_ren, SDL_PIXELFORMAT_ARGB8888,
+                                       SDL_TEXTUREACCESS_STREAMING, ww, wh);
+        g_vram_tex_w = ww;
+        g_vram_tex_h = wh;
+        if (!g_vram_tex) return;
+    }
 
     void *pixels;
     int pitch;
     SDL_LockTexture(g_vram_tex, NULL, &pixels, &pitch);
     uint32_t *px = (uint32_t *)pixels;
+    int stride = pitch / 4;
 
-    /* Checker background so empty VRAM is obvious */
-    for (int y = 0; y < VRAM_VIEW_H; y++) {
-        for (int x = 0; x < VRAM_VIEW_W; x++) {
+    for (int i = 0; i < ww * wh; i++) px[i] = 0xFF202020;
+
+    /* OSD band: current plane bases + scroll values the renderer uses */
+    {
+        uint32_t plane_a = ((uint32_t)(vdp.registers[2] & 0x38)) << 10;
+        uint32_t plane_b = ((uint32_t)(vdp.registers[4] & 0x07)) << 13;
+        plane_a &= VRAM_SIZE - 1;
+        plane_b &= VRAM_SIZE - 1;
+        const uint8_t *h = &ram[v_hscrolltablebuffer];
+        int16_t ax = (int16_t)((uint16_t)h[0] | ((uint16_t)h[1] << 8));
+        int16_t bx = (int16_t)((uint16_t)h[2] | ((uint16_t)h[3] << 8));
+        char buf[128];
+        snprintf(buf, sizeof buf,
+                 "A=$%04X B=$%04X R10=$%02X  AX=%d AY=%d BX=%d BY=%d",
+                 plane_a, plane_b, vdp.registers[16] & 0xFF,
+                 ax, (int16_t)v_scrposy_vdp, bx, (int16_t)v_bgscrposy_vdp);
+        font8x8_blit_shadow(px, pitch, ww, wh, 2, 2, buf, 0xFFC0C0C0);
+    }
+
+    /* Checker background inside the grid area */
+    for (int y = gy; y < gy + grid_h && y < wh; y++) {
+        for (int x = gx; x < gx + grid_w && x < ww; x++) {
             int cc = ((x >> 2) + (y >> 2)) & 1;
-            px[y * (pitch / 4) + x] = cc ? 0xFF3A3A3A : 0xFF525252;
+            px[y * stride + x] = cc ? 0xFF3A3A3A : 0xFF525252;
         }
     }
 
-    /* Draw all 2048 tiles. Tile number = row * 128 + col. */
-    for (int t = 0; t < 2048; t++) {
-        int col = t % VRAM_VIEW_COLS;
-        int row = t / VRAM_VIEW_COLS;
+    /* All 2048 tiles; the wall of columns reorganizes to the window size */
+    int scale = cell / 8;
+    for (int t = 0; t < VRAM_VIEW_TILES; t++) {
+        int col = t % cols;
+        int row = t / cols;
+        int ox0 = gx + col * cell;
+        int oy0 = gy + row * cell;
         const uint8_t *td = &vdp.vram[t * 32];
 
         for (int ty = 0; ty < 8; ty++) {
@@ -261,36 +375,67 @@ static void render_vram_viewer(void) {
                 if (idx == 0) continue; /* transparent -> checker stays */
 
                 uint32_t c = MD_ColorToRGBA(palette_main[idx]);
-                int ox = col * VRAM_VIEW_CELL + tx * VRAM_VIEW_SCALE;
-                int oy = row * VRAM_VIEW_CELL + ty * VRAM_VIEW_SCALE;
-                for (int s = 0; s < VRAM_VIEW_SCALE; s++) {
-                    for (int r = 0; r < VRAM_VIEW_SCALE; r++) {
-                        px[(oy + r) * (pitch / 4) + ox + s] = c;
+                for (int s = 0; s < scale; s++) {
+                    for (int r = 0; r < scale; r++) {
+                        int xx = ox0 + tx * scale + s;
+                        int yy = oy0 + ty * scale + r;
+                        if (xx >= 0 && yy >= 0 && xx < ww && yy < wh) {
+                            px[yy * stride + xx] = c;
+                        }
                     }
                 }
             }
         }
     }
 
-    /* Grid lines every tile */
-    for (int y = 0; y < VRAM_VIEW_ROWS * VRAM_VIEW_CELL; y++) {
-        for (int x = 0; x < VRAM_VIEW_W; x++) {
-            if (x % VRAM_VIEW_CELL == 0 || y % VRAM_VIEW_CELL == 0) {
-                px[y * (pitch / 4) + x] = 0xFF101010;
+    /* Grid lines at cell boundaries */
+    for (int y = gy; y < gy + grid_h && y < wh; y++) {
+        for (int x = gx; x < gx + grid_w && x < ww; x++) {
+            if ((x - gx) % cell == 0 || (y - gy) % cell == 0) {
+                px[y * stride + x] = 0xFF101010;
             }
         }
     }
 
-    /* CRAM strip at the bottom (64 colors, shown with current palette) */
-    for (int i = 0; i < 64; i++) {
-        uint32_t c = MD_ColorToRGBA(vdp.cram[i]);
-        int x0 = i * VRAM_VIEW_W / 64;
-        int x1 = (i + 1) * VRAM_VIEW_W / 64;
-        for (int y = VRAM_VIEW_ROWS * VRAM_VIEW_CELL; y < VRAM_VIEW_H; y++) {
-            for (int x = x0; x < x1; x++) {
-                px[y * (pitch / 4) + x] = c;
-            }
+    /* Left margin: VRAM address of the first tile of each row */
+    char buf[16];
+    for (int r = 0; r < rows; r++) {
+        int tile0 = r * cols;
+        if (tile0 >= VRAM_VIEW_TILES) break;
+        snprintf(buf, sizeof buf, "$%04X", tile0 * 32);
+        font8x8_blit_shadow(px, pitch, ww, wh, 6,
+                            gy + r * cell + (cell - 8) / 2, buf, 0xFFA0A0A0);
+    }
+    for (int y = VRAM_VIEW_HDR; y < wh; y++) {
+        px[y * stride + (VRAM_VIEW_LABEL - 2)] = 0xFF4A4A4A;
+    }
+
+    /* Palette (bottom): PAL = palette_main (what the renderer uses), CRAM =
+       raw CRAM. Each is a 4x16 block of SQUARE swatches that never stretch
+       and adapt like the tile grid (integer swatch size 8..16 px); PAL and
+       CRAM sit side by side with a bounded gap. */
+    {
+        uint32_t pal_rgba[64], cram_rgba[64];
+        for (int i = 0; i < 64; i++) {
+            pal_rgba[i] = MD_ColorToRGBA(palette_main[i]);
+            cram_rgba[i] = MD_ColorToRGBA(vdp.cram[i]);
         }
+        int cell = 16;                          /* swatch edge, 8..16 px */
+        while (cell > 8 && 2 * 16 * cell + 52 > avail_w) cell -= 4;
+        int sec_w = 16 * cell;
+        int gap = avail_w - 2 * sec_w;
+        if (gap > 80) gap = 80;
+        if (gap < 52) gap = 52;
+        int total = 2 * sec_w + gap;
+        int left = VRAM_VIEW_LABEL + (avail_w - total) / 2;
+        int sec_h = 4 * (cell + 1) - 1;
+        int strip_top = wh - VRAM_VIEW_STRIP;
+        int sy = strip_top + (VRAM_VIEW_STRIP - sec_h) / 2;
+        render_pal_section(px, stride, pitch, ww, wh, left, sy, cell,
+                           pal_rgba, "PAL", 'P');
+        render_pal_section(px, stride, pitch, ww, wh,
+                           left + sec_w + gap, sy, cell,
+                           cram_rgba, "CRAM", 'C');
     }
 
     SDL_UnlockTexture(g_vram_tex);
@@ -573,9 +718,9 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
            Later layers overwrite earlier ones; transparent pixels are never
            written. Note the ASM's "FG"/"BG" naming is swapped versus plane A/B. */
         render_plane_scanline(&vdp.vram[plane_b_addr], palette_main,
-                              bg_scroll_x, bg_scroll_y, row, pix, pitch, 0);
+                              bg_scroll_x, bg_scroll_y, row, pix, pitch, 0, 1);
         render_plane_scanline(&vdp.vram[plane_a_addr], palette_main,
-                              fg_scroll_x, fg_scroll_y, row, pix, pitch, 0);
+                              fg_scroll_x, fg_scroll_y, row, pix, pitch, 0, 0);
 
         /* Blit surviving sprites tail-to-head so the first table entry
            ends up over later ones; pass 0 = non-priority sprites. */
@@ -627,9 +772,9 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
         }
 
         render_plane_scanline(&vdp.vram[plane_b_addr], palette_main,
-                              bg_scroll_x, bg_scroll_y, row, pix, pitch, 1);
+                              bg_scroll_x, bg_scroll_y, row, pix, pitch, 1, 1);
         render_plane_scanline(&vdp.vram[plane_a_addr], palette_main,
-                              fg_scroll_x, fg_scroll_y, row, pix, pitch, 1);
+                              fg_scroll_x, fg_scroll_y, row, pix, pitch, 1, 0);
 
         /* Pass 1 = priority sprites, above everything. */
         for (int k = list_len - 1; k >= 0; k--) {
@@ -710,6 +855,9 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
 
     /* Refresh the debug VRAM viewer window (no-op when closed) */
     render_vram_viewer();
+
+    /* Refresh the debug Plane A/B viewer window (no-op when closed) */
+    PlaneView_Render();
 
     /* Refresh the debug Object RAM viewer window (no-op when closed) */
     extern void ObjView_Render(void);
