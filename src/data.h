@@ -521,6 +521,16 @@ extern size_t   Map_Card_len;
 extern const uint8_t *Map_Got;
 extern size_t   Map_Got_len;
 
+/* Special Stage results screen mappings (same file, own table — Map_SSR in
+   _maps/Title Cards.asm, used by the 7E SSResult object) */
+extern const uint8_t *Map_SSR;
+extern size_t   Map_SSR_len;
+
+/* Special Stage results Chaos Emeralds mappings (_maps/SS Result Chaos
+   Emeralds.asm, table label Map_SSRC_internal — used by the 7F SSRChaos) */
+extern const uint8_t *Map_SSRC;
+extern size_t   Map_SSRC_len;
+
 /* Explosion mappings (27 ExplosionItem / 3F Explosion) */
 extern const uint8_t *Map_ExplodeItem;
 extern size_t   Map_ExplodeItem_len;

@@ -33,6 +33,8 @@ static void Ring_Main(void *obj);
 static void RingLoss_Main(void *obj);
 static void Signpost_Main(void *obj);
 static void GotThroughCard_Main(void *obj);
+static void SSResult_Main(void *obj);
+static void SSRChaos_Main(void *obj);
 static void Crabmeat_Main(void *obj);
 static void MotoBug_Main(void *obj);
 static void BuzzBomber_Main(void *obj);
@@ -116,6 +118,10 @@ void Objects_Init(void) {
     obj_dispatch[id_Prison] = Prison_Main;
     obj_dispatch[id_Newtron]      = Newtron_Main;
     obj_dispatch[id_SonicSpecial] = SonicSpecial_Main;
+
+    /* Register Special Stage results screen objects */
+    obj_dispatch[id_SSResult]  = SSResult_Main;
+    obj_dispatch[id_SSRChaos]  = SSRChaos_Main;
 
 
     /* Register explosion/gray puff, fiery explosion, animals, and points */
@@ -1882,6 +1888,246 @@ static void GotThroughCard_Main(void *obj) {
         case 0x0A: Got_NextLevel(o); break;
         case 0x0E: Got_SBZ2_MoveOut(o); break;
         case 0x10: Got_SBZ2_Boundary(o); break;
+    }
+}
+
+/* ===========================================================================
+   Object 7E — Special Stage results screen
+   Object 7F — Chaos Emeralds from the Special Stage results screen
+   (disasm/_incObj/7E, 7F Special Stage Results and Chaos Emeralds.asm)
+
+   The elements live in the fixed ObjRAM slots v_ssrescard..v_ssrescontinue
+   (slots 23-27) and the emeralds at v_ssresemeralds (slot 32); GM_Special
+   sets RAM_BYTE(v_ssrescard) = id_SSResult before the SS_NormalExit loop,
+   exactly like the ASM.
+   =========================================================================== */
+
+/* SSR_ItemData: start X, target X, Y, routine, frame */
+typedef struct {
+    int16_t start_x;
+    int16_t main_x;
+    int16_t y;
+    uint8_t routine;
+    uint8_t frame;
+} SSR_Item;
+
+static const SSR_Item SSR_ItemData[] = {
+    /* Header text */      { 0x020, 0x120, 0xC4, 2, 0 },  /* custom frame, see SSR_Main */
+    /* Score tally */      { 0x320, 0x120, 0x118, 2, 1 },
+    /* Ring Bonus tally */ { 0x360, 0x120, 0x128, 2, 2 },
+    /* Blue oval */        { 0x1EC, 0x11C, 0xC4, 2, 3 },
+    /* Continue tally */   { 0x3A0, 0x120, 0x138, 2, 6 },
+};
+
+/* SSRC_PosData: emerald X-positions in order of collection (pseudo-interlaced) */
+static const int16_t SSRC_PosData[] = { 0x110, 0x128, 0xF8, 0x140, 0xE0, 0x158 };
+
+/* SSR_ChkPLC (routine 0) -> SSR_Main: once the PLC queue is empty, set up
+   the card elements back-to-back in the v_ssrescard..v_ssrescontinue slots. */
+static void SSR_Main(uint8_t *o) {
+    uint8_t *a1 = o;
+
+    /* moveq #4-1,d1: header, score, ring, oval; +1 if >= 50 rings */
+    int d1 = 4 - 1;
+    if ((uint16_t)v_rings >= (uint16_t)ss_continue_rings) { /* cmpi.w #ss_continue_rings,(v_rings).w / blo.s SSR_Loop */
+        d1 += 1;                                             /* addq.w #1,d1 */
+    }
+
+    for (int i = 0; i <= d1; i++) {                          /* SSR_Loop: dbf d1 */
+        const SSR_Item *it = &SSR_ItemData[i];
+        obID(a1)       = id_SSResult;                        /* _move.b #id_SSResult,obID(a1) */
+        obX(a1)        = it->start_x;                        /* move.w (a2)+,obX(a1) */
+        ssr_mainX(a1)  = it->main_x;                         /* move.w (a2)+,ssr_mainX(a1) */
+        obScreenY(a1)  = it->y;                              /* move.w (a2)+,obScreenY(a1) */
+        obRoutine(a1)  = it->routine;                        /* move.b (a2)+,obRoutine(a1) */
+        obFrame(a1)    = it->frame;                          /* move.b (a2)+,obFrame(a1) */
+        obMap(a1)      = (uint32_t)(uintptr_t)Map_SSR;       /* move.l #Map_SSR,obMap(a1) */
+        obGfx(a1)      = (uint16_t)(ArtTile_Title_Card | Tile_Prio); /* move.w #ArtTile_Title_Card|Tile_Prio,obGfx(a1) */
+        obRender(a1)   = sprite_cam_screen;                  /* move.b #sprite_cam_screen,obRender(a1) */
+        a1 += object_size;                                   /* lea object_size(a1),a1 */
+    }
+
+    /* Header text frame: SPECIAL STAGE / CHAOS EMERALDS / SONIC GOT THEM ALL */
+    int d0 = 7;                                              /* moveq #7,d0 */
+    if (v_emeralds != 0) {                                   /* move.b (v_emeralds).w,d1 / beq.s .setFrame */
+        d0 = 0;                                              /* moveq #0,d0 */
+        if (v_emeralds == ss_emeralds_num) {                 /* cmpi.b #ss_emeralds_num,d1 / bne.s .setFrame */
+            d0 = 8;                                          /* "SONIC GOT THEM ALL" */
+            obX(o)       = 0x18;                             /* move.w #$18,obX(a0) */
+            ssr_mainX(o) = 0x118;                            /* move.w #$118,ssr_mainX(a0) */
+        }
+    }
+    obFrame(o) = (uint8_t)d0;                                /* .setFrame: move.b d0,obFrame(a0) */
+}
+
+static void SSR_ChkPLC(uint8_t *o) {
+    if (PLC_IsEmpty()) {                                     /* tst.l (v_plc_buffer).w / beq.s SSR_Main */
+        SSR_Main(o);
+    }
+}
+
+/* SSR_Move (routine 2): slide each element toward ssr_mainX at 0x10 px/frame;
+   the ring bonus element (frame 2) controls the sequence when it lands. */
+static void SSR_Move(uint8_t *o) {
+    int16_t d1 = 0x10;                                       /* moveq #$10,d1 */
+    int16_t d0 = ssr_mainX(o);                               /* move.w ssr_mainX(a0),d0 */
+
+    if (d0 == obX(o)) {                                      /* cnt.w obX(a0),d0 / beq.s .reachedXTarget */
+        if (obFrame(o) == 2) {                               /* cmpi.b #2,obFrame(a0) / bne.s .checkOffScreen */
+            obRoutine(o) += 2;                               /* addq.b #2 -> SSR_Wait (4) */
+            ssr_timeframe(o) = 3 * 60;                       /* move.w #3*60,obTimeFrame(a0) */
+            RAM_BYTE(v_ssresemeralds) = id_SSRChaos;         /* move.b #id_SSRChaos,(v_ssresemeralds).w */
+        }
+        goto check_offscreen;                                /* falls through to .checkOffScreen */
+    }
+
+    if (d0 < obX(o)) {                                       /* bge.s .updateXPos / neg.w d1 */
+        d1 = -d1;
+    }
+    obX(o) += d1;                                            /* .updateXPos: add.w d1,obX(a0) */
+
+check_offscreen:                                             /* .checkOffScreen */
+    d0 = obX(o);                                             /* move.w obX(a0),d0 */
+    if (d0 < 0) return;                                      /* bmi.s .return */
+    if ((uint16_t)d0 >= 0x80 + 320 + 64) return;             /* cmpi.w #$80+320+64,d0 / bhs.s .return */
+    DisplaySprite(o);                                        /* bra.w DisplaySprite */
+}
+
+/* SSR_Wait (routines 4, 8, $C, $10): wait out the timer, then advance routine */
+static void SSR_Wait(uint8_t *o) {
+    ssr_timeframe(o) -= 1;                                   /* subq.w #1,obTimeFrame(a0) */
+    if (ssr_timeframe(o) == 0) {                             /* bne.s .display */
+        obRoutine(o) += 2;                                   /* addq.b #2,obRoutine(a0) */
+    }
+    DisplaySprite(o);                                        /* .display: bra.w DisplaySprite */
+}
+
+/* SSR_RingBonus (routine 6): count the ring bonus down by 10 (100 points)
+   each tally step, then wait and show the continue if >= 50 rings. */
+static void SSR_RingBonus(uint8_t *o) {
+    DisplaySprite(o);                                        /* bsr.w DisplaySprite */
+    f_endactbonus = 1;                                       /* move.b #1,(f_endactbonus).w */
+
+    if (v_ringbonus != 0) {                                  /* tst.w (v_ringbonus).w / beq.s .finished */
+        v_ringbonus -= 10;                                   /* subi.w #10,(v_ringbonus).w */
+        AddPoints(10);                                       /* moveq #10,d0 / jsr (AddPoints).l */
+
+        if ((v_vblank_byte & 3) == 0) {                      /* move.b (v_vblank_byte).w,d0 / andi.b #3,d0 / bne.s .return */
+            Sound_Queue(sfx_Switch, false);                  /* move.w #sfx_Switch,d0 / jmp (QueueSound2).l */
+        }
+        return;                                              /* .return: rts */
+    }
+
+    /* .finished */
+    Sound_Queue(sfx_Cash, false);                            /* move.w #sfx_Cash,d0 / jsr (QueueSound2).l */
+    obRoutine(o) += 2;                                       /* addq.b #2 -> SSR_Wait (8) */
+    ssr_timeframe(o) = 3 * 60;                               /* move.w #3*60,obTimeFrame(a0) */
+
+    if ((uint16_t)v_rings >= (uint16_t)ss_continue_rings) {  /* cmpi.w #ss_continue_rings,(v_rings).w / blo.s .return */
+        ssr_timeframe(o) = 1 * 60;                           /* move.w #1*60,obTimeFrame(a0) */
+        obRoutine(o) += 4;                                   /* addq.b #4 -> SSR_Wait ($C) */
+    }
+}
+
+/* SSR_Exit (routines $A, $12): signal SS_NormalExit to return to the level */
+static void SSR_Exit(uint8_t *o) {
+    f_restart = 1;                                           /* move.w #1,(f_restart).w */
+    DisplaySprite(o);                                        /* bra.w DisplaySprite */
+}
+
+/* SSR_Continue (routine $E): show the mini-Sonic continue tally and play the
+   continue jingle. */
+static void SSR_Continue(uint8_t *o) {
+    uint8_t *cont = RAM_ADDR(v_ssrescontinue);
+    obFrame(cont)   = 4;                                     /* move.b #4,(v_ssrescontinue+obFrame).w */
+    obRoutine(cont) = 0x14;                                  /* move.b #$14,(v_ssrescontinue+obRoutine).w -> SSR_ContAni */
+    Sound_Queue(sfx_Continue, false);                        /* move.w #sfx_Continue,d0 / jsr (QueueSound2).l */
+    obRoutine(o) += 2;                                       /* addq.b #2 -> SSR_Wait ($10) */
+    ssr_timeframe(o) = 6 * 60;                               /* move.w #6*60,obTimeFrame(a0) */
+    DisplaySprite(o);                                        /* bra.w DisplaySprite */
+}
+
+/* SSR_ContAni (routine $14): make mini-Sonic alternate frames 4/5 every
+   16 frames (foot tapping). */
+static void SSR_ContAni(uint8_t *o) {
+    if ((v_vblank_byte & 0x0F) == 0) {                       /* move.b (v_vblank_byte).w,d0 / andi.b #$F,d0 / bne.s .display */
+        obFrame(o) ^= 1;                                     /* bchg #0,obFrame(a0) */
+    }
+    DisplaySprite(o);                                        /* .display: bra.w DisplaySprite */
+}
+
+/* Object 7E dispatcher */
+static void SSResult_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00: SSR_ChkPLC(o); break;
+        case 0x02: SSR_Move(o); break;
+        case 0x04:
+        case 0x08:
+        case 0x0C:
+        case 0x10: SSR_Wait(o); break;
+        case 0x06: SSR_RingBonus(o); break;
+        case 0x0A:
+        case 0x12: SSR_Exit(o); break;
+        case 0x0E: SSR_Continue(o); break;
+        case 0x14: SSR_ContAni(o); break;
+    }
+}
+
+/* ===========================================================================
+   Object 7F — Chaos Emeralds from the results screen
+   =========================================================================== */
+
+/* SSRC_Main (routine 0): spawn one SSRChaos per collected emerald into the
+   slots right after v_ssresemeralds, reading v_emldlist for the colors. */
+static void SSRC_Main(uint8_t *o) {
+    uint8_t *a1 = o;
+
+    /* moveq #0,d2 (v_emldlist index); d1 = v_emeralds-1 */
+    int d2 = 0;
+    int d1 = v_emeralds - 1;                                 /* move.b (v_emeralds).w,d1 / subq.b #1,d1 */
+    if (d1 < 0) {                                            /* bcs.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+
+    for (int i = 0; i <= d1; i++) {                          /* SSRC_Loop: dbf d1 */
+        obID(a1)       = id_SSRChaos;                        /* _move.b #id_SSRChaos,obID(a1) */
+        obX(a1)        = SSRC_PosData[i];                    /* move.w (a2)+,obX(a1) */
+        obScreenY(a1)  = 0xF0;                               /* move.w #$F0,obScreenY(a1) */
+
+        uint8_t d3 = RAM_BYTE(v_emldlist + d2);              /* lea (v_emldlist).w,a3 / move.b (a3,d2.w),d3 */
+        obFrame(a1) = d3;                                    /* move.b d3,obFrame(a1) */
+        obAnim(a1)  = d3;                                    /* move.b d3,obAnim(a1) */
+        d2 += 1;                                             /* addq.b #1,d2 */
+
+        obRoutine(a1) += 2;                                  /* addq.b #2 -> SSRC_Flash */
+        obMap(a1)     = (uint32_t)(uintptr_t)Map_SSRC;       /* move.l #Map_SSRC,obMap(a1) */
+        obGfx(a1)     = (uint16_t)(ArtTile_SS_Results_Emeralds | Tile_Prio); /* move.w #ArtTile_SS_Results_Emeralds|Tile_Prio,obGfx(a1) */
+        obRender(a1)  = sprite_cam_screen;                   /* move.b #sprite_cam_screen,obRender(a1) */
+        a1 += object_size;                                   /* lea object_size(a1),a1 */
+    }
+}
+
+/* SSRC_Flash (routine 2): alternate each emerald between its visible frame
+   and the blank frame (frame 6) every frame. */
+static void SSRC_Flash(uint8_t *o) {
+    uint8_t d0 = obFrame(o);                                 /* move.b obFrame(a0),d0 */
+    obFrame(o) = ss_emeralds_num;                            /* move.b #ss_emeralds_num,obFrame(a0) (blank) */
+    if (d0 == ss_emeralds_num) {                             /* cmpi.b #ss_emeralds_num,d0 / bne.s .display */
+        obFrame(o) = obAnim(o);                              /* move.b obAnim(a0),obFrame(a0) */
+    }
+    DisplaySprite(o);                                        /* .display: bra.w DisplaySprite */
+}
+
+/* Object 7F dispatcher */
+static void SSRChaos_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00: SSRC_Main(o); break;
+        case 0x02: SSRC_Flash(o); break;
     }
 }
 

@@ -666,6 +666,12 @@ static inline void RAM_SET_U32(uint32_t addr, uint32_t v) {
 #define got_finalX(obj)  (*(int16_t *)((uint8_t *)(obj) + 0x32))  /* target X while moving out (SBZ2) */
 #define got_timeframe(obj) (*(uint16_t *)((uint8_t *)(obj) + 0x1E)) /* 3*60 or post-delay counter */
 
+/* Special Stage Results object 7E specific fields
+   (ssr_mainX = objoff_30; obTimeFrame at objoff_1E is a 16-bit counter here,
+   written as a word per the ASM: move.w #3*60,obTimeFrame(a0)) */
+#define ssr_mainX(obj)     (*(int16_t *)((uint8_t *)(obj) + 0x30))  /* target X-position for card while moving in */
+#define ssr_timeframe(obj) (*(uint16_t *)((uint8_t *)(obj) + 0x1E)) /* time delay counter (3*60, 1*60, 6*60...) */
+
 /* Ring/RingLoss specific fields */
 #define ring_origX(obj)      (*(int16_t *)((uint8_t *)(obj) + 0x32))  /* objoff_32: original ring X when spawned */
 #define ring_respawnbit(obj) (*(uint8_t *)((uint8_t *)(obj) + 0x34))  /* objoff_34: respawn list bit to clear */

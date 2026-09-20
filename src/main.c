@@ -209,6 +209,10 @@ void WaitForVBlank(void) {
         PalCycle_SS();
         if (v_generictimer != 0) v_generictimer--;
         break;    
+    case id_VBlank_Continue:    /* sonic.asm VBlank_Continue ($16): SS finish loop */
+        VBlank_StandardTransfers();
+        if (v_generictimer != 0) v_generictimer--;
+        break;
     default:                     VBlank_StandardTransfers(); break;
     }
 

@@ -285,6 +285,8 @@ const uint8_t *Map_PSB;             size_t Map_PSB_len;
 const uint8_t *Map_Cred;            size_t Map_Cred_len;
 const uint8_t *Map_Card;            size_t Map_Card_len;
 const uint8_t *Map_Got;             size_t Map_Got_len;
+const uint8_t *Map_SSR;             size_t Map_SSR_len;
+const uint8_t *Map_SSRC;            size_t Map_SSRC_len;
 const uint8_t *Map_HUD;             size_t Map_HUD_len;
 const uint8_t *Map_Ring;            size_t Map_Ring_len;
 const uint8_t *Map_Sign;            size_t Map_Sign_len;
@@ -775,6 +777,12 @@ int Data_Init(void) {
     /* "SONIC HAS PASSED" vive en el mismo archivo, tabla propia: */
     load_asm_asset_named("_maps/Title Cards.asm", "Map_Got",
                          &Map_Got, &Map_Got_len);
+    /* "SPECIAL STAGE"/"CHAOS EMERALDS" results screen, misma tabla propia: */
+    load_asm_asset_named("_maps/Title Cards.asm", "Map_SSR",
+                         &Map_SSR, &Map_SSR_len);
+    /* Esmeraldas de la pantalla de resultados (tabla Map_SSRC_internal): */
+    load_asm_asset_named("_maps/SS Result Chaos Emeralds.asm", "Map_SSRC_internal",
+                         &Map_SSRC, &Map_SSRC_len);
     LOAD_MAP("_maps/HUD.asm",                        Map_HUD);
     LOAD_MAP("_maps/Rings (REV00).asm",                      Map_Ring);
     LOAD_MAP("_maps/Signpost.asm",                   Map_Sign);
@@ -1142,7 +1150,7 @@ void Data_Quit(void) {
 
     /* Mappings mmap-eados */
     UNMAP(Map_Sonic); UNMAP(Map_TSon); UNMAP(Map_PSB); UNMAP(Map_Cred);
-    UNMAP(Map_Card); UNMAP(Map_Got); UNMAP(Map_HUD); UNMAP(Map_Ring);
+    UNMAP(Map_Card); UNMAP(Map_Got); UNMAP(Map_SSR); UNMAP(Map_SSRC); UNMAP(Map_HUD); UNMAP(Map_Ring);
     UNMAP(Map_Sign); UNMAP(Map_Pri); UNMAP(Map_Shield); UNMAP(Map_Smash);
     UNMAP(Map_Hel); UNMAP(Map_Swing_GHZ); UNMAP(Map_Swing_SLZ);
     UNMAP(Map_Eggman); UNMAP(Map_BossItems);

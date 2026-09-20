@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "data.h"
 #include "vdp.h"
+#include "plc.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -252,6 +253,151 @@ void Palette_FadeIn(void) {
         }
         memcpy(vdp.cram, dst, num_colors * sizeof(uint16_t));
     }
+}
+
+/* ============================================================================
+    Palette White Fades (from _inc/Palette Fading.asm — PaletteWhiteIn / Out)
+
+    The Special Stage fades to/from WHITE instead of black:
+    - PaletteWhiteOut: brightens every color toward cWhite over 22 frames.
+    - PaletteWhiteIn: pre-fills v_palette with white, then darkens each color
+      toward its target in v_palette_fading over 22 frames.
+    Both set the VBlank fade routine ($12) per frame (CRAM transfer happens
+    there) and poll RunPLC, exactly like the ASM.
+    ============================================================================ */
+
+/* WhiteIn_DecColor (_inc/Palette Fading.asm lines 271-305): darken one active
+   color by one channel-step toward its target. Blue first, then green; red is
+   always decremented by $002 (no target check — ASM quirk, ported as-is). */
+static void WhiteIn_DecColor(uint16_t *a0, uint16_t target) {
+    uint16_t d3 = *a0;                    /* move.w (a0),d3 */
+    if (d3 == target) return;             /* cmp.w d2,d3 / beq.s .nextColor */
+
+    /* .decBlue: decrease blue value by one step */
+    if (d3 >= 0x200) {                    /* subi.w #$200,d1 / blo.s .decGreen */
+        uint16_t d1 = (uint16_t)(d3 - 0x200);
+        if (d1 >= target) {               /* cmp.w d2,d1 / blo.s .decGreen */
+            *a0 = d1;                     /* move.w d1,(a0)+ */
+            return;
+        }
+    }
+    /* .decGreen: decrease green value by one step */
+    if (d3 >= 0x020) {                    /* subi.w #$020,d1 / blo.s .decRed */
+        uint16_t d1 = (uint16_t)(d3 - 0x020);
+        if (d1 >= target) {               /* cmp.w d2,d1 / blo.s .decRed */
+            *a0 = d1;                     /* move.w d1,(a0)+ */
+            return;
+        }
+    }
+    /* .decRed: decrease red value by one step & update active color */
+    *a0 = (uint16_t)(d3 - 0x002);         /* subq.w #$002,(a0)+ */
+}
+
+/* WhiteIn_FromWhite (lines 239-268): fade all affected colors one step toward
+   their targets; also fades the underwater palette, but only in Labyrinth. */
+void WhiteIn_FromWhite(void) {
+    uint16_t *a0 = (uint16_t *)RAM_ADDR(v_palette);          /* lea (v_palette).w,a0 */
+    uint16_t *a1 = (uint16_t *)RAM_ADDR(v_palette_fading);   /* lea (v_palette_fading).w,a1 */
+    int start = v_pfade_start;                               /* move.b (v_pfade_start).w,d0 / adda.w d0,a0/a1 */
+    int size  = v_pfade_size;                                /* move.b (v_pfade_size).w,d0 */
+
+    for (int i = 0; i <= size; i++) {
+        WhiteIn_DecColor(&a0[start + i], a1[start + i]);     /* .fadeColors: bsr.s WhiteIn_DecColor / dbf d0 */
+    }
+
+    if (v_zone == id_LZ) {                                   /* cmpi.b #id_LZ,(v_zone).w / bne.s .return */
+        uint16_t *w0 = (uint16_t *)RAM_ADDR(v_palette_water);         /* lea (v_palette_water).w,a0 */
+        uint16_t *w1 = (uint16_t *)RAM_ADDR(v_palette_water_fading);  /* lea (v_palette_water_fading).w,a1 */
+        for (int i = 0; i <= size; i++) {
+            WhiteIn_DecColor(&w0[start + i], w1[start + i]);  /* .fadeColorsWater: bsr.s WhiteIn_DecColor / dbf d0 */
+        }
+    }
+}
+
+/* PaletteWhiteIn (lines 212-236): fill the active palette with white, then
+   22 frames of WhiteIn_FromWhite toward the fade-in buffer. */
+void PaletteWhiteIn(void) {
+    extern void WaitForVBlank(void);
+
+    /* move.w #$003F,(v_pfade_start).w: start=0, size=$3F (affect all $40 colors) */
+    v_pfade_start = 0;
+    v_pfade_size  = 0x3F;
+
+    /* (PalWhiteIn_Alt) fill palette with white */
+    uint16_t *a0 = (uint16_t *)RAM_ADDR(v_palette);          /* lea (v_palette).w,a0 */
+    for (int i = 0; i <= v_pfade_size; i++) {                 /* .fillWhite: move.w d1,(a0)+ / dbf d0 */
+        a0[i] = cWhite;                                       /* move.w #cWhite,d1 */
+    }
+
+    for (int d4 = 22 - 1; d4 >= 0; d4--) {                    /* move.w #22-1,d4 / .fadeMainLoop */
+        v_vblank_routine = id_VBlank_PaletteFade;             /* move.b #id_VBlank_PaletteFade,(v_vblank_routine) */
+        WaitForVBlank();                                      /* bsr.w WaitForVBlank */
+        WhiteIn_FromWhite();                                  /* bsr.s WhiteIn_FromWhite */
+        RunPLC();                                             /* bsr.w RunPLC */
+        /* Port sync: VBlank_StandardTransfers already does Palette_Update()
+           (v_palette -> palette_main); keep vdp.cram in step too, like the
+           black Palette_FadeIn/FadeOut do (writeCRAM v_palette,0). */
+        memcpy(vdp.cram, RAM_ADDR(v_palette), 64 * sizeof(uint16_t));
+    }                                                         /* dbf d4,.fadeMainLoop */
+}
+
+/* WhiteOut_AddColor (lines 352-387): brighten one active color by one
+   channel-step toward white. Red first, then green, then blue. */
+static void WhiteOut_AddColor(uint16_t *a0) {
+    uint16_t d2 = *a0;                                        /* move.w (a0),d2 */
+    if (d2 == cWhite) return;                                 /* cmpi.w #cWhite,d2 / beq.s .nextColor */
+
+    /* .addRed: red channel already full? */
+    if ((d2 & 0x00E) != cRed) {                               /* andi.w #$00E,d1 / cmpi.w #cRed,d1 / beq.s .addGreen */
+        *a0 = (uint16_t)(d2 + 0x002);                         /* addq.w #$002,(a0)+ */
+        return;
+    }
+    /* .addGreen */
+    if ((d2 & 0x0E0) != cGreen) {                             /* andi.w #$0E0,d1 / cmpi.w #cGreen,d1 / beq.s .addBlue */
+        *a0 = (uint16_t)(d2 + 0x020);                         /* addi.w #$020,(a0)+ */
+        return;
+    }
+    /* .addBlue */
+    if ((d2 & 0xE00) != cBlue) {                              /* andi.w #$E00,d1 / cmpi.w #cBlue,d1 / beq.s .nextColor */
+        *a0 = (uint16_t)(d2 + 0x200);                         /* addi.w #$200,(a0)+ */
+    }
+    /* else: all channels full == cWhite, already returned above */
+}
+
+/* WhiteOut_ToWhite (lines 328-349): brighten all affected colors a bit more.
+   The underwater palette is faded to white even in non-LZ levels. */
+void WhiteOut_ToWhite(void) {
+    uint16_t *a0 = (uint16_t *)RAM_ADDR(v_palette);           /* lea (v_palette).w,a0 */
+    int start = v_pfade_start;                                /* move.b (v_pfade_start).w,d0 / adda.w d0,a0 */
+    int size  = v_pfade_size;                                 /* move.b (v_pfade_size).w,d0 */
+
+    for (int i = 0; i <= size; i++) {                         /* .fadeColors: bsr.s WhiteOut_AddColor / dbf d0 */
+        WhiteOut_AddColor(&a0[start + i]);
+    }
+
+    /* Underwater palette is faded out to white even in non-LZ levels */
+    uint16_t *w0 = (uint16_t *)RAM_ADDR(v_palette_water);     /* lea (v_palette_water).w,a0 */
+    for (int i = 0; i <= size; i++) {                         /* .fadeColorsWater: bsr.s WhiteOut_AddColor / dbf d0 */
+        WhiteOut_AddColor(&w0[start + i]);
+    }
+}
+
+/* PaletteWhiteOut (lines 313-325): 22 frames of WhiteOut_ToWhite. */
+void PaletteWhiteOut(void) {
+    extern void WaitForVBlank(void);
+
+    /* move.w #$003F,(v_pfade_start).w */
+    v_pfade_start = 0;
+    v_pfade_size  = 0x3F;
+
+    for (int d4 = 22 - 1; d4 >= 0; d4--) {                    /* move.w #22-1,d4 / .fadeMainLoop */
+        v_vblank_routine = id_VBlank_PaletteFade;             /* move.b #id_VBlank_PaletteFade,(v_vblank_routine) */
+        WaitForVBlank();                                      /* bsr.w WaitForVBlank */
+        WhiteOut_ToWhite();                                   /* bsr.s WhiteOut_ToWhite */
+        RunPLC();                                             /* bsr.w RunPLC */
+        /* Port sync: same as PaletteWhiteIn (writeCRAM v_palette,0) */
+        memcpy(vdp.cram, RAM_ADDR(v_palette), 64 * sizeof(uint16_t));
+    }                                                         /* dbf d4,.fadeMainLoop */
 }
 
 /* ============================================================================

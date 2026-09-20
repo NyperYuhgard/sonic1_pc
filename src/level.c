@@ -20,9 +20,8 @@
 extern void ClearScreen(void);
 extern void WaitForVBlank(void);
 
-/* VBlank routine IDs (from main.c) */
+/* VBlank routine IDs (from constants.h / main.c) */
 #define id_VBlank_Lag          0x00
-#define id_VBlank_TitleCards   0x0C
 #define id_VBlank_Levels       0x08
 #define id_VBlank_Paused       0x10
 

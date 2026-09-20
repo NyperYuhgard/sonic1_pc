@@ -31,6 +31,18 @@ void Palette_FadeOut(void);
 /* Palette fading - fade active palette in from v_palette_fading */
 void Palette_FadeIn(void);
 
+/* Palette fading - fade active palette (v_palette) to white over 22 frames
+   (from _inc/Palette Fading.asm PaletteWhiteIn/Out) */
+void PaletteWhiteIn(void);
+void PaletteWhiteOut(void);
+
+/* Brighten/darken the palette one step toward/from white — the fractional
+   helpers used by the white fades and the SS finish loop (WhiteIn_FromWhite /
+   WhiteOut_ToWhite). Public because SS_FinLoop calls WhiteOut_ToWhite
+   directly (SpecCode.asm line 142). */
+void WhiteIn_FromWhite(void);
+void WhiteOut_ToWhite(void);
+
 /* Sega screen palette cycling - returns nonzero while active, 0 when done */
 int PalCycle_Sega(void);
 

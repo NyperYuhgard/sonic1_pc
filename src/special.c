@@ -12,6 +12,7 @@
 #include "collision.h"
 #include "public.h"
 #include "level.h"
+#include "hud.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1000,12 +1001,8 @@ void SS_ShowLayout(void) {
 /* ---------------------------------------------------------------------------
  *  SS_EmitSpriteFrame — emisor de sprites.
  *
- *  INTEGRACIÓN REQUERIDA: esta función debe escribir a v_spritetablebuffer
- *  en el formato de sprite de tu port. Como no veo tu sprites.c, la dejo
- *  como stub que NO emite nada. Cuando la conectes, vas a ver los bloques.
- *
- *  Esta es la implementación de REFERENCIA (formato MD estándar de 8 bytes).
- *  Si tu port usa otro formato, adaptala.
+ *  Emite piezas usando Sprites_EmitPiece (formato MD estándar de 8 bytes).
+ *  Llamada desde SS_ShowLayout para construir la tabla de sprites del SS.
  * --------------------------------------------------------------------------- */
 static int SS_EmitSpriteFrame(int sprite_count,
                               int16_t x, int16_t y,
@@ -1039,15 +1036,16 @@ void SS_InitVars(void) {
 }
 
 /* ===========================================================================
- *  GM_Special — entry point, bloqueante.
- *  Portado de GM_Special (SpecCode.asm). Simplificado para Fase 1:
- *    - FadeIn/FadeOut negro por ahora (debería ser blanco con PaletteWhiteIn/Out)
- *    - SSResult 7E se omite por ahora
+ *  GM_Special_Stage_Main — entry point, bloqueante.
+ *  Portado 1:1 de GM_Special (SpecCode.asm, FixBugs=0):
+ *    - Fades blancos (PaletteWhiteIn/Out)
+ *    - Flujo SS_FinLoop → SSResult setup → SS_NormalExit
+ *    - Objeto 7E (SSResult) y 7F (SSRChaos) registrados en objects.c
  * =========================================================================== */
 void GM_Special_Stage_Main(void) {
-    /* ================== Setup una vez ================== */
+/* ================== Setup una vez ================== */
     Sound_Queue(sfx_EnterSS, false);
-    Palette_FadeOut();   /* TODO: PaletteWhiteOut */
+    PaletteWhiteOut();
 
     v_vdp_buffer1 &= ~0x0040;
     VDP_ClearScreen();
@@ -1091,7 +1089,6 @@ void GM_Special_Stage_Main(void) {
 
     /* Sonic del SS */
     RAM_BYTE(v_player) = id_SonicSpecial;
-    /* TODO: object 09 va a auto-inicializarse */
 
     PalCycle_SS();
 
@@ -1107,7 +1104,7 @@ void GM_Special_Stage_Main(void) {
 
     /* Enable display + fade in */
     v_vdp_buffer1 |= 0x0040;
-    Palette_FadeIn();   /* TODO: PaletteWhiteIn */
+    PaletteWhiteIn();
 
     /* ================== Main loop ================== */
     while (v_gamemode == GM_Special) {
@@ -1130,29 +1127,89 @@ void GM_Special_Stage_Main(void) {
     }
 
     /* ================== Exit ================== */
+    /* Demo exit handled in main loop (GM_Sega) */
     if (f_demo) {
         v_gamemode = GM_Title;
         return;
     }
 
-    /* Normal exit: volver al nivel */
+    /* set screen mode to level (move.b #id_Level,(v_gamemode).w) */
     v_gamemode = GM_Level;
+    /* is level number higher than FZ (0502)? */
     if (RAM_U16(0xFE10) >= (id_FZ + 1)) {
-        RAM_SET_U16(0xFE10, 0);
+        RAM_SET_U16(0xFE10, 0);                     /* clr.w (v_zone_act).w */
     }
-    v_generictimer = 60;
 
-    /* Fade out */
-    while (v_generictimer > 0) {
-        v_vblank_routine = id_VBlank_Levels;
-        WaitForVBlank();
-        ExecuteObjects();
-        BuildSprites();
-        SS_ShowLayout();
-        SS_BGAnimate();
-        v_generictimer--;
+    /* SS_Finish */
+    v_generictimer = 60;                             /* move.w #60,(v_generictimer).w */
+    v_pfade_size   = 0x3F;                           /* move.w #$003F,(v_pfade_start).w */
+    v_pfade_start  = 0;
+    v_palchgspeed  = 0;                              /* clr.w (v_palchgspeed).w */
+
+    /* SS_FinLoop: fade-out to white for one second */
+    do {
+        v_vblank_routine = id_VBlank_Continue;       /* move.b #id_VBlank_Continue,(v_vblank_routine).w */
+        WaitForVBlank();                             /* bsr.w WaitForVBlank */
+        MoveSonicInDemo();                           /* bsr.w MoveSonicInDemo */
+        v_jpadhold2  = v_jpadhold1;                  /* move.w (v_jpadhold1).w,(v_jpadhold2).w */
+        ExecuteObjects();                            /* jsr (ExecuteObjects).l */
+        BuildSprites();                              /* jsr (BuildSprites).l */
+        SS_ShowLayout();                             /* bsr.w SS_ShowLayout */
+        SS_BGAnimate();                              /* bsr.w SS_BGAnimate */
+
+        v_palchgspeed -= 1;                          /* subq.w #1,(v_palchgspeed).w */
+        if ((int16_t)v_palchgspeed < 0) {            /* bpl.s SS_FinLoop_NoBrighten */
+            v_palchgspeed = 2;                       /* move.w #2,(v_palchgspeed).w */
+            WhiteOut_ToWhite();                      /* bsr.w WhiteOut_ToWhite */
+        }
+    } while (v_generictimer != 0);                   /* tst.w (v_generictimer).w / bne.s SS_FinLoop */
+
+    /* ===== Fade-out done: load Special Stage Results screen ===== */
+    /* VDP: foreground/background nametable addresses + 64-cell hscroll size */
+    VDP_SetRegister(2, vram_fg >> 10);              /* vreg_fgvram|(vram_fg>>10) */
+    VDP_SetRegister(4, vram_bg >> 13);              /* vreg_bgvram|(vram_bg>>13) */
+    VDP_SetRegister(0x10, 0x01);                    /* vreg_planesize|%000001 (64-cell) */
+    VDP_ClearScreen();                              /* bsr.w ClearScreen */
+
+    /* Title card font (Nem_TitleCard) directly to VRAM */
+    NemDecToVRAM(Nem_TitleCard, ArtTile_Title_Card * tile_size);
+
+    Hud_Base();                                      /* jsr (Hud_Base).l */
+
+    /* Paleta directa + PLCs */
+    PalLoad(palid_SSResult);                         /* moveq #palid_SSResult,d0 / bsr.w PalLoad */
+    NewPLC(plcid_Main);                              /* moveq #plcid_Main,d0 / bsr.w NewPLC */
+    AddPLC(plcid_SSResult);                          /* moveq #plcid_SSResult,d0 / bsr.w AddPLC */
+
+    /* Counters */
+    f_scorecount = 1;                                /* move.b #1,(f_scorecount).w */
+    f_endactbonus = 1;                               /* move.b #1,(f_endactbonus).w */
+    v_ringbonus = (uint16_t)((uint16_t)v_rings * 10); /* move.w (v_rings).w,d0 / mulu.w #10,d0 */
+
+    /* Music: end-of-level music */
+    Sound_Queue(bgm_GotThrough, false);               /* move.w #bgm_GotThrough,d0 / jsr (QueueSound2).l */
+
+    /* Clear object RAM */
+    memset(RAM_ADDR(v_objspace), 0, 0x2000);         /* clearRAM v_objspace */
+
+    /* Load Special Stage Results screen object */
+    RAM_BYTE(v_ssrescard) = id_SSResult;             /* move.b #id_SSResult,(v_ssrescard).w */
+
+    /* SS_NormalExit: results screen loop */
+    while (1) {
+        PauseGame();                                /* bsr.w PauseGame */
+        v_vblank_routine = id_VBlank_TitleCards;    /* move.b #id_VBlank_TitleCards,(v_vblank_routine).w */
+        WaitForVBlank();                            /* bsr.w WaitForVBlank */
+        ExecuteObjects();                           /* jsr (ExecuteObjects).l */
+        BuildSprites();                             /* jsr (BuildSprites).l */
+        RunPLC();                                   /* bsr.w RunPLC */
+        if (f_restart != 0) {                       /* tst.w (f_restart).w / beq.s SS_NormalExit */
+            if (PLC_IsEmpty()) break;               /* tst.l (v_plc_buffer).w / bne.s SS_NormalExit */
+        }
     }
-    Palette_FadeOut();   /* TODO: PaletteWhiteOut */
 
-    /* TODO: cargar SSResult (object 7E) y esperar f_restart */
+    /* Exit Special Stage normally */
+    Sound_Queue(sfx_EnterSS, false);                /* move.w #sfx_EnterSS,d0 / bsr.w QueueSound2 */
+    PaletteWhiteOut();                              /* bsr.w PaletteWhiteOut */
+    /* rts -> MainGameLoop (v_gamemode = GM_Level) */
 }

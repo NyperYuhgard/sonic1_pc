@@ -174,9 +174,12 @@
 #define id_VBlank_Title        0x04
 #define id_VBlank_Levels       0x08
 #define id_VBlank_SpecialStage 0x0A
+#define id_VBlank_TitleCards   0x0C
 #define id_VBlank_Paused       0x10
 #define id_VBlank_PaletteFade  0x12
 #define id_VBlank_SegaPCM      0x14
+#define id_VBlank_Continue     0x16
+/* id_VBlank_Ending = 0x18 (sin portar) */
 
 /* ---------------------------------------------------------------------------
    Zone IDs
