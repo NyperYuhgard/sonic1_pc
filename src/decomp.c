@@ -256,7 +256,13 @@ void EniDec(const uint8_t *source, uint16_t *dest, uint16_t starting_art_tile) {
             if ((flags & 0x02) && ENI_READ_BITS(1)) value |= 0x1000;   \
             if ((flags & 0x01) && ENI_READ_BITS(1)) value |= 0x0800;   \
             if (inline_bits > 0)                                       \
-                value = (uint16_t)(value | ENI_READ_BITS(inline_bits));\
+                value = (uint16_t)(value + ENI_READ_BITS(inline_bits));\
+            /* ASM EniDec_FetchInlineValue (.maskvalue/.enoughbits):
+               'and.w EniDec_Masks-2(pc,d0.w),d1' then 'add.w d3,d1'
+               -> (inline & mask) + (starting art tile | flags).
+               The inline bits are ADDED with carry, not OR'ed: a tile
+               base like $051 overlaps common inline values, so OR and
+               ADD diverge (only SSBg1 artifacts exposed this). */       \
             value;                                                     \
         })
 
