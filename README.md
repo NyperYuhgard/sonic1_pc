@@ -84,8 +84,6 @@ falling back to `disasm/`, so you can either:
 | `P` | Toggle the VRAM viewer (tile sheet with VRAM address labels, OSD of plane bases/scrolls, palette_main + CRAM strips) |
 | `O` | Toggle the Object RAM viewer (live object slots) |
 | `G` | Toggle the Plane A/B viewer (full nametables, adapts to window size without stretching: side-by-side or stacked, wheel/drag scroll) |
-| `F` | Toggle free camera |
-| `HOME / END / PAGE UP / PAGE DOWN` | Move the free camera; `DELETE` scrolls left |
 | `ESC` (window title bar) | Quit |
 
 ## Cheat codes
@@ -108,11 +106,11 @@ The `game_mode_table` in `src/main.c` mirrors `GameModeArray` from `sonic.asm`:
 
 | Mode | ID | Status |
 |---|---|---|
-| Sega screen | `$00` | ✅ Ported (palette cycle + "SEGA" chant timing) |
-| Title screen | `$04` | ✅ Ported (STP, title art, title Sonic, PSBTM, level select, cheats) |
+| Sega screen | `$00` | ✅ 100% (palette cycle + "SEGA" chant timing) |
+| Title screen | `$04` | ✅ 98% (STP, title art, title Sonic, PSBTM, level select, cheats) |
 | Demo | `$08` | ⛔ Stub (returns to Sega) |
-| Level | `$0C` | ✅ Ported (GHZ1 focus) |
-| Special Stage | `$10` | ⛔ Stub (`TODO`) |
+| Level | `$0C` | ✅ 40% (Only Green Hill Zone Complete) |
+| Special Stage | `$10` | ✅ 99% (Full flow: fades, results screen, emeralds) |
 | Continue | `$14` | ⛔ Stub (`TODO`) |
 | Ending | `$18` | ⛔ Stub (`TODO`) |
 | Credits | `$1C` | ⛔ Stub (`TODO`) |
@@ -135,6 +133,8 @@ The `game_mode_table` in `src/main.c` mirrors `GameModeArray` from `sonic.asm`:
 - Title cards, game-over card, "Got Through" card, signpost.
 - Collision index for the charset (`ColIndexLoad`, `ConvertCollisionArray`).
 - Animated level graphics per zone (GHZ) and zone palette cycling.
+- **Special Stage**: full 1:1 flow (white fades, maze physics, results screen
+  with card elements, ring bonus tally, Chaos Emeralds, exit to next level).
 
 ## Project layout
 
@@ -158,7 +158,6 @@ src/
 ├── deform.c/.h   — background deformation + camera scroll
 ├── collision.c/.h— 16x16 collision index for the level charset
 ├── objview.c/.h  — Object RAM debug viewer window
-├── freecamera.c  — free camera debug feature
 └── debugmode.c/.h— debug object placement (from _incObj/DebugMode.asm)
 
 disasm/           — original Sega disassembly + uncompressed assets (source of truth)
@@ -198,8 +197,8 @@ disasm/           — original Sega disassembly + uncompressed assets (source of
 
 ## Roadmap / known stubs
 
-- Special Stage, Continue, Ending and Credits screens (state machines only).
 - Demo mode.
+- Continue, Ending and Credits screens (state machines only).
 - Zones other than Green Hill — data structures/tables are ported where the ASM
   requires them; asset pointers may be `NULL`.
 - Software "Delay"-style VBlank features and the Z80 sound driver (the PC sound
