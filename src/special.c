@@ -523,11 +523,26 @@ void SS_BGAnimate(void) {
         /* ASM: cmpi.w #$C,d0 / bne.s .not_C */
         if (d0 == 0x0C) {
             v_bg3screenposx--;
-            uint32_t *clouds = (uint32_t *)RAM_ADDR(v_ss_scroll_clouds);
+            /* ASM: cada entrada de v_ss_scroll_clouds es un longword; la
+               hscroll table usa su palabra ALTA (move.w (a3)+,d0), así que
+               la resta de $18000..$C000 arrastra hacia esa palabra.
+               La resta debe operar sobre el valor 32-bit completo en orden
+               big-endian 68000 (word0 = palabra alta). Un uint32_t nativo
+               (endianness host) invierte los bytes: al ser todos los dd
+               múltiplos de $2000, cada word0 resultante queda ≡ 0 (mod 256)
+               y tras el wrap del plano las nubes se renderizan con scroll
+               0 — estáticas, sin la deriva del original. */
+            uint8_t *clouds = RAM_ADDR(v_ss_scroll_clouds);
             uint32_t dd = 0x18000;
             for (int i = 0; i < 7; i++) {
-                clouds[i] -= dd;
-                dd        -= 0x2000;
+                uint16_t w0 = *(const uint16_t *)clouds;
+                uint16_t w1 = *(const uint16_t *)(clouds + 2);
+                uint32_t v  = ((uint32_t)w0 << 16) | w1;
+                v -= dd;
+                *(uint16_t *)clouds       = (uint16_t)(v >> 16);
+                *(uint16_t *)(clouds + 2) = (uint16_t)v;
+                clouds += 4;
+                dd     -= 0x2000;
             }
         }
 
@@ -1015,8 +1030,11 @@ void SS_InitVars(void) {
     memset(RAM_ADDR(v_ss_animations), 0,
            v_ss_animations_end - v_ss_animations);
     memset(RAM_ADDR(v_ss_rotationmatrix), 0, 0x400);
-    memset(RAM_ADDR(v_ss_scroll_bubbles), 0, 0x28);
-    memset(RAM_ADDR(v_ss_scroll_clouds), 0, 0x1C);
+    /* Nota: el ASM NO limpia v_ss_scroll_bubbles / v_ss_scroll_clouds
+       (los clearRAM del SS sólo cubren v_objspace, v_levelvariables,
+       v_timingvariables y v_ngfx_buffer). El wobble de burbujas se
+       recalcula entero cada frame y la deriva de nubes tiene la misma
+       pendiente desde cualquier valor inicial, así que no se inicializan. */
     v_spritecount = 0;
 }
 

@@ -17,6 +17,7 @@ static int prev_vram_key = 0;
 static int prev_objview_key = 0;
 static int prev_ramview_key = 0;
 static int prev_planeview_key = 0;
+static int prev_planeview_wrap_key = 0;
 static int prev_f_key = 0;
 
 void Input_Init(void) {
@@ -94,10 +95,16 @@ void Input_Read(void) {
     if (keys[SDL_SCANCODE_G] && !prev_planeview_key) {
         PlaneView_Toggle();
     }
-    
-prev_ramview_key = keys[SDL_SCANCODE_R];
-    prev_objview_key = keys[SDL_SCANCODE_O];
     prev_planeview_key = keys[SDL_SCANCODE_G];
+
+    /* Debug: V toggles the plane viewer 128-row wrap mode (BlastEm-style) */
+    if (keys[SDL_SCANCODE_V] && !prev_planeview_wrap_key) {
+        PlaneView_ToggleWrap();
+    }
+    prev_planeview_wrap_key = keys[SDL_SCANCODE_V];
+
+    prev_ramview_key = keys[SDL_SCANCODE_R];
+    prev_objview_key = keys[SDL_SCANCODE_O];
 
     /* Debug: F toggles free camera mode (down-edge only) */
     if (keys[SDL_SCANCODE_F] && !prev_f_key) {

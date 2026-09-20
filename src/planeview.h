@@ -9,9 +9,14 @@
    The layout adapts to the window size (side-by-side with a flexible gap,
    stacking vertically on narrow windows) and never stretches the content;
    when it does not fit, it scrolls (mouse wheel + left-drag).
-   Call PlaneView_Toggle on key-down edge. */
+   Call PlaneView_Toggle on key-down edge.
+
+   PlaneView_ToggleWrap toggles a BlastEm-compatible display mode: the debug
+   plane view there renders 128 rows wrapping the plane height (row & mask),
+   so the SS's 64-row plane appears twice stacked. V key. */
 
 void PlaneView_Toggle(void);
+void PlaneView_ToggleWrap(void);
 int  PlaneView_WindowID(void);
 void PlaneView_Render(void);
 

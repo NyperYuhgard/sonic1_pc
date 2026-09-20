@@ -40,6 +40,7 @@ static int g_tex_w = 0, g_tex_h = 0;
 
 static int g_ox = 0, g_oy = 0;              /* scroll offset (content - view) */
 static int g_drag = 0, g_last_mx = 0, g_last_my = 0;
+static int g_wrap = 0;                      /* 0 = plano real, 1 = 128 filas estilo BlastEm */
 
 typedef struct {
     int ww, wh;                 /* window client size */
@@ -126,7 +127,8 @@ void PlaneView_Toggle(void) {
         return;
     }
     int rowsA = VDP_PlaneRows(0), rowsB = VDP_PlaneRows(1);
-    int maxr = rowsA > rowsB ? rowsA : rowsB;
+    int dispA = g_wrap ? 128 : rowsA, dispB = g_wrap ? 128 : rowsB;
+    int maxr = dispA > dispB ? dispA : dispB;
     int ww = SIDE_MIN, wh = PV_HEADER + maxr * 8 + PV_FOOT;
     SDL_DisplayMode dm;
     if (SDL_GetCurrentDisplayMode(0, &dm) == 0 && dm.w > 0) {
@@ -147,6 +149,13 @@ void PlaneView_Toggle(void) {
                               SDL_TEXTUREACCESS_STREAMING, ww, wh);
     g_tex_w = ww;
     g_tex_h = wh;
+}
+
+/* Toggle BlastEm-style 128-row wraparound display (row & plane_height).
+   g_oy is re-clamped/re-centered by pv_layout on the next render. */
+void PlaneView_ToggleWrap(void) {
+    g_wrap = !g_wrap;
+    g_oy = 0;
 }
 
 int PlaneView_WindowID(void) {
@@ -177,9 +186,13 @@ void PlaneView_DragEnd(void) {
 }
 
 /* Draw one full nametable panel. wx/wy = window coords of the panel origin
-   (already scrolled/centered); every write is clipped to [0,ww)x[0,wh). */
+   (already scrolled/centered); every write is clipped to [0,ww)x[0,wh).
+   rows = number of rows to draw (>= plane_rows in wrap mode); plane_rows is
+   the real plane height (32/64/128), used to wrap: row ty samples plane row
+   (ty & (plane_rows-1)), matching BlastEm's debug plane view. */
 static void planeview_draw_panel(uint32_t *px, int stride, int ww, int wh,
-                                 int wx, int wy, int rows, uint32_t base) {
+                                 int wx, int wy, int rows, uint32_t base,
+                                 int plane_rows) {
     /* Checker background so empty VRAM is obvious */
     for (int y = 0; y < rows * 8; y++) {
         int yy = wy + y;
@@ -196,8 +209,9 @@ static void planeview_draw_panel(uint32_t *px, int stride, int ww, int wh,
     const uint8_t *nt = &vdp.vram[base];
     for (int ty = 0; ty < rows; ty++) {
         int y0 = wy + ty * 8;
+        int pr = ty & (plane_rows - 1);     /* wrap: modo BlastEm */
         for (int tx = 0; tx < PV_COLS; tx++) {
-            const uint8_t *e = &nt[(ty * PV_COLS + tx) * 2];
+            const uint8_t *e = &nt[(pr * PV_COLS + tx) * 2];
             uint16_t entry = (uint16_t)((e[0] << 8) | e[1]);
             if (entry == 0) continue;   /* truly empty cell */
             uint16_t tile_num = entry & 0x7FF;
@@ -274,12 +288,14 @@ void PlaneView_Render(void) {
 
     int rowsA = VDP_PlaneRows(0);
     int rowsB = VDP_PlaneRows(1);
+    int dispA = g_wrap ? 128 : rowsA;   /* 128 filas con wrap = visor BlastEm */
+    int dispB = g_wrap ? 128 : rowsB;
     int ww, wh;
     SDL_GetWindowSize(g_win, &ww, &wh);
     if (ww < 60 || wh < 60) return;
 
     PVLayout L;
-    pv_layout(ww, wh, rowsA, rowsB, &L);
+    pv_layout(ww, wh, dispA, dispB, &L);
 
     /* Backing texture at window size => RenderCopy stays 1:1. */
     if (g_tex_w != ww || g_tex_h != wh) {
@@ -312,7 +328,8 @@ void PlaneView_Render(void) {
     int16_t ay = (int16_t)v_scrposy_vdp;
     int16_t by = (int16_t)v_bgscrposy_vdp;
 
-    int rows[2] = { rowsA, rowsB };
+    int rows[2] = { rowsA, rowsB };        /* alto real del plano: 32/64/128 */
+    int disp[2] = { dispA, dispB };        /* filas dibujadas (wrap: 128) */
     int pan_x[2] = { L.pa_x, L.pb_x };
     int pan_y[2] = { L.pa_y, L.pb_y };
     int hdr_x[2] = { L.ha_x, L.hb_x };
@@ -324,12 +341,13 @@ void PlaneView_Render(void) {
     int py_base = PV_HEADER - L.oy;
 
     /* Header labels (pinned at the window top) */
-    snprintf(buf, sizeof buf, "PLANE %s BASE=$%04X  %dX%d",
-             names[0], plane_a, PV_COLS, rowsA);
+    snprintf(buf, sizeof buf, "PLANE %s BASE=$%04X  %dX%d%s",
+             names[0], plane_a, PV_COLS, dispA, g_wrap ? " WRAP" : "");
     font8x8_blit_shadow(px, pitch, ww, wh, hdr_x[0] - L.ox, 1,
                         buf, 0xFF9FDF9F);
-    snprintf(buf, sizeof buf, "PLANE %s BASE=$%04X  %dX%d  R10=$%02X",
-             names[1], plane_b, PV_COLS, rowsB, vdp.registers[16] & 0xFF);
+    snprintf(buf, sizeof buf, "PLANE %s BASE=$%04X  %dX%d%s  R10=$%02X",
+             names[1], plane_b, PV_COLS, dispB, g_wrap ? " WRAP" : "",
+             vdp.registers[16] & 0xFF);
     font8x8_blit_shadow(px, pitch, ww, wh, hdr_x[1] - L.ox, 1,
                         buf, 0xFF9FDFDF);
 
@@ -353,10 +371,10 @@ void PlaneView_Render(void) {
 
     /* Panels + per-panel left ruler */
     for (int i = 0; i < 2; i++) {
-        int rws = rows[i];
+        int rws = disp[i];
         planeview_draw_panel(px, stride, ww, wh,
                              pan_x[i] - L.ox, py_base + pan_y[i], rws,
-                             i == 0 ? plane_a : plane_b);
+                             i == 0 ? plane_a : plane_b, rows[i]);
 
         int rs = strp_x[i] - L.ox, re = strp_x[i] - L.ox + PV_STRIP - 1;
         int y0 = py_base + pan_y[i], y1 = y0 + rws * 8;
@@ -379,7 +397,7 @@ void PlaneView_Render(void) {
                             pan_x[1] - L.ox, py_base + pan_y[1], rowsB, bx, by);
 
     /* Legend */
-    int maxr = rowsA > rowsB ? rowsA : rowsB;
+    int maxr = dispA > dispB ? dispA : dispB;
     font8x8_blit_shadow(px, pitch, ww, wh, PV_PAD,
                         py_base + maxr * 8 + 4,
                         "RED RECT = SCREEN VIEWPORT 320X224 (HSCROLL ROW 0)",
