@@ -33,6 +33,7 @@ set(SOURCES
     src/ramview.c
     src/planeview.c
     src/special.c
+    src/enddemo.c
 )
 
 # Executable

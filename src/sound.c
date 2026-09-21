@@ -33,7 +33,8 @@ static const snd_map_t bgm_map[] = {
     { bgm_Continue,    "assets/Music/Continue.ogg" },
     { bgm_Credits,     "assets/Music/Credits.ogg" },
     { bgm_Drowning,    "assets/Music/Drowning.ogg" },
-    { bgm_Emerald,    "assets/SoundFX/Stage/Emerald.wav" },
+    { bgm_Emerald,     "assets/SoundFX/Stage/Emerald.wav" },
+    { bgm_Demo,        "assets/Music/Demo.ogg" },
     /* bgm_Emerald has no dedicated file; keep it silent (SS music stays). */
 };
 

@@ -29,7 +29,7 @@
    Game state
    =================================================================== */
 static SDL_Window   *window   = NULL;
-static SDL_Renderer *renderer = NULL;
+SDL_Renderer *renderer = NULL;
 int running = 1;
 
 /* Last game mode dispatched by MainGameLoop, masked to $1C like the ASM
@@ -39,6 +39,8 @@ int running = 1;
    setup whenever the mode is reached from another mode, so the pumped C
    functions need this to tell a fresh arrival apart from a continuing frame. */
 uint8_t g_last_mode = 0xFF;
+
+#include "enddemo.h"
 
 /* ===================================================================
     Forward declarations for game mode functions
@@ -881,6 +883,7 @@ static const GameModeFunc game_mode_table[] = {
     GM_Continue_Screen,  /* $14 */
     GM_Ending_Screen,    /* $18 */
     GM_Credits_Screen,   /* $1C */
+    GM_EndDemo_Screen,   /* $20 */
 };
 
 #define GAME_MODE_TABLE_SIZE (sizeof(game_mode_table) / sizeof(game_mode_table[0]))
@@ -891,7 +894,7 @@ static const GameModeFunc game_mode_table[] = {
 static void MainGameLoop(void) {
     while (running) {
         /* Get current game mode */
-        uint8_t mode = v_gamemode & 0x1C;  /* match ASM: andi.w #$1C */
+        uint8_t mode = v_gamemode & 0x3C;  /* expanded mask (bits 2-5) to support GM_EndDemo ($20) */
         int index = mode >> 2;
 
         if (index < (int)GAME_MODE_TABLE_SIZE && game_mode_table[index]) {

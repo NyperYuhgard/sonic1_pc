@@ -1821,6 +1821,13 @@ static void Got_Bonus(uint8_t *o) {
 
 /* Got_NextLevel (routine $A): advance to the next zone/act */
 static void Got_NextLevel(uint8_t *o) {
+    /* Demo build: if finishing Green Hill Act 3, go to End Demo screen */
+    if (v_zone == id_GHZ && v_act == act3) {
+        v_gamemode = GM_EndDemo;
+        DisplaySprite(o);
+        return;
+    }
+
     int d0 = (v_zone & 7) * 4 + (v_act & 3);     /* andi #7 / lsl #3 + andi #3 / add (word index) */
     uint16_t nl = LevelOrder[d0];                /* move.w LevelOrder(pc,d0.w),d0 */
     RAM_SET_U16(0xFE10, nl);                     /* move.w d0,(v_zone_act).w */

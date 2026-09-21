@@ -162,11 +162,13 @@
  --------------------------------------------------------------------------- */
 #define GM_Sega      0x00
 #define GM_Title     0x04
+#define GM_Demo      0x08
 #define GM_Level     0x0C
 #define GM_Special   0x10
 #define GM_Continue  0x14
 #define GM_Ending    0x18
 #define GM_Credits   0x1C
+#define GM_EndDemo   0x20
 
 /* VBlank routines (id_VBlank_*) */
 #define id_VBlank_Lag          0x00
@@ -497,7 +499,8 @@ enum {
 #define bgm_Credits     0x91
 #define bgm_Drowning    0x92
 #define bgm_Emerald     0x93
-#define bgm__Last       0x93
+#define bgm_Demo        0x94
+#define bgm__Last       0x94
 
 /* ---------------------------------------------------------------------------
    Sound effect IDs
