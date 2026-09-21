@@ -702,7 +702,10 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
     int sy[80], sh[80], sw[80];
     for (int i = 0; i < n; i++) {
         uint8_t *entry = &table[i * 8];
-        sy[i] = ((int)(entry[0] | (entry[1] << 8)) & 0x1FF) - 0x80;
+        /* Decodifica Y como int16 con signo: evita el wrap-around de
+         *      9 bits para objetos que están por encima o por debajo de la
+         *      pantalla. Mismo valor que el original dentro de [-128, 383]. */
+        sy[i] = (int)(int16_t)(entry[0] | (entry[1] << 8)) - 0x80;
         sh[i] = ((entry[2] & 0x0F) + 1) * 8;
         sw[i] = ((entry[2] >> 4) + 1) * 8;
     }
@@ -750,7 +753,7 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             int width_tiles  = (entry[2] >> 4) + 1;
             int tile         = pattern & 0x7FF;
             int pal_line     = (pattern >> 13) & 3;
-            int x            = ((int)(entry[6] | (entry[7] << 8)) & 0x1FF) - 0x80;
+            int x            = (int)(int16_t)(entry[6] | (entry[7] << 8)) - 0x80;
 
             int xflip = (pattern >> 11) & 1;
             int yflip = (pattern >> 12) & 1;
@@ -805,7 +808,7 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             int width_tiles  = (entry[2] >> 4) + 1;
             int tile         = pattern & 0x7FF;
             int pal_line     = (pattern >> 13) & 3;
-            int x            = ((int)(entry[6] | (entry[7] << 8)) & 0x1FF) - 0x80;
+            int x            = (int)(int16_t)(entry[6] | (entry[7] << 8)) - 0x80;
 
             int xflip = (pattern >> 11) & 1;
             int yflip = (pattern >> 12) & 1;

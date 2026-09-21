@@ -2,6 +2,7 @@
 #include "ram.h"
 #include "constants.h"
 #include "data.h"
+#include "config.h"
 #include "sound.h"
 #include "collision.h"
 #include "plc.h"
@@ -10079,7 +10080,7 @@ static void SonicSS_ExitStage(uint8_t *o) {
     }
     /* The second cmp never fires in practice (the game mode change above
        short-circuits before v_ssrotate reaches $3000). Kept verbatim. */
-    if (v_ssrotate >= (int16_t)(2 * 0x60 * ss_rotatespeed)) {
+    if ((int16_t)v_ssrotate >= (int16_t)(2 * 0x60 * ss_rotatespeed)) {
         v_ssrotate = 0;
         v_ssangle  = 0x4000;
         obRoutine(o) += 2;
@@ -10423,6 +10424,10 @@ static void SonicSS_ChkItems_NonSolidActionBlock(uint8_t *o) {
             RAM_ADDR(v_emldlist)[v_emeralds] = d4;
             v_emeralds++;
         }
+        if (g_settings.ss_alt_anim) {                        /* → SonicSS_ExitStage */
+            obAnim(o) = id_Leap1; 
+            obAnim(o) = id_Leap2; 
+        }
         Sound_Queue(bgm_Emerald, false);
         return;
     }
@@ -10511,7 +10516,10 @@ static void SonicSS_ChkItems_SolidActionBlock(uint8_t *o) {
 
     /* GOAL? */
     if (id == id_SS_GOAL) {
-        obRoutine(o) += 2;                          /* → SonicSS_ExitStage */
+        obRoutine(o) += 2;  
+        if (g_settings.ss_alt_anim) {                        /* → SonicSS_ExitStage */
+            obAnim(o) = id_Shrink; 
+        }
         Sound_Queue(sfx_SSGoal, false);
         return;
     }
@@ -10540,7 +10548,7 @@ static void SonicSS_ChkItems_SolidActionBlock(uint8_t *o) {
         /* ASM: btst #6,(v_ssrotate+1).w ; bne.s SonicSS_DOWNsnd
          * Traducido: shift SOLO si bit 6 = 0 (ya estás en fast $80). */
         if (!(v_ssrotate & 0x0040)) {
-            v_ssrotate >>= 1;
+            v_ssrotate = (uint16_t)((int16_t)v_ssrotate >> 1);
             uint8_t *p = RAM_ADDR(sonss_touchedblock_ram(o) - 1);
             *p = id_SS_UP;
         }

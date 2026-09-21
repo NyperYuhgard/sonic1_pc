@@ -8,6 +8,7 @@ typedef struct {
     int  fps_interp;      /* 0 = off, 1 = 60→120 Hz interpolado */
     int  scanlines;       /* 0/1 efecto CRT */
     int  fullscreen;      /* 0/1 */
+    int  ss_alt_anim;
 } Settings;
 
 extern Settings g_settings;

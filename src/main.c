@@ -869,6 +869,10 @@ static void Options_BuildText(void) {
              "FULLSCREEN     : %-6s",
              g_settings.fullscreen ? "ON" : "OFF");
 
+    snprintf(buf[opt_row_ss_alt_anim], opt_line_length + 1,
+             "SS ALT ANIMS   : %-6s",
+             g_settings.ss_alt_anim ? "ON" : "OFF");         
+
     snprintf(buf[opt_row_apply], opt_line_length + 1,
              "APPLY & SAVE           ");
     snprintf(buf[opt_row_back],  opt_line_length + 1,
@@ -979,6 +983,10 @@ static void Options_Run(void) {
                     g_settings.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
                 Options_BuildText();
                 break;
+            case opt_row_ss_alt_anim:
+                g_settings.ss_alt_anim ^= 1;
+                Options_BuildText();
+                break;    
             }
         }
         if (v_jpadpress1 & btnR) {
@@ -997,6 +1005,10 @@ static void Options_Run(void) {
                 g_settings.fullscreen ^= 1;
                 SDL_SetWindowFullscreen(window,
                     g_settings.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+                Options_BuildText();
+                break;
+            case opt_row_ss_alt_anim:
+                g_settings.ss_alt_anim ^= 1;
                 Options_BuildText();
                 break;
             }

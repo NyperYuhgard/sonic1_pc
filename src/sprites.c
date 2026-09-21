@@ -14,8 +14,6 @@
 void Sprites_EmitPiece(uint8_t *sprite_table, int *sprite_index,
                        int base_y, int base_x, const uint8_t **data,
                        uint16_t gfx, int xflip, int yflip) {
-    //if (*sprite_index >= sprites_max) return;
-
     const uint8_t *p = *data;
     int y_off = (int8_t)p[0];
     int width_code = (p[1] >> 2) & 3;      /* width-1 (Sonic 1: 2 bits) */
@@ -40,24 +38,26 @@ void Sprites_EmitPiece(uint8_t *sprite_table, int *sprite_index,
         x_off -= (width_code + 1) * 8;
     }
     int x = base_x + x_off;
-    x &= 0x1FF;
-    if (x == 0) x = 1;
+    /* SIN masking de 9 bits y SIN el workaround x==0.
+       Guardamos los 16 bits completos con signo; el renderer los
+       decodifica como int16_t. Esto evita que piezas con posición
+       < -128 o > +383 hagan wrap-around al otro lado de la pantalla.
+       Con g_render_left == 0 el comportamiento es idéntico al original
+       (todas las posiciones caen dentro de [-128, 383] por el culling). */
 
     uint16_t pattern = (uint16_t)gfx + tile;
-    /* Per-piece mapping flags (obGfx already carries the palette bits) */
-    if (m_pal)   pattern |= (uint16_t)(m_pal << 13); /* palette line in VDP word */
-    if (m_xflip) pattern |= 1 << 11;   /* set X-flip in VDP word */
-    if (m_yflip) pattern |= 1 << 12;   /* set Y-flip in VDP word */
-    if (m_pri)   pattern |= 1 << 15;   /* priority: draws above planes/others */
-    /* Object-level flips (obRender) toggle on top of the mapping flags */
+    if (m_pal)   pattern |= (uint16_t)(m_pal << 13);
+    if (m_xflip) pattern |= 1 << 11;
+    if (m_yflip) pattern |= 1 << 12;
+    if (m_pri)   pattern |= 1 << 15;
     if (xflip) pattern ^= 1 << 11;
     if (yflip) pattern ^= 1 << 12;
 
     uint8_t *entry = &sprite_table[*sprite_index * 8];
     entry[0] = (uint8_t)(y & 0xFF);
     entry[1] = (uint8_t)((y >> 8) & 0xFF);
-    entry[2] = (uint8_t)((width_code << 4) | height_code); /* dims WWHH */
-    entry[3] = (uint8_t)((*sprite_index) + 1);             /* link */
+    entry[2] = (uint8_t)((width_code << 4) | height_code);
+    entry[3] = (uint8_t)((*sprite_index) + 1);
     entry[4] = (uint8_t)(pattern & 0xFF);
     entry[5] = (uint8_t)((pattern >> 8) & 0xFF);
     entry[6] = (uint8_t)(x & 0xFF);
