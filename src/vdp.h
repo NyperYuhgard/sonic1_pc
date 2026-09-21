@@ -29,7 +29,7 @@ extern VDP_State vdp;
 void VDP_Init(void);
 void VDP_Reset(void);
 void VDP_RenderFrame(struct SDL_Renderer *renderer);
-
+void VDP_ApplyWidescreen(int new_w);
 /* DMA / memory transfers */
 void VDP_WriteVRAM(const uint8_t *src, uint32_t vram_addr, uint32_t len);
 void VDP_WriteCRAM(const uint8_t *src, uint32_t cram_addr, uint32_t len);
@@ -64,7 +64,7 @@ int VDP_PlaneRows(int plane_b);
 /* Debug/test overlay: when >= 0, draw a counter bar in VDP_RenderFrame.
    Set to -1 to disable (normal operation). */
 extern int vdp_test_counter;
-
+extern int g_render_w; extern int g_render_left;
 /* Helper: convert MD 9-bit color to SDL 32-bit RGBA */
 uint32_t MD_ColorToRGBA(uint16_t md_color);
 

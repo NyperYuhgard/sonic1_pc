@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "objects.h"
 #include "data.h"
+#include "vdp.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -106,9 +107,10 @@ void BuildSprites(void) {
                 }
 
                 int w = obActWid(obj);
+                int margin = g_render_left;          /* 0 en modo 1:1 → comportamiento original */
                 x = obX(obj) - cam_x;
-                if (x + w < 0) continue;
-                if (x - w >= 320) continue;
+                if (x + w < -margin) continue;
+                if (x - w >= 320 + margin) continue;
 
                 y = obY(obj) - cam_y;
                 if (render & sprite_customheight) {

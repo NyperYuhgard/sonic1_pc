@@ -5,6 +5,8 @@
 
 #include "types.h"
 #include "constants.h"
+#include "options.h"
+#include "config.h"
 #include "ram.h"
 #include "vdp.h"
 #include "input.h"
@@ -19,7 +21,6 @@
 #include "plc.h"
 #include "hud.h"
 #include "special.h"
-
 /* ===================================================================
    Display scaling
    =================================================================== */
@@ -55,7 +56,9 @@ static void GM_Credits_Screen(void);
 /* Level select */
 static void LevSelTextLoad(void);
 static void LevSelControls(void);
-
+/* Options menu */
+static void Options_Run(void);
+static void Options_BuildText(void);
 /* ===================================================================
    RAM initialization (from GameInit in sonic.asm)
    =================================================================== */
@@ -160,7 +163,7 @@ static void ProcessSDLEvents(void) {
                     ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
                     ev.window.event == SDL_WINDOWEVENT_EXPOSED) {
                     /* Forzamos a SDL a re-aplicar el tamaño lógico y recalcular el viewport */
-                    SDL_RenderSetLogicalSize(renderer, SCREEN_WIDTH, SCREEN_HEIGHT);
+                    SDL_RenderSetLogicalSize(renderer, Settings_RenderWidth(), SCREEN_HEIGHT);
                     }
         }
     }
@@ -619,8 +622,21 @@ static void GM_Title_Screen(void) {
                 if (!running) return;
                 LevSelControls();
                 RunPLC();
+                if (v_jpadpress1 & btnB) {
+                    Options_Run();
+                    /* Al volver hay que redibujar el level select porque el menú
+                       ha escrito encima de vram_bg */
+                    PalLoad(palid_LevelSel);
+                    Palette_Update();
+                    memset(RAM_ADDR(v_hscrolltablebuffer), 0, 0x400);
+                    v_scrposy_vdp = 0;
+                    v_scrposx_vdp = 0;
+                    VDP_FillVRAM(0, vram_bg, plane_size_64x32);
+                    LevSelTextLoad();
+                    continue;
+                }
 
-                if (v_jpadpress1 & (btnA | btnB | btnC | btnStart)) {
+                if (v_jpadpress1 & (btnA | btnC | btnStart)) {
                     if (v_levselitem == levsel_sndtest_row) {
                         int sound = v_levselsound + 0x80;
                         if (f_creditscheat && sound == 0x9F) {
@@ -823,6 +839,47 @@ static void LevSelTextLoad(void) {
     LevSel_ChgSnd(vram_num + 2, tile_attr, sound & 0xF);
 }
 
+static const char *opt_labels[opt_line_count] = {
+    "WIDESCREEN     : OFF   ",
+    "FPS INTERP.    : OFF   ",
+    "SCANLINES      : OFF   ",
+    "FULLSCREEN     : OFF   ",
+    "APPLY & SAVE           ",
+    "BACK                   "
+};
+
+static void Options_BuildText(void) {
+    char buf[opt_line_count][opt_line_length + 1];
+
+    snprintf(buf[opt_row_widescreen], opt_line_length + 1,
+             "WIDESCREEN     : %-6s",
+             g_settings.widescreen == 0   ? "OFF" :
+             g_settings.widescreen == 398 ? "398" :
+             g_settings.widescreen == 424 ? "424" : "480");
+
+    snprintf(buf[opt_row_fpsinterp], opt_line_length + 1,
+             "FPS INTERP.    : %-6s",
+             g_settings.fps_interp ? "ON" : "OFF");
+
+    snprintf(buf[opt_row_scanlines], opt_line_length + 1,
+             "SCANLINES      : %-6s",
+             g_settings.scanlines ? "ON" : "OFF");
+
+    snprintf(buf[opt_row_fullscreen], opt_line_length + 1,
+             "FULLSCREEN     : %-6s",
+             g_settings.fullscreen ? "ON" : "OFF");
+
+    snprintf(buf[opt_row_apply], opt_line_length + 1,
+             "APPLY & SAVE           ");
+    snprintf(buf[opt_row_back],  opt_line_length + 1,
+             "BACK                   ");
+
+    for (int i = 0; i < opt_line_count; i++) {
+        uint16_t attr = (i == v_levselitem) ? levsel_yellow : levsel_white;
+        LevSel_ChgLine(buf[i], opt_vram_main + i * 128, attr);
+    }
+}
+
 static void LevSelControls(void) {
     uint8_t pressed = v_jpadpress1 & (btnUp | btnDn);
     if (pressed) {
@@ -869,6 +926,112 @@ static void LevSelControls(void) {
     }
 }
 
+static void Options_Run(void) {
+    /* Setup del menú: paleta, VRAM, texto */
+    PalLoad(palid_LevelSel);
+    Palette_Update();
+    memset(RAM_ADDR(v_hscrolltablebuffer), 0, 0x400);
+    v_scrposy_vdp = 0;
+    v_scrposx_vdp = 0;
+    VDP_FillVRAM(0, vram_bg, plane_size_64x32);
+
+    v_levselitem  = 0;
+    v_levseldelay = 0;
+
+    Options_BuildText();
+
+    for (;;) {
+        v_vblank_routine = id_VBlank_Title;
+        WaitForVBlank();
+        if (!running) return;
+
+        /* --- Navegación --- */
+        if (v_jpadpress1 & btnUp) {
+            v_levselitem = (v_levselitem + opt_line_count - 1) % opt_line_count;
+            Options_BuildText();
+        }
+        if (v_jpadpress1 & btnDn) {
+            v_levselitem = (v_levselitem + 1) % opt_line_count;
+            Options_BuildText();
+        }
+
+        /* --- Cambio de valor (izq/der) --- */
+        if (v_jpadpress1 & btnL) {
+            switch (v_levselitem) {
+            case opt_row_widescreen:
+                if (g_settings.widescreen == 480) g_settings.widescreen = 424;
+                else if (g_settings.widescreen == 424) g_settings.widescreen = 398;
+                else if (g_settings.widescreen == 398) g_settings.widescreen = 0;
+                else g_settings.widescreen = 480;
+                Options_BuildText();
+                break;
+            case opt_row_fpsinterp:
+                g_settings.fps_interp ^= 1;
+                Options_BuildText();
+                break;
+            case opt_row_scanlines:
+                g_settings.scanlines ^= 1;
+                Options_BuildText();
+                break;
+            case opt_row_fullscreen:
+                g_settings.fullscreen ^= 1;
+                SDL_SetWindowFullscreen(window,
+                    g_settings.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+                Options_BuildText();
+                break;
+            }
+        }
+        if (v_jpadpress1 & btnR) {
+            /* Igual que L pero en sentido inverso; o simplifica y solo permites L */
+            switch (v_levselitem) {
+            case opt_row_widescreen:
+                if (g_settings.widescreen == 0) g_settings.widescreen = 398;
+                else if (g_settings.widescreen == 398) g_settings.widescreen = 424;
+                else if (g_settings.widescreen == 424) g_settings.widescreen = 480;
+                else g_settings.widescreen = 0;
+                Options_BuildText();
+                break;
+            case opt_row_fpsinterp:  g_settings.fps_interp ^= 1; Options_BuildText(); break;
+            case opt_row_scanlines:  g_settings.scanlines  ^= 1; Options_BuildText(); break;
+            case opt_row_fullscreen:
+                g_settings.fullscreen ^= 1;
+                SDL_SetWindowFullscreen(window,
+                    g_settings.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+                Options_BuildText();
+                break;
+            }
+        }
+
+        /* --- Aceptar --- */
+        if (v_jpadpress1 & (btnA | btnStart)) {
+            switch (v_levselitem) {
+            case opt_row_apply:
+                Settings_Save();
+                VDP_ApplyWidescreen(Settings_RenderWidth());
+                SDL_RenderSetLogicalSize(renderer, g_render_w, SCREEN_HEIGHT);
+                Sound_Queue(sfx_Ring, false);
+                break;
+            case opt_row_back:
+                Sound_Queue(sfx_Ring, false);
+                Settings_Save();
+                VDP_ApplyWidescreen(Settings_RenderWidth());
+                SDL_RenderSetLogicalSize(renderer, g_render_w, SCREEN_HEIGHT);
+                return;
+            }
+        }
+
+        /* --- Salir con B (toggle como en el levsel) --- */
+        if (v_jpadpress1 & btnB) {
+            Sound_Queue(sfx_Ring, false);
+            Settings_Save();
+            VDP_ApplyWidescreen(Settings_RenderWidth());
+            SDL_RenderSetLogicalSize(renderer, g_render_w, SCREEN_HEIGHT);
+            return;
+        }
+
+        RunPLC();
+    }
+}
 /* ===================================================================
     Game mode array (matches GameModeArray in sonic.asm)
     =================================================================== */
@@ -961,6 +1124,7 @@ static void CleanupSDL(void) {
     }
     if (renderer) SDL_DestroyRenderer(renderer);
     if (window)   SDL_DestroyWindow(window);
+    Settings_Save();
     SDL_Quit();
 }
 
@@ -978,6 +1142,9 @@ int main(int argc, char *argv[]) {
     if (!InitSDL()) {
         return 1;
     }
+    Settings_Load();
+    VDP_ApplyWidescreen(Settings_RenderWidth());
+    SDL_RenderSetLogicalSize(renderer, g_render_w, SCREEN_HEIGHT);
 
     if (Data_Init() != 0) {
         fprintf(stderr, "Warning: some assets failed to load, using fallbacks\n");

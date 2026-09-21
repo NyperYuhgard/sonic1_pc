@@ -634,7 +634,7 @@ static void draw_bg_top(uint16_t *flags, int cam_x, int cam_y,
             if (d6 > ((224 + 16 + 16) / 16) - 1)
                 d6 = (224 + 16 + 16) / 16 - 1;
             draw_strip_tb(layout, cam_x, cam_y, plane_base,
-                          -16, -16, d6);
+                          -16, -g_render_left - 16, d6);
         }
     }
 
@@ -647,7 +647,7 @@ static void draw_bg_top(uint16_t *flags, int cam_x, int cam_y,
             if (d6 > ((224 + 16 + 16) / 16) - 1)
                 d6 = (224 + 16 + 16) / 16 - 1;
             draw_strip_tb(layout, cam_x, cam_y, plane_base,
-                          -16, 320, d6);
+                          -16, 320 + g_render_left, d6);
         }
     }
 }
@@ -663,14 +663,14 @@ static void draw_bg_bottom(uint16_t *flags, int cam_x, int cam_y,
     /* bit 2 — left column, bottom section */
     if (*flags & 0x04) {
         *flags &= ~0x04;
-        if ((uint16_t)cam_x >= 16) {    /* cmpi.w #16,(a3) ; blo */
+        if ((uint16_t)cam_x >= 16) {
             int d4 = scroll_a - (cam_y & 0xFFF0);
             if (d4 >= 0) {
                 int d6 = (d4 >> 4) - ((224 + 16) / 16 - 1);
                 if (d6 < 0) {
                     d6 = -d6;
                     draw_strip_tb(layout, cam_x, cam_y, plane_base,
-                                  d4, -16, d6);
+                                  d4, -g_render_left - 16, d6);
                 }
             }
         }
@@ -685,7 +685,7 @@ static void draw_bg_bottom(uint16_t *flags, int cam_x, int cam_y,
             if (d6 < 0) {
                 d6 = -d6;
                 draw_strip_tb(layout, cam_x, cam_y, plane_base,
-                              d4, 320, d6);
+                              d4, 320 + g_render_left, d6);
             }
         }
     }
@@ -707,7 +707,7 @@ void LoadTilesAsYouMove(void) {
     draw_bg_bottom(&v_bg2_scroll_flags_dup, bg2x, bg2y,
                    vram_bg, RAM_ADDR(v_lvllayout_bg));
 
-    /* --- Foreground --- */
+        /* --- Foreground --- */
     uint16_t fgf = v_fg_scroll_flags_dup;
     if (!(fgf & 0xFF)) return;
 
@@ -715,32 +715,39 @@ void LoadTilesAsYouMove(void) {
     int fgy = (int16_t)(uint16_t)v_screenposy_dup;
     const uint8_t *fg_layout = RAM_ADDR(v_lvllayout_fg);
 
+    /* Posiciones y ancho ajustados a widescreen. Cuando g_render_left == 0
+       estos valores coinciden exactamente con el original (352/16-1 = 21,
+       -16, 320). */
+    const int strip_start = -g_render_left - 16;      /* un bloque a la izq. del nuevo borde */
+    const int strip_end   = 320 + g_render_left;      /* un bloque a la der. del nuevo borde */
+    const int strip_count = (g_render_w + 32) / 16 - 1;  /* ancho visible + 2 bloques de margen */
+
     /* bit 0 — top row */
     if (fgf & 0x01) {
         fgf &= ~0x01;
         draw_strip_lr(fg_layout, fgx, fgy, vram_fg,
-                      -16, -16, ((320 + 16 + 16) / 16) - 1);
+                      -16, strip_start, strip_count);
     }
 
     /* bit 1 — bottom row */
     if (fgf & 0x02) {
         fgf &= ~0x02;
         draw_strip_lr(fg_layout, fgx, fgy, vram_fg,
-                      224, -16, ((320 + 16 + 16) / 16) - 1);
+                      224, strip_start, strip_count);
     }
 
     /* bit 2 — left column */
     if (fgf & 0x04) {
         fgf &= ~0x04;
         draw_strip_tb(fg_layout, fgx, fgy, vram_fg,
-                      -16, -16, ((224 + 16 + 16) / 16) - 1);
+                      -16, strip_start, ((224 + 16 + 16) / 16) - 1);
     }
 
     /* bit 3 — right column */
     if (fgf & 0x08) {
         fgf &= ~0x08;
         draw_strip_tb(fg_layout, fgx, fgy, vram_fg,
-                      -16, 320, ((224 + 16 + 16) / 16) - 1);
+                      -16, strip_end, ((224 + 16 + 16) / 16) - 1);
     }
 
     v_fg_scroll_flags_dup = fgf;
@@ -875,7 +882,7 @@ static void Level_Enter(void) {
     PalLoad_Fade(palid_Sonic);     /* load Sonic palette to fade-in buffer */
     LevelSizeLoad();               /* set level boundaries */
     DeformLayers();                /* initialize background deformation */
-    v_fg_scroll_flags |= 0x04;     /* bset #2: draw extra column at left side during start */
+    v_fg_scroll_flags |= 0x0C;     /* bset #2: draw extra column at left side during start */
 
     LevelDataLoad();               /* load block mappings, layout and palette */
     LoadTilesFromStart();          /* draw FG + BG once before fade-in */

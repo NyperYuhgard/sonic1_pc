@@ -34,6 +34,7 @@ set(SOURCES
     src/planeview.c
     src/special.c
     src/enddemo.c
+    src/config.c
 )
 
 # Executable
