@@ -658,8 +658,8 @@ extern const uint8_t *Map_Bonus;
 extern const uint8_t *Map_Jaws;
 extern const uint8_t *Map_Burro;
 extern const uint8_t *Map_Harp;
-extern const uint8_t *Map_Push;
-extern const uint8_t *Map_But;
+extern const uint8_t *Map_Push;            extern size_t Map_Push_len;
+extern const uint8_t *Map_But;             extern size_t Map_But_len;
 extern const uint8_t *Map_MBlockLZ;
 extern const uint8_t *Map_LBlock;
 extern const uint8_t *Map_Gar;
@@ -836,6 +836,8 @@ extern const uint8_t *Map_SS_Chaos1;       extern size_t Map_SS_Chaos1_len;
 extern const uint8_t *Map_SS_Chaos2;       extern size_t Map_SS_Chaos2_len;
 extern const uint8_t *Map_SS_Chaos3;       extern size_t Map_SS_Chaos3_len;
 extern const uint8_t *Map_Flash;           extern size_t Map_Flash_len;
+extern const uint8_t *Map_Glass;           extern size_t Map_Glass_len;
+extern const uint8_t *Map_CStom;           extern size_t Map_CStom_len;
 
 /* Initialize all assets from the assets/ directory.
    Returns 0 on success, -1 on any failure. */

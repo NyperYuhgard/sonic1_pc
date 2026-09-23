@@ -330,6 +330,8 @@ const uint8_t *Map_SS_Chaos1;       size_t Map_SS_Chaos1_len;
 const uint8_t *Map_SS_Chaos2;       size_t Map_SS_Chaos2_len;
 const uint8_t *Map_SS_Chaos3;       size_t Map_SS_Chaos3_len;
 const uint8_t *Map_Flash;           size_t Map_Flash_len;
+const uint8_t *Map_Glass;           size_t Map_Glass_len;
+const uint8_t *Map_CStom;           size_t Map_CStom_len;
 
 /* Mappings referenciados por DebugMode (aún sin portar en su mayoría) */
 const uint8_t *Map_Newt;            size_t Map_Newt_len;
@@ -339,8 +341,8 @@ const uint8_t *Map_Bonus;
 const uint8_t *Map_Jaws;
 const uint8_t *Map_Burro;
 const uint8_t *Map_Harp;
-const uint8_t *Map_Push;
-const uint8_t *Map_But;
+const uint8_t *Map_Push;            size_t Map_Push_len;
+const uint8_t *Map_But;             size_t Map_But_len;
 const uint8_t *Map_MBlockLZ;
 const uint8_t *Map_LBlock;
 const uint8_t *Map_Gar;
@@ -829,6 +831,10 @@ int Data_Init(void) {
     LOAD_MAP("_maps/SS Chaos Emeralds.asm", Map_SS_Chaos3);
     LOAD_MAP("_maps/Ring Flash.asm", Map_Flash);
     LOAD_MAP("_maps/Giant Ring.asm", Map_GRing);
+    LOAD_MAP("_maps/MZ Large Green Glass Blocks.asm", Map_Glass);
+    LOAD_MAP("_maps/Chained Stompers.asm", Map_CStom);
+    LOAD_MAP("_maps/Button.asm", Map_But);
+    LOAD_MAP("_maps/Pushable Blocks.asm", Map_Push);
 
     /* ---------------- Animaciones ---------------- */
     LOAD_ANIM("_anim/Sonic.asm",                     Ani_Sonic);

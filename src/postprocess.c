@@ -63,24 +63,58 @@ static void filter_crt(const uint32_t *src, uint32_t *dst, int w, int h) {
             float sx = xc * (1.0f + curve_x * r2);
             float sy = yc * (1.0f + curve_y * r2);
 
-            // Coordenadas flotantes exactas
             float u = (sx + 1.0f) * 0.5f * (float)w;
             float v = (sy + 1.0f) * 0.5f * (float)h;
 
             int px = (int)u;
             int py = (int)v;
 
-            // 1. Distancia a las orillas para calcular el Anti-Aliasing del borde del marco
             float dist_x = fabsf(sx);
             float dist_y = fabsf(sy);
 
-            // Fuera de la pantalla: marco negro
             if (px < 0 || px >= w || py < 0 || py >= h || dist_x >= 1.0f || dist_y >= 1.0f) {
-                d[x] = 0xFF000000u;
+                d[x] = 0xFF000000u; // Marco negro
             } else {
-                uint32_t col = src[(size_t)py * w + px];
+                // 1. Muestreo del píxel actual y vecino izquierdo (para sangrado y difuminado)
+                size_t idx = (size_t)py * w + px;
+                uint32_t col_curr = src[idx];
+                
+                // Vecino izquierdo (si existe)
+                uint32_t col_left = (px > 0) ? src[idx - 1] : col_curr;
+                // Vecino derecho (si existe)
+                uint32_t col_right = (px < w - 1) ? src[idx + 1] : col_curr;
 
-                // 2. Anti-aliasing suave en el borde del marco (cobertura de ~1.5 píxeles)
+                // Descomponer canales del píxel central
+                uint32_t cr = (col_curr >> 16) & 0xFF;
+                uint32_t cg = (col_curr >> 8)  & 0xFF;
+                uint32_t cb =  col_curr        & 0xFF;
+
+                // Descomponer canales del vecino izquierdo
+                uint32_t lr = (col_left >> 16) & 0xFF;
+                uint32_t lg = (col_left >> 8)  & 0xFF;
+                uint32_t lb =  col_left        & 0xFF;
+
+                // Descomponer canales del vecino derecho
+                uint32_t rr = (col_right >> 16) & 0xFF;
+                uint32_t rg = (col_right >> 8)  & 0xFF;
+                uint32_t rb =  col_right        & 0xFF;
+
+                // 2. Sangrado de croma (Rojo y Azul "chorrean" a la derecha) + Leve difuminado de fósforo [1 2 1]/4
+                // Mezclamos croma analógico + difuminado horizontal en un solo cálculo
+                uint32_t r = ((cr * 2 + lr + rr) >> 2); 
+                uint32_t g = ((cg * 2 + lg + rg) >> 2);
+                uint32_t b = ((cb * 2 + lb + rb) >> 2);
+
+                // Aplicamos un sangrado extra en los rojos/azules hacia la derecha
+                r = (r * 3 + lr) >> 2; // ~25% arrastre
+                b = (b * 4 + lb) / 5;  // ~20% arrastre
+
+                // Clampeo rápido por si las dudas
+                if (r > 255) r = 255;
+                if (g > 255) g = 255;
+                if (b > 255) b = 255;
+
+                // 3. Anti-aliasing del borde del marco
                 float edge_x = (1.0f - dist_x) * (float)w * 0.5f;
                 float edge_y = (1.0f - dist_y) * (float)h * 0.5f;
                 float edge = edge_x < edge_y ? edge_x : edge_y;
@@ -89,14 +123,12 @@ static void filter_crt(const uint32_t *src, uint32_t *dst, int w, int h) {
                     float alpha = edge / 1.5f;
                     if (alpha < 0.0f) alpha = 0.0f;
 
-                    uint32_t r = (uint32_t)(((col >> 16) & 0xFF) * alpha);
-                    uint32_t g = (uint32_t)(((col >> 8)  & 0xFF) * alpha);
-                    uint32_t b = (uint32_t)(( col        & 0xFF) * alpha);
-                    d[x] = 0xFF000000u | (r << 16) | (g << 8) | b;
-                } else {
-                    // Centro totalmente nítido (Nearest Neighbor)
-                    d[x] = col;
+                    r = (uint32_t)(r * alpha);
+                    g = (uint32_t)(g * alpha);
+                    b = (uint32_t)(b * alpha);
                 }
+
+                d[x] = 0xFF000000u | (r << 16) | (g << 8) | b;
             }
         }
     }

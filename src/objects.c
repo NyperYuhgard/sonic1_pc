@@ -8,6 +8,7 @@
 #include "plc.h"
 #include "debugmode.h"
 #include "special.h"
+#include "vdp.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,6 +71,10 @@ static void Newtron_Main(void *obj);
 static void SonicSpecial_Main(void *obj);
 static void GiantRing_Main(void *obj);
 static void RingFlash_Main(void *obj);
+static void GlassBlock_Main(void *obj);
+static void ChainStomp_Main(void *obj);
+static void Button_Main(void *obj);
+static void PushBlock_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -123,7 +128,10 @@ void Objects_Init(void) {
     obj_dispatch[id_SonicSpecial] = SonicSpecial_Main;
     obj_dispatch[id_GiantRing] = GiantRing_Main;
     obj_dispatch[id_RingFlash] = RingFlash_Main;
-
+    obj_dispatch[id_GlassBlock] = GlassBlock_Main;
+    obj_dispatch[id_ChainStomp] = ChainStomp_Main;
+    obj_dispatch[id_Button] = Button_Main;
+    obj_dispatch[id_PushBlock] = PushBlock_Main;
     /* Register Special Stage results screen objects */
     obj_dispatch[id_SSResult]  = SSResult_Main;
     obj_dispatch[id_SSRChaos]  = SSRChaos_Main;
@@ -5469,7 +5477,7 @@ Solid_ChkCollision:
     if ((uint8_t)obRoutine(a1) >= 6) goto Solid_Debug;    /* cmpi.b #6 / bhs.w Solid_Debug */
     if (v_debuguse) goto Solid_Debug;           /* tst.w (v_debuguse).w / bne.w */
     d5 = d0;                                    /* move.w d0,d5 */
-    if (d0 <= d1) goto solid_left;              /* cmp.w d0,d1 / bhs.s .sonic_left */
+    if (d0 < d1) goto solid_left;              /* cmp.w d1,d0 / bhs.s .sonic_left */
     d1 = (int16_t)(d1 + d1);                    /* add.w d1,d1 */
     d0 = (int16_t)(d0 - d1);                    /* sub.w d1,d0 */
     d5 = (int16_t)(-d0);                        /* move.w d0,d5 / neg.w d5 */
@@ -5480,8 +5488,8 @@ solid_left:
     d3 = (int16_t)(d3 - d4);                    /* sub.w d4,d3 */
     d1 = (int16_t)(-d3);                        /* move.w d3,d1 / neg.w d1 */
 solid_top:
-    if (d5 > d1) goto Solid_TopBottom;          /* cmp.w d1,d5 / bhi.w */
-    if (d1 <= 4) goto Solid_SideAir;            /* cmpi.w #4,d1 / bls.s */
+    if ((uint16_t)d5 > (uint16_t)d1) goto Solid_TopBottom;
+    if ((uint16_t)d1 <= 4) goto Solid_SideAir;
     if (d0 == 0) goto Solid_AlignToSide;        /* tst.w d0 / beq.s */
     if (d0 < 0) goto Solid_OnRight;             /* bmi.s */
     if (obVelX(a1) < 0) goto Solid_AlignToSide; /* tst.w obVelX(a1) / bmi.s */
@@ -10790,5 +10798,1230 @@ static void RingFlash_Main(void *obj) {
         case 0: Flash_Main(o);   break;
         case 2: Flash_ChkDel(o); break;
         case 4: Flash_Delete(o); break;
+    }
+}
+/* ===========================================================================
+ *  Object 30 — Large Green Glass Pillars (MZ)
+ *  Ported from _incObj/30 MZ Large Green Glass Blocks.asm (REV01, FixBugs=0).
+ *
+ *  Cada pilar spawna DOS objetos en slot adyacente: el pilar (routines 2/6)
+ *  y un "sheen" (reflejo, routines 4/8). El bit 3 del subtype distingue
+ *  sheen (1) de pilar (0). El tipo es subtype & 7:
+ *    0 = estático
+ *    1 = oscila arriba/abajo (empieza arriba)
+ *    2 = oscila arriba/abajo (opuesto a 1)
+ *    3 = stomp (baja al pisarlo varias veces; prototipo sin terminar)
+ *    4 = switch (baja cuando se pulsa el switch correspondiente)
+ *
+ *  Campos:
+ *    glass_origY          = objoff_30 (word): Y inicial del objeto
+ *    glass_distanceY      = objoff_32 (word): píxeles restantes de bajada
+ *    glass_stomp_flags    = objoff_34 (byte): bit0 = Sonic encima, bit7 = bajando
+ *    glass_switch_flag    = objoff_34 (byte): 1 = switch pulsado (MISMO byte que stomp)
+ *    glass_stomp_first    = objoff_35 (byte): set tras el primer aterrizaje
+ *    glass_stomp_distance = objoff_36 (word): píxeles restantes del stomp actual
+ *    glass_stomp_delay    = objoff_38 (byte): frames de espera antes de bajar
+ *    glass_parent         = objoff_3C (long): índice de slot del padre
+ * =========================================================================== */
+
+#define glass_origY(o)          (*(int16_t *)((uint8_t *)(o) + 0x30))
+#define glass_distanceY(o)      (*(int16_t *)((uint8_t *)(o) + 0x32))
+#define glass_stomp_flags(o)    (*(uint8_t  *)((uint8_t *)(o) + 0x34))
+#define glass_switch_flag(o)    (*(uint8_t  *)((uint8_t *)(o) + 0x34))
+#define glass_stomp_first(o)    (*(uint8_t  *)((uint8_t *)(o) + 0x35))
+#define glass_stomp_distance(o) (*(int16_t *)((uint8_t *)(o) + 0x36))
+#define glass_stomp_delay(o)    (*(uint8_t  *)((uint8_t *)(o) + 0x38))
+#define glass_parent(o)         (*(uint32_t *)((uint8_t *)(o) + 0x3C))
+
+/* Glass_Vars1: pilar alto (subtypes 0/1/2) — { routine, ydist(unused), frame } */
+static const uint8_t Glass_Vars1[2][3] = {
+    { 2, 0, 0 },   /* pilar */
+    { 4, 0, 1 },   /* sheen */
+};
+/* Glass_Vars2: pilar bajo (subtypes 3+) */
+static const uint8_t Glass_Vars2[2][3] = {
+    { 6, 0, 2 },   /* pilar */
+    { 8, 0, 1 },   /* sheen */
+};
+/* --- Glass_Main — routine 0: spawn pilar + sheen --- */
+static void Glass_Main(uint8_t *o) {
+    const uint8_t (*a2)[3] = Glass_Vars1;
+    obHeight(o) = 144 / 2;
+
+    if (obSubtype(o) >= 3) {           /* cmpi.b #3 / blo.s .IsType012 */
+        a2 = Glass_Vars2;
+        obHeight(o) = 112 / 2;
+    }
+    /* .IsType012 */
+
+    uint8_t *a1 = o;                   /* primera iteración usa el propio slot */
+    for (int i = 0; i < 2; i++) {      /* dbf d1 con d1 = 2-1 */
+        if (i > 0) {
+            a1 = (uint8_t *)FindNextFreeObj(a1);
+            if (!a1) goto finalize;    /* bne.s .finalizePillar */
+        }
+        /* .makePillar */
+        obRoutine(a1)   = a2[i][0];
+        obID(a1)        = id_GlassBlock;
+        obX(a1)         = obX(o);
+        /* a2[i][1] es siempre 0 → obY = obY(a0) */
+        obY(a1)         = obY(o);
+        obMap(a1)       = (uint32_t)(uintptr_t)Map_Glass;
+        obGfx(a1)       = (uint16_t)(ArtTile_MZ_Glass_Pillar | Tile_Pal3 | Tile_Prio);
+        obRender(a1)    = sprite_cam_field;
+        glass_origY(a1) = obY(a1);
+        obSubtype(a1)   = obSubtype(o);
+        obActWid(a1)    = 64 / 2;
+        obPriority(a1)  = 4;
+        obFrame(a1)     = a2[i][2];
+        glass_parent(a1) = (uint32_t)Object_GetIndex(o);
+    }
+    /* Tras el loop, a1 = último (sheen): ajustes exclusivos del sheen */
+    obActWid(a1) = 32 / 2;
+    obPriority(a1) = 3;
+    obSubtype(a1) = (uint8_t)((obSubtype(a1) + (1 << 3)) & 0x0F);
+
+finalize:
+    glass_distanceY(o) = 144;
+    obRender(o) |= sprite_customheight;
+}
+
+/* --- Glass_UpdateY: obY = origY - d0 --- */
+static void Glass_UpdateY(uint8_t *o, int16_t d0) {
+    obY(o) = (int16_t)(glass_origY(o) - d0);
+}
+
+/* --- Glass_MoveSheen: tail común de Type1/Type2 --- */
+static void Glass_MoveSheen(uint8_t *o, uint16_t d0, int16_t d1) {
+    if (obSubtype(o) & (1 << 3)) {     /* btst #3,obSubtype → ¿es sheen? */
+        d0 = (uint16_t)(-(int16_t)d0);
+        d0 = (uint16_t)(d0 + (uint16_t)d1);
+        /* asr/lsr.b #1: sólo el byte bajo, el resto se preserva */
+        {
+            uint16_t hi = d0 & 0xFF00u;
+            uint16_t lo = d0 & 0x00FFu;
+            d0 = (uint16_t)(hi | (lo >> 1));
+        }
+        d0 = (uint16_t)(d0 + 32);
+    }
+    Glass_UpdateY(o, (int16_t)d0);
+}
+
+/* --- Glass_Type1_UpDown (subtype 1) --- */
+static void Glass_Type1_UpDown(uint8_t *o) {
+    uint16_t d0 = RAM_BYTE(v_oscillate + 0x12);
+    Glass_MoveSheen(o, d0, 64);
+}
+
+/* --- Glass_Type2_DownUp (subtype 2) --- */
+static void Glass_Type2_DownUp(uint8_t *o) {
+    int16_t d1 = 64;
+    uint16_t d0 = RAM_BYTE(v_oscillate + 0x12);
+    d0 = (uint16_t)(-(int16_t)d0);
+    d0 = (uint16_t)(d0 + (uint16_t)d1);
+    Glass_MoveSheen(o, d0, d1);
+}
+
+/* --- Glass_Type3_Stomp (subtype 3, prototipo) --- */
+static void Glass_Type3_Stomp(uint8_t *o) {
+    if (obSubtype(o) & (1 << 3)) {
+        /* sheen: oscila, offset -16 */
+        uint16_t d0 = RAM_BYTE(v_oscillate + 0x12);
+        d0 = (uint16_t)(d0 - 16);
+        Glass_UpdateY(o, (int16_t)d0);
+        return;
+    }
+
+    /* .checkSonicStomp */
+    if (obStatus(o) & (1 << 3)) {                    /* btst #3,obStatus → Sonic encima */
+        if (glass_stomp_flags(o) != 0) goto checkMoveDown;
+        glass_stomp_flags(o) = 1;                    /* "Sonic encima" */
+        /* bset #0,glass_stomp_first — Z = valor ANTERIOR del bit */
+        {
+            uint8_t was = glass_stomp_first(o);
+            glass_stomp_first(o) |= 1;
+            if ((was & 1) == 0) {
+                /* Primer aterrizaje: no arrancar el stomp todavía */
+                goto checkMoveDown;
+            }
+        }
+        /* Segundo aterrizaje o posterior: iniciar stomp */
+        glass_stomp_flags(o) |= (1 << 7);            /* moving down */
+        glass_stomp_distance(o) = 16;
+        glass_stomp_delay(o) = 10;
+        if (glass_distanceY(o) == 64) {              /* cmpi.w #64 */
+            glass_stomp_distance(o) = 64;
+        }
+    } else {
+        glass_stomp_flags(o) &= ~1;                  /* bclr #0 */
+    }
+
+checkMoveDown:
+    if ((int8_t)glass_stomp_flags(o) < 0) {          /* bit 7 set: bajando */
+        if (glass_stomp_delay(o) != 0) {
+            glass_stomp_delay(o)--;
+            if (glass_stomp_delay(o) != 0) {
+                goto setYDistance;
+            }
+        }
+        if (glass_distanceY(o) != 0) {
+            glass_distanceY(o)--;
+            glass_stomp_distance(o)--;
+            if (glass_stomp_distance(o) != 0) {
+                goto setYDistance;
+            }
+        }
+        glass_stomp_flags(o) &= ~(1 << 7);           /* bclr #7: parar de bajar */
+    }
+
+setYDistance:
+    Glass_UpdateY(o, glass_distanceY(o));
+}
+
+/* --- Glass_Type4_Switch (subtype 4) --- */
+static void Glass_Type4_Switch(uint8_t *o) {
+    if (obSubtype(o) & (1 << 3)) {
+        /* sheen: oscila, offset -16 */
+        uint16_t d0 = RAM_BYTE(v_oscillate + 0x12);
+        d0 = (uint16_t)(d0 - 16);
+        Glass_UpdateY(o, (int16_t)d0);
+        return;
+    }
+
+    /* Glass_ChkSwitch */
+    if (glass_switch_flag(o) == 0) {
+        uint8_t *a2 = RAM_ADDR(f_switch);
+        uint8_t d0 = (uint8_t)(obSubtype(o) >> 4);
+        if (a2[d0] == 0) {
+            goto setYDistance;
+        }
+        glass_switch_flag(o) = 1;
+    }
+
+    /* .movePillarDown: baja 2px/frame hasta distanceY == 0 */
+    if (glass_distanceY(o) != 0) {
+        glass_distanceY(o) -= 2;
+    }
+
+setYDistance:
+    Glass_UpdateY(o, glass_distanceY(o));
+}
+
+/* --- Glass_Types: dispatcher por subtype & 7 --- */
+static void Glass_Types(uint8_t *o) {
+    switch (obSubtype(o) & 7) {
+        case 0: /* estacionario */              return;
+        case 1: Glass_Type1_UpDown(o);          return;
+        case 2: Glass_Type2_DownUp(o);          return;
+        case 3: Glass_Type3_Stomp(o);           return;
+        case 4: Glass_Type4_Switch(o);          return;
+    }
+}
+
+/* --- Glass_Pillar_UpDown — routine 2 (pilar alto) --- */
+static void Glass_Pillar_UpDown(uint8_t *o) {
+    Glass_Types(o);
+    int16_t out_d3 = 0, out_d5 = 0;
+    SolidObject(o,
+                (int16_t)(64 / 2 + sonic_solid_width),   /* d1 */
+                144 / 2,                                 /* d2 */
+                146 / 2,                                 /* d3 */
+                obX(o),                                  /* d4 */
+                &out_d3, &out_d5);
+}
+
+/* --- Glass_Sheen_UpDown — routine 4 --- */
+static void Glass_Sheen_UpDown(uint8_t *o) {
+    uint8_t *parent = (uint8_t *)Object_GetSlot((int)glass_parent(o));
+    glass_distanceY(o) = glass_distanceY(parent);
+    Glass_Types(o);
+}
+
+/* --- Glass_Pillar_Triggered — routine 6 (pilar bajo) --- */
+static void Glass_Pillar_Triggered(uint8_t *o) {
+    Glass_Types(o);
+    int16_t out_d3 = 0, out_d5 = 0;
+    SolidObject(o,
+                (int16_t)(64 / 2 + sonic_solid_width),
+                112 / 2,
+                114 / 2,
+                obX(o),
+                &out_d3, &out_d5);
+}
+
+/* --- Glass_Sheen_Triggered — routine 8 --- */
+static void Glass_Sheen_Triggered(uint8_t *o) {
+    uint8_t *parent = (uint8_t *)Object_GetSlot((int)glass_parent(o));
+    glass_distanceY(o) = glass_distanceY(parent);
+    glass_origY(o)     = obY(parent);
+    Glass_Types(o);
+}
+
+/* --- Dispatcher Object 30 --- */
+static void GlassBlock_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: Glass_Main(o);             break;
+        case 2: Glass_Pillar_UpDown(o);    break;
+        case 4: Glass_Sheen_UpDown(o);     break;
+        case 6: Glass_Pillar_Triggered(o); break;
+        case 8: Glass_Sheen_Triggered(o);  break;
+    }
+    /* out_of_range.w .delete ; bra.w DisplaySprite */
+    if (OutOfRange(o, -1)) {
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);
+}
+/* ===========================================================================
+ *  Object 31 — MZ Chained Stompers
+ *  Ported from _incObj/31 MZ Chained Stompers.asm (REV01, FixBugs=0).
+ *
+ *  Un "main block" spawnea 4 hijos: el propio bloque (parent), las púas,
+ *  la cadena y la base adosada al techo. Todos comparten subtype y posición X;
+ *  el bloque los mantiene alineados verticalmente a través de cstom_current.
+ *
+ *  Campos:
+ *    cstom_origY   = objoff_30 (word): Y inicial del objeto
+ *    cstom_current = objoff_32 (word): extensión actual (16.8 fixed point; solo el byte alto se usa para Y)
+ *    cstom_length  = objoff_34 (word): extensión máxima (de CStom_Lengths)
+ *    cstom_rising  = objoff_36 (word): 1 si está subiendo (auto-stomp)
+ *    cstom_delay   = objoff_38 (word): frames de espera antes de subir
+ *    cstom_switch  = objoff_3A (byte): índice del switch que activa la subida
+ *    cstom_parent  = objoff_3C (long): índice de slot del bloque padre
+ *
+ *  Subtypes:
+ *    $00-$06: large block, tipos 0-6
+ *    $10-$16: medium block (spikes), tipos 0-6
+ *    $20-$26: small block SIN spikes, tipos 0-6
+ *    $80/$81: switch-activated (convierte el subtype a 0)
+ * =========================================================================== */
+
+#define cstom_origY(o)   (*(int16_t *)((uint8_t *)(o) + 0x30))
+#define cstom_current(o) (*(uint16_t*)((uint8_t *)(o) + 0x32))
+#define cstom_length(o)  (*(int16_t *)((uint8_t *)(o) + 0x34))
+#define cstom_rising(o)  (*(int16_t *)((uint8_t *)(o) + 0x36))
+#define cstom_delay(o)   (*(int16_t *)((uint8_t *)(o) + 0x38))
+#define cstom_switch(o)  (*(uint8_t *)((uint8_t *)(o) + 0x3A))
+#define cstom_parent(o)  (*(uint32_t*)((uint8_t *)(o) + 0x3C))
+
+/* Forward declarations de Object 31 */
+static void CStom_MainBlock(uint8_t *o);
+static void CStom_Types(uint8_t *o);
+static void CStom_Ceiling(uint8_t *o);
+static void CStom_Spikes(uint8_t *o);
+static void CStom_Chain(uint8_t *o);
+
+/* { switch ID, subtype override } × 2. El segundo byte siempre es 0. */
+static const uint8_t CStom_SwchNums[2][2] = {
+    { 0, 0 },  /* $80 */
+    { 1, 0 },  /* $81 (unused) */
+};
+
+/* { routine, relative Y-offset (signed byte), frame } × 4 */
+static const uint8_t CStom_Var[4][3] = {
+    { 2, 0x00, 0 },   /* main block      */
+    { 4, 0x1C, 1 },   /* spikes          */
+    { 8, 0xCC, 3 },   /* chain           */
+    { 6, 0xF0, 2 },   /* ceiling base    */
+};
+
+/* Chain lengths (indexed by subtype & 0xF). */
+static const uint16_t CStom_Lengths[7] = {
+    0x7000, 0xA000, 0x5000, 0x7800, 0x3800, 0x5800, 0xB800,
+};
+
+/* { obActWid, frame } × 3, indexed by (subtype >> 3) & 0xE. */
+static const uint8_t CStom_Var2[3][2] = {
+    { 0x70/2, 0    },   /* $0x: large  */
+    { 0x60/2, 9    },   /* $1x: medium */
+    { 0x20/2, 0x0A },   /* $2x: small (no spikes) */
+};
+/* --- CStom_UpdateBlockY: obY = origY + high byte of current --- */
+static void CStom_UpdateBlockY(uint8_t *o) {
+    uint8_t b = (uint8_t)(cstom_current(o) >> 8);
+    obY(o) = (int16_t)((uint16_t)cstom_origY(o) + (uint16_t)b);
+}
+
+/* --- CStom_ChkDel: FixBugs=0 → out_of_range ; sin DisplaySprite extra --- */
+static void CStom_ChkDel(uint8_t *o) {
+    if (OutOfRange(o, -1)) DeleteObject(o);
+}
+
+/* --- CStom_Main — routine 0: setup + spawn 4 objetos --- */
+static void CStom_Main(uint8_t *o) {
+    uint8_t d0 = obSubtype(o);
+
+    if (d0 & 0x80) {
+        /* Switch-activated */
+        uint8_t idx = d0 & 0x7F;
+        cstom_switch(o) = CStom_SwchNums[idx][0];
+        d0 = CStom_SwchNums[idx][1];   /* subtype override, siempre 0 */
+        obSubtype(o) = d0;
+    }
+
+    d0 &= 0x0F;
+    uint16_t length = CStom_Lengths[d0];
+    if (d0 == 0) {
+        cstom_current(o) = length;     /* $x0: spawn ya extendido al máximo */
+    }
+
+    /* Spawn 4 objects (o menos si spike-less). */
+    int d1 = 3;             /* contador dbf-style */
+    int idx = 0;            /* offset en CStom_Var */
+    uint8_t *a1 = o;
+    int first = 1;
+
+    while (d1 >= 0) {
+        if (!first) {
+            a1 = (uint8_t *)FindNextFreeObj(a1);
+            if (!a1) goto setupMainBlock;
+        }
+        first = 0;
+
+    makeStomper:
+        obRoutine(a1)   = CStom_Var[idx][0];
+        obID(a1)        = id_ChainStomp;
+        obX(a1)         = obX(o);
+        obY(a1)         = (int16_t)(obY(o) + (int8_t)CStom_Var[idx][1]);
+        obMap(a1)       = (uint32_t)(uintptr_t)Map_CStom;
+        obGfx(a1)       = (uint16_t)ArtTile_MZ_Spike_Stomper;
+        obRender(a1)    = sprite_cam_field;
+        cstom_origY(a1) = obY(a1);
+        obSubtype(a1)   = obSubtype(o);
+        obActWid(a1)    = 32 / 2;
+        cstom_length(a1)= (int16_t)length;
+        obPriority(a1)  = 4;
+        obFrame(a1)     = CStom_Var[idx][2];
+        idx += 3;
+
+        if (obFrame(a1) == 1) {         /* es el objeto de púas */
+            d1--;                       /* subq.w #1,d1 */
+            if ((obSubtype(o) & 0xF0) == 0x20) {
+                /* Small spike-less: reusar slot para la cadena */
+                goto makeStomper;
+            }
+            obActWid(a1)  = 112 / 2;
+            obColType(a1) = (uint8_t)(col_80x32 | col_hurt);
+            d1++;                       /* addq.w #1,d1 */
+        }
+
+        cstom_parent(a1) = (uint32_t)Object_GetIndex(o);
+        d1--;
+    }
+    obPriority(a1) = 3;                 /* ceiling base: prioridad 3 */
+
+setupMainBlock:
+    d0 = (uint8_t)((obSubtype(o) >> 3) & 0x0E);   /* 0, 2, or 4 */
+    obActWid(o) = CStom_Var2[d0 >> 1][0];
+    obFrame(o)  = CStom_Var2[d0 >> 1][1];
+
+    /* Fall through into CStom_MainBlock. */
+    CStom_MainBlock(o);
+}
+
+/* --- CStom_MainBlock — routine 2 --- */
+static void CStom_MainBlock(uint8_t *o) {
+    CStom_Types(o);
+
+    v_obj31ypos = (uint16_t)obY(o);
+
+    {
+        int16_t d1 = (int16_t)((int8_t)obActWid(o) + sonic_solid_width);
+        int16_t out_d3 = 0, out_d5 = 0;
+        SolidObject(o, d1, 24 / 2, 26 / 2, obX(o), &out_d3, &out_d5);
+    }
+
+    if (obStatus(o) & (1 << 3)) {         /* Sonic encima */
+        /* cmpi.b #$10,cstom_current — high byte >= 0x10 */
+        uint8_t hi = (uint8_t)(cstom_current(o) >> 8);
+        if (hi < 0x10) {
+            /* Aplastar: a0 = player, a2 = stomper */
+            KillSonic(RAM_ADDR(v_player), o);
+        }
+    }
+
+    DisplaySprite(o);                     /* FixBugs=0 */
+    CStom_ChkDel(o);
+}
+
+/* --- CStom_Spikes — routine 4 --- */
+static void CStom_Spikes(uint8_t *o) {
+    uint8_t *parent = (uint8_t *)Object_GetSlot((int)cstom_parent(o));
+    uint8_t b = (uint8_t)(cstom_current(parent) >> 8);
+    obY(o) = (int16_t)((uint16_t)cstom_origY(o) + (uint16_t)b);
+    /* Fall through a CStom_Ceiling */
+    CStom_Ceiling(o);
+}
+
+/* --- CStom_Ceiling — routine 6 --- */
+static void CStom_Ceiling(uint8_t *o) {
+    DisplaySprite(o);                     /* FixBugs=0 */
+    CStom_ChkDel(o);
+}
+
+/* --- CStom_Chain — routine 8 --- */
+static void CStom_Chain(uint8_t *o) {
+    obHeight(o) = 256 / 2;                /* 128 */
+    obRender(o) |= sprite_customheight;
+
+    uint8_t *parent = (uint8_t *)Object_GetSlot((int)cstom_parent(o));
+    uint8_t d0 = (uint8_t)(cstom_current(parent) >> 8);
+    d0 = (uint8_t)(d0 >> 5);
+    d0 = (uint8_t)(d0 + 3);
+    obFrame(o) = d0;
+    /* Fall through a CStom_Spikes (alinear + display) */
+    CStom_Spikes(o);
+}
+
+/* --- CStom_SwitchActivated (type $x0) --- */
+static void CStom_SwitchActivated(uint8_t *o) {
+    uint8_t *a2 = RAM_ADDR(f_switch);
+    if (a2[cstom_switch(o)] == 0) goto falling;
+
+    if ((int16_t)v_obj31ypos >= 0) goto checkRising;
+    if (cstom_current(o) == 0x10) goto stop;
+
+checkRising:
+    if (cstom_current(o) == 0) goto stop;
+
+    if ((v_vblank_byte & 0x0F) == 0 && (int8_t)obRender(o) < 0) {
+        Sound_Queue(sfx_ChainRise, false);
+    }
+
+    /* .rise */
+    if (cstom_current(o) >= 0x80) {
+        cstom_current(o) -= 0x80;
+        CStom_UpdateBlockY(o);
+        return;
+    }
+    cstom_current(o) = 0;
+    /* fall through to .stop */
+
+stop:
+    obVelY(o) = 0;
+    CStom_UpdateBlockY(o);
+    return;
+
+falling:
+    {
+        uint16_t maxlen = (uint16_t)cstom_length(o);
+        if (cstom_current(o) == maxlen) {
+            CStom_UpdateBlockY(o);
+            return;
+        }
+        int16_t v = obVelY(o);
+        obVelY(o) = (int16_t)(obVelY(o) + 0x70);
+        cstom_current(o) = (uint16_t)(cstom_current(o) + (uint16_t)v);
+
+        if (maxlen > cstom_current(o)) {
+            CStom_UpdateBlockY(o);
+            return;
+        }
+        cstom_current(o) = maxlen;
+        obVelY(o) = 0;
+        if ((int8_t)obRender(o) < 0) {
+            Sound_Queue(sfx_ChainStomp, false);
+        }
+        CStom_UpdateBlockY(o);
+    }
+}
+
+/* --- CStom_AutoStomp (types $x1/$x2/$x4/$x6) --- */
+static void CStom_AutoStomp(uint8_t *o) {
+    if (cstom_rising(o) != 0) {
+        if (cstom_delay(o) != 0) {
+            cstom_delay(o)--;
+            CStom_UpdateBlockY(o);
+            return;
+        }
+        /* .risingSound */
+        if ((v_vblank_byte & 0x0F) == 0 && (int8_t)obRender(o) < 0) {
+            Sound_Queue(sfx_ChainRise, false);
+        }
+        /* .rise */
+        if (cstom_current(o) >= 0x80) {
+            cstom_current(o) -= 0x80;
+            CStom_UpdateBlockY(o);
+            return;
+        }
+        cstom_current(o) = 0;
+        obVelY(o) = 0;
+        cstom_rising(o) = 0;
+        CStom_UpdateBlockY(o);
+        return;
+    }
+
+    /* .falling */
+    uint16_t maxlen = (uint16_t)cstom_length(o);
+    if (cstom_current(o) == maxlen) {
+        CStom_UpdateBlockY(o);
+        return;
+    }
+    int16_t v = obVelY(o);
+    obVelY(o) = (int16_t)(obVelY(o) + 0x70);
+    cstom_current(o) = (uint16_t)(cstom_current(o) + (uint16_t)v);
+
+    if (maxlen > cstom_current(o)) {
+        CStom_UpdateBlockY(o);
+        return;
+    }
+    cstom_current(o) = maxlen;
+    obVelY(o) = 0;
+    cstom_rising(o) = 1;
+    cstom_delay(o) = 60;
+    if ((int8_t)obRender(o) < 0) {
+        Sound_Queue(sfx_ChainStomp, false);
+    }
+    CStom_UpdateBlockY(o);
+}
+
+/* --- CStom_WaitForSonic (types $x3/$x5) --- */
+static void CStom_WaitForSonic(uint8_t *o) {
+    int16_t d0 = obX(RAM_ADDR(v_player)) - obX(o);
+    if (d0 < 0) d0 = (int16_t)(-d0);
+    if ((uint16_t)d0 < 144) {
+        obSubtype(o)++;
+    }
+    CStom_UpdateBlockY(o);
+}
+
+/* --- CStom_Types: dispatcher por subtype & 0xF --- */
+static void CStom_Types(uint8_t *o) {
+    switch (obSubtype(o) & 0x0F) {
+        case 0: CStom_SwitchActivated(o); return;
+        case 1:
+        case 2:
+        case 4:
+        case 6: CStom_AutoStomp(o);       return;
+        case 3:
+        case 5: CStom_WaitForSonic(o);    return;
+    }
+}
+
+/* --- Dispatcher Object 31 --- */
+static void ChainStomp_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: CStom_Main(o);        return;
+        case 2: CStom_MainBlock(o);   return;
+        case 4: CStom_Spikes(o);      return;
+        case 6: CStom_Ceiling(o);     return;
+        case 8: CStom_Chain(o);       return;
+    }
+}
+/* ===========================================================================
+ *  Object 32 — Button / Switch (MZ, SYZ, LZ, SBZ)
+ *  Ported from _incObj/32 Button.asm (REV01, FixBugs=0).
+ *
+ *  Cada botón usa un byte en f_switch[] (indexado por subtype & $F).
+ *  El bit dentro del byte lo determina el bit 6 del subtype:
+ *    - bit 6 = 0 → usa bit 0 del byte
+ *    - bit 6 = 1 → usa bit 7 del byte (variante "alterna" sin usar en el juego)
+ *
+ *  Si el bit 7 del subtype está puesto Y estamos en MZ, llama a But_MZBlock
+ *  para ver si un PushBlock (Object 33) está encima. En FixBugs=0 NO se
+ *  comprueba la zona, así que la rutina corre en cualquier nivel donde el
+ *  subtype tenga el bit 7 (esto es el bug conocido).
+ * =========================================================================== */
+
+/* Radios de detección (X, Y) del bloque empujable. Siempre los mismos. */
+static const uint8_t But_mzBlock_sizes[2] = { 0x10, 0x10 };
+static void But_Pressed(uint8_t *o);
+static int  But_MZBlock(uint8_t *o, int bit);
+/* --- But_MZBlock: ¿hay un PushBlock (id $33) sobre el botón? -------------
+ *  Devuelve 1 si sí, 0 si no. El ASM pasa d3 (bit actual 0 o 7) y lo
+ *  preserva en la pila, pero en la práctica no lo usa para la lógica —
+ *  el backup/restore es solo por si el llamador lo necesitara después.
+ *  Lo replicamos pasándolo como parámetro por fidelidad al ASM. */
+static int But_MZBlock(uint8_t *o, int bit) {
+    (void)bit;   /* no afecta al cálculo */
+
+    uint16_t d2 = (uint16_t)(obX(o) - 0x10);   /* left edge del botón */
+    uint16_t d3 = (uint16_t)(obY(o) - 8);      /* top edge del botón  */
+    uint16_t d4 = 0x20;                        /* rango X de detección */
+    uint16_t d5 = 0x10;                        /* rango Y de detección */
+
+    uint8_t *base = RAM_ADDR(v_lvlobjspace);
+    int count = (v_lvlobjend - v_lvlobjspace) / object_size;
+
+    for (int i = 0; i < count; i++) {
+        uint8_t *a1 = base + i * object_size;
+        if ((int8_t)obRender(a1) >= 0) continue;    /* bpl.s .nextObject */
+        if (obID(a1) != id_PushBlock)  continue;    /* cmpi.b #id_PushBlock */
+        /* .blockFound */
+
+        /* checkX: d0 = blockX - 0x10 - buttonLeft, comparación unsigned */
+        uint16_t d0 = (uint16_t)((uint16_t)obX(a1) - 0x10);
+        d0 = (uint16_t)(d0 - d2);
+        if (d0 & 0x8000) {
+            /* blo tras sub d2 → rama blo (d0 += 0x20) */
+            uint16_t sum = (uint16_t)(d0 + 0x20);
+            if (sum >= 0x20) continue;              /* no wrap → fuera de rango */
+            /* wrap → caer a checkY */
+        } else {
+            /* bhs .checkX_fromRight */
+            if (d0 > d4) continue;
+            /* caer a checkY */
+        }
+
+        /* checkY: mismo patrón, pero el ASM hace `add.w d1,d1` (d1=$10 → $20)
+           antes del `add.w d1,d0`, así que aquí se suma/compara contra $20. */
+        uint16_t e0 = (uint16_t)((uint16_t)obY(a1) - 0x10);
+        e0 = (uint16_t)(e0 - d3);
+        if (e0 & 0x8000) {
+            uint16_t sum = (uint16_t)(e0 + 0x20);
+            if (sum >= 0x20) continue;
+        } else {
+            if (e0 > d5) continue;
+        }
+
+        /* .blockOnTop */
+        return 1;
+    }
+    return 0;
+}
+
+/* --- But_Main — routine 0: setup --- */
+static void But_Main(uint8_t *o) {
+    obRoutine(o) += 2;                              /* → But_Pressed */
+    obMap(o) = (uint32_t)(uintptr_t)Map_But;
+
+    /* Default = MZ: Tile_Pal3. Si NO es MZ, se quita la paleta. */
+    obGfx(o) = (uint16_t)(ArtTile_Button_Main | Tile_Pal3);
+    if ((uint8_t)v_zone != id_MZ) {
+        obGfx(o) = (uint16_t)ArtTile_Button_Main;
+    }
+
+    obRender(o)  = sprite_cam_field;
+    obActWid(o)  = 32 / 2;
+    obPriority(o)= 4;
+    obY(o) += 3;                                    /* addq.w #3,obY */
+}
+
+/* --- But_Pressed — routine 2 --- */
+static void But_Pressed(uint8_t *o) {
+    /* tst.b obRender ; bpl.s .display (FixBugs=0: short branch) */
+    if ((int8_t)obRender(o) >= 0) goto display;
+
+    {
+        int16_t d1 = (int16_t)(32/2 + sonic_solid_width);
+        int16_t d2 = 10/2;
+        int16_t d3 = 10/2;
+        int16_t d4 = obX(o);
+        int16_t out_d3 = 0, out_d5 = 0;
+        SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5);
+    }
+
+    obFrame(o) &= (uint8_t)~1;                      /* bclr #0: unpressed frame */
+
+    uint8_t d0 = (uint8_t)(obSubtype(o) & 0x0F);
+    uint8_t *a3 = RAM_ADDR(f_switch + d0);          /* lea (a3,d0),a3 */
+    int bit = 0;
+
+    /* btst #6: alterna bit 0/7 */
+    if (obSubtype(o) & (1 << 6)) {
+        bit = 7;
+    }
+
+    /* .checkMZ1Block: FixBugs=0 → SIN comprobación de zona */
+    if ((obSubtype(o) & 0x80) != 0) {
+        if (But_MZBlock(o, bit)) {
+            goto pressed;
+        }
+    }
+
+    /* .checkSonicOnTop */
+    if (obSolid(o) != 0) goto pressed;
+
+    /* No está pulsado */
+    *a3 &= (uint8_t)~(1u << bit);                    /* bclr d3,(a3) */
+    goto handleFlashing;
+
+pressed:
+    /* .pressed */
+    if (*a3 != 0) goto setPressedState;             /* tst.b (a3) ; bne */
+
+    Sound_Queue(sfx_Switch, false);                 /* QueueSound2 */
+
+setPressedState:
+    *a3 |= (uint8_t)(1u << bit);                     /* bset d3,(a3) */
+    obFrame(o) |= 1;                                /* bset #0: pressed frame */
+
+handleFlashing:
+    /* .handleFlashing: bit 5 del subtype activa el parpadeo (sin usar) */
+    if (obSubtype(o) & (1 << 5)) {
+        obTimeFrame(o)--;                            /* subq.b #1 */
+        if ((int8_t)obTimeFrame(o) < 0) {
+            obTimeFrame(o) = 7;
+            obFrame(o) ^= 2;                         /* bchg #1: 0 ↔ 2 */
+        }
+    }
+
+display:
+    /* FixBugs=0: DisplaySprite PRIMERO, luego out_of_range */
+    DisplaySprite(o);
+    if (OutOfRange(o, -1)) {
+        DeleteObject(o);
+    }
+}
+
+/* --- Dispatcher Object 32 --- */
+static void Button_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: But_Main(o);    break;
+        case 2: But_Pressed(o); break;
+    }
+}
+
+static int16_t PushB_ObjHitWallRight(uint8_t *o, int16_t d3) {
+    int16_t y = obY(o);
+    int16_t x = (int16_t)(obX(o) + d3);
+    int16_t dist = 0;
+
+    v_anglebuffer = 0;                                   /* move.b #0,(a4) */
+
+    FindWall(y, x,
+             0x0E,             /* d5: left/right/bottom solid */
+             0x0000,           /* d6: sin eor mask         */
+             0x10,             /* a3: tile width hacia derecha */
+             &v_anglebuffer, o, &dist);
+
+    /* .no_snap: si bit 0 del ángulo está puesto, snap a $C0 (pared derecha plana) */
+    if (v_anglebuffer & 1) {
+        v_anglebuffer = 0xC0;
+    }
+    return dist;
+}
+
+static int16_t PushB_ObjHitWallLeft(uint8_t *o, int16_t d3) {
+    int16_t y = obY(o);
+    int16_t x = (int16_t)(obX(o) + d3);
+    int16_t dist = 0;
+
+    /* FixBugs=0: el `eori.w #$F,d3` que corrige la colisión errática
+       contra paredes izquierdas está entre `if FixBugs`, así que se omite. */
+
+    v_anglebuffer = 0;                                   /* move.b #0,(a4) */
+
+    FindWall(y, x,
+             0x0E,             /* d5: left/right/bottom solid */
+             0x0800,           /* d6: eor mask xflip        */
+             -0x10,            /* a3: tile width hacia izquierda */
+             &v_anglebuffer, o, &dist);
+
+    if (v_anglebuffer & 1) {
+        v_anglebuffer = 0x40;                            /* snap a $40 (pared izquierda plana) */
+    }
+    return dist;
+}
+
+/* --- ChkPartiallyVisible --------------------------------------------------
+ *  Devuelve 1 si el sprite toca al menos parcialmente el viewport visible. */
+static int ChkPartiallyVisible(uint8_t *o) {
+    int16_t x = (int16_t)(obX(o) - (int16_t)v_screenposx);
+    int16_t y = (int16_t)(obY(o) - (int16_t)v_screenposy);
+    int16_t w = (int16_t)(int8_t)obActWid(o);
+    int16_t h = (int16_t)(int8_t)obHeight(o);
+    if (x + w < 0) return 0;
+    if (x - w >= g_render_w) return 0;
+    if (y + h < 0) return 0;
+    if (y - h >= SCREEN_HEIGHT) return 0;
+    return 1;
+}
+/* ===========================================================================
+ *  Object 33 — Pushable Blocks (MZ; unused in LZ)
+ *  Ported from _incObj/33 MZ, LZ Pushable Blocks.asm (REV01, FixBugs=0).
+ *
+ *  Subtypes: 0 = 1x1 block, 1 = 4x1 block (o $80+ para el bloque que va
+ *  sobre el stomper en MZ1, aunque esto es por el bit 7 del subtype).
+ *
+ *  Campos:
+ *    pblock_lavaspeed = objoff_30 (word): X-velocidad guardada antes de tocar lava
+ *    pblock_onlava    = objoff_32 (byte): 1 si está flotando sobre lava
+ *    pblock_origX     = objoff_34 (word): X inicial
+ *    pblock_origY     = objoff_36 (word): Y inicial
+ * =========================================================================== */
+
+#define pblock_lavaspeed(o) (*(int16_t *)((uint8_t *)(o) + 0x30))
+#define pblock_onlava(o)    (*(uint8_t  *)((uint8_t *)(o) + 0x32))
+#define pblock_origX(o)     (*(int16_t *)((uint8_t *)(o) + 0x34))
+#define pblock_origY(o)     (*(int16_t *)((uint8_t *)(o) + 0x36))
+
+static const uint8_t PushB_Var[2][2] = {
+    { 32/2,  0 },   /* 1x1 */
+    { 128/2, 1 },   /* 4x1 */
+};
+static void PushB_Action(uint8_t *o);
+static void PushB_ChkVisible(uint8_t *o);
+static void PushB_OnLava(uint8_t *o);
+static void PushB_Display(uint8_t *o);
+static void PushB_ChkWithinOrigin(uint8_t *o);
+static void PushB_SolidAction(uint8_t *o, int16_t d1, int16_t d2, int16_t d3, int16_t d4);
+static void PushB_SpawnLavaGeysers(uint8_t *o);
+/* --- PushB_Solid_ChkCollision: wrapper de SolidObject que devuelve d0 -----
+ *  d0 = obX(player) - obX(block) + d1 ajustado para ser negativo si Sonic
+ *  está en la mitad derecha (d0 > d1), positivo si está en la mitad
+ *  izquierda (d0 <= d1). Igual que Solid_Collision del ASM. */
+static int PushB_Solid_ChkCollision(uint8_t *o, int16_t d1, int16_t d2, int16_t d3,
+                                     int16_t *out_d0) {
+    int16_t out_d3 = 0, out_d5 = 0;
+    uint8_t *a1 = RAM_ADDR(v_player);
+
+    /* d0 ANTES de que SolidObject alinee a Sonic */
+    int16_t d0 = (int16_t)(obX(a1) - obX(o) + d1);
+
+    int type = SolidObject(o, d1, d2, d3, obX(o), &out_d3, &out_d5);
+    if (type == 0) return 0;
+    if (type < 0) return -1;
+
+    /* Igual que Solid_Collision: transforma solo si d0 > d1 (mitad derecha),
+       i.e. cuando `cmp.w d0,d1 / bhs .sonic_left` NO salta en el ASM.
+       Resultado: d0 positivo = distancia al borde izquierdo (empujar a la
+       derecha); d0 negativo = distancia al borde derecho (empujar a la
+       izquierda). */
+    if (d0 > d1) {
+        d0 = (int16_t)(d0 - (int16_t)(d1 + d1));
+    }
+    if (out_d0) *out_d0 = d0;
+    return 1;
+}
+
+/* --- PushB_Display: DisplaySprite + out_of_range ------------------------- */
+static void PushB_Display(uint8_t *o) {
+    if (!OutOfRange(o, -1)) {
+        DisplaySprite(o);
+        return;
+    }
+    PushB_ChkWithinOrigin(o);
+}
+
+/* --- PushB_ChkWithinOrigin: si está fuera pero el original no, reset ---- */
+static void PushB_ChkWithinOrigin(uint8_t *o) {
+    if (OutOfRange(o, pblock_origX(o))) {
+        /* .deleteAndAllowRespawn */
+        uint8_t *a2 = RAM_ADDR(v_objstate);
+        uint8_t d0 = obRespawnNo(o);
+        if (d0 != 0) {
+            a2[2 + d0] &= ~1;      /* bclr #0: permite respawn */
+        }
+        DeleteObject(o);
+        return;
+    }
+    /* Reset a la posición inicial */
+    obX(o) = pblock_origX(o);
+    obY(o) = pblock_origY(o);
+    obRoutine(o) = 4;
+    PushB_ChkVisible(o);
+}
+
+/* --- PushB_ChkVisible — routine 4 --- */
+static void PushB_ChkVisible(uint8_t *o) {
+    if (ChkPartiallyVisible(o)) {
+        obRoutine(o) = 2;
+        pblock_onlava(o) = 0;
+        obVelX(o) = 0;
+        obVelY(o) = 0;
+    }
+}
+
+/* --- PushB_SolidAction_NotOnPlatform ------------------------------------- */
+static void PushB_SolidAction_NotOnPlatform(uint8_t *o,
+                                              int16_t d1, int16_t d2, int16_t d3) {
+    int16_t d0 = 0;
+    int type = PushB_Solid_ChkCollision(o, d1, d2, d3, &d0);
+    if (type == 0) return;                /* no touch */
+    if (type < 0) return;                 /* top/bottom */
+    if (pblock_onlava(o) != 0) return;    /* on lava → no push */
+
+    if (d0 == 0) return;
+    if (d0 < 0) goto leftSide;
+
+    /* .rightSide */
+    {
+        uint8_t *a1 = RAM_ADDR(v_player);
+        if (obStatus(a1) & 1) return;      /* Sonic mirando a la derecha */
+        int16_t dx = d0;
+        int16_t d3h = (int16_t)(int8_t)obActWid(o);
+        int16_t wall = PushB_ObjHitWallRight(o, d3h);
+        if (wall < 0) return;
+        obX(o) += 1;                          /* push block right */
+        /* Mover Sonic 1px y fijar velocidad */
+        obX(a1) += 1;
+        obInertia(a1) = 0x40;
+        obVelX(a1) = 0;
+        Sound_Queue(sfx_Push, false);
+
+        /* .pushBlock completo */
+        goto pushCommon;
+    }
+
+leftSide:
+    {
+        uint8_t *a1 = RAM_ADDR(v_player);
+        if (!(obStatus(a1) & 1)) return;         /* Sonic mirando a la izquierda */
+        int16_t dx = d0;
+        int16_t d3h = (int16_t)(int8_t)obActWid(o);
+        int16_t wall = PushB_ObjHitWallLeft(o, (int16_t)~d3h);
+        if (wall < 0) return;
+        obX(o) -= 1;
+        obX(a1) -= 1;
+        obInertia(a1) = (int16_t)-0x40;
+        obVelX(a1) = 0;
+        Sound_Queue(sfx_Push, false);
+    }
+
+pushCommon:
+    {
+        uint8_t *a1 = RAM_ADDR(v_player);
+        int16_t dx = d0;
+
+        if ((int8_t)obSubtype(o) < 0) return;   /* bloque sobre stomper */
+
+        int16_t dist, angle;
+        ObjFloorDist(o, &dist, &angle);
+        if (dist <= 4) {
+            /* .alignToFloor */
+            obY(o) = (int16_t)(obY(o) + dist);
+            return;
+        }
+        /* .setToDrop: bloque cae por un borde */
+        obVelX(o) = 0x400;
+        if (dx < 0) obVelX(o) = (int16_t)(-obVelX(o));
+        ob2ndRout(o) = 6;
+    }
+}
+
+/* --- PushB_SolidAction: dispatch por ob2ndRout --- */
+static void PushB_SolidAction(uint8_t *o, int16_t d1, int16_t d2, int16_t d3, int16_t d4) {
+    uint8_t state = ob2ndRout(o);
+
+    if (state == 0) {
+        PushB_SolidAction_NotOnPlatform(o, d1, d2, d3);
+        return;
+    }
+    if (state == 2) {
+        /* .sonicOnBlock: Sonic estaba encima */
+        int16_t dummy;
+        ExitPlatform(o, d1, &dummy);
+        uint8_t *a1 = RAM_ADDR(v_player);
+        if (obStatus(a1) & (1 << 3)) {
+            MvSonicOnPtfm(o, d4, d3);
+            return;
+        }
+        ob2ndRout(o) = 0;
+        return;
+    }
+    if (state == 4) {
+        /* .falling */
+        SpeedToPos(o);
+        obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+        int16_t dist, angle;
+        ObjFloorDist(o, &dist, &angle);
+        if (dist < 0) {
+            obY(o) = (int16_t)(obY(o) + dist);
+            obVelY(o) = 0;
+            ob2ndRout(o) = 0;
+            /* Comprobación de lava: si el tile bajo el bloque es $16A+ */
+            /* (necesita acceso al 16x16 word; con ObjFloorDist actual no
+               lo tenemos, así que por ahora no activamos onlava) */
+        }
+        return;
+    }
+    if (state == 6) {
+        /* .snapToLedge */
+        SpeedToPos(o);
+        int16_t x = obX(o);
+        if ((x & 0xC) != 0) return;
+        obX(o) = (int16_t)(obX(o) & 0xFFF0);
+        pblock_lavaspeed(o) = obVelX(o);
+        obVelX(o) = 0;
+        ob2ndRout(o) = 4;
+        return;
+    }
+}
+
+/* --- PushB_OnLava: manejo mientras está flotando sobre lava --- */
+static void PushB_OnLava(uint8_t *o) {
+    int16_t savedX = obX(o);
+
+    if ((uint8_t)ob2ndRout(o) < 4) {
+        SpeedToPos(o);
+    }
+
+    if (obStatus(o) & (1 << 1)) {
+        /* Disparado por geiser */
+        obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+        int16_t dist, angle;
+        ObjFloorDist(o, &dist, &angle);
+        if (dist < 0) {
+            obY(o) = (int16_t)(obY(o) + dist);
+            obVelY(o) = 0;
+            obStatus(o) &= ~(1 << 1);
+
+            /* Comprobación de tile lava (mismo problema que arriba) */
+            if (0) {   /* TODO: check tile == $16A+ */
+                int16_t d0 = (int16_t)(pblock_lavaspeed(o) >> 3);
+                obVelX(o) = d0;
+                pblock_onlava(o) = 1;
+                obSubpixelY(o) = 0;
+            }
+        }
+        /* .lavaPlatform */
+    } else {
+        /* .PushB_OnLava_CheckWall */
+        if (obVelX(o) == 0) {
+            /* .sinkingInLava */
+            int32_t y_fp = ((uint32_t)obY(o) << 16) | (uint16_t)obSubpixelY(o);
+            y_fp += 0x2001;
+            obY(o) = (int16_t)((uint32_t)y_fp >> 16);
+            obSubpixelY(o) = (int16_t)(y_fp & 0xFFFF);
+            uint8_t sunk = (uint8_t)(obSubpixelY(o) >> 8);
+            if (sunk >= 160) {
+                /* .PushB_Sunken */
+                uint8_t *a1 = RAM_ADDR(v_player);
+                obStatus(a1) &= ~(1 << 3);
+                obStatus(o)  &= ~(1 << 3);
+                PushB_ChkWithinOrigin(o);
+                return;
+            }
+        } else if (obVelX(o) < 0) {
+            /* .checkWallLeft */
+            int16_t d3h = (int16_t)(int8_t)obActWid(o);
+            int16_t wall = PushB_ObjHitWallLeft(o, (int16_t)~d3h);
+            if (wall < 0) {
+                obVelX(o) = 0;
+            }
+        } else {
+            /* .checkWallRight */
+            int16_t d3h = (int16_t)(int8_t)obActWid(o);
+            int16_t wall = PushB_ObjHitWallRight(o, d3h);
+            if (wall < 0) {
+                obVelX(o) = 0;
+            }
+        }
+    }
+
+    /* .PushB_LavaPlatform */
+    {
+        int16_t d1 = (int16_t)((int8_t)obActWid(o) + sonic_solid_width);
+        int16_t d2 = 32/2;
+        int16_t d3 = 34/2;
+        PushB_SolidAction(o, d1, d2, d3, savedX);
+        PushB_SpawnLavaGeysers(o);
+        PushB_Display(o);
+    }
+}
+
+/* --- PushB_SpawnLavaGeysers: hardcoded MZ2/MZ3 --- */
+static void PushB_SpawnLavaGeysers(uint8_t *o) {
+    uint16_t zact = RAM_U16(0xFE10);
+    int16_t d2 = 0;
+    int spawn = 0;
+
+    if (zact == id_MZ_act2) {
+        d2 = -32;
+        int16_t x = obX(o);
+        if (x == 0xDD0 || x == 0xCC0 || x == 0xBA0) spawn = 1;
+    } else if (zact == id_MZ_act3) {
+        d2 = 32;
+        int16_t x = obX(o);
+        if (x == 0x560 || x == 0x5C0) spawn = 1;
+    }
+    if (!spawn) return;
+
+    uint8_t *a1 = (uint8_t *)FindFreeObj();
+    if (!a1) return;
+    obID(a1) = id_GeyserMaker;
+    obX(a1) = (int16_t)(obX(o) + d2);
+    obY(a1) = (int16_t)(obY(o) + 16);
+    /* gmake_parent: en ASM es un long con la dirección del padre. En el
+       port, guarda el índice de slot. Ajusta el offset según tu port de
+       4C Geyser Maker (lo más probable es objoff_3C). */
+    /* TODO: rellenar cuando portes Object 4C. */
+    (void)a1;
+}
+
+/* --- PushB_Action — routine 2 --- */
+static void PushB_Action(uint8_t *o) {
+    if (pblock_onlava(o) != 0) {
+        PushB_OnLava(o);
+        return;
+    }
+
+    {
+        int16_t d1 = (int16_t)((int8_t)obActWid(o) + sonic_solid_width);
+        int16_t d2 = 32/2;
+        int16_t d3 = 34/2;
+        PushB_SolidAction(o, d1, d2, d3, obX(o));
+    }
+
+    /* Hardcoded MZ1: alinear con el stomper (Object 31) */
+    if (RAM_U16(0xFE10) == id_MZ_act1) {
+        obSubtype(o) &= ~0x80;      /* bclr #7 */
+        int16_t x = obX(o);
+        if (x >= 0xA20 && x < 0xAA1) {
+            int16_t y31 = (int16_t)v_obj31ypos;
+            y31 = (int16_t)(y31 - 0x1C);
+            obY(o) = y31;
+            v_obj31ypos |= (1 << 7);       /* bset #7 */
+            obSubtype(o) |= 0x80;          /* bset #7 */
+        }
+    }
+
+    PushB_Display(o);
+}
+
+/* --- PushB_Main — routine 0 --- */
+static void PushB_Main(uint8_t *o) {
+    obRoutine(o) += 2;
+    obHeight(o) = 30 / 2;
+    obWidth(o) = 30 / 2;
+    obMap(o) = (uint32_t)(uintptr_t)Map_Push;
+    obGfx(o) = (uint16_t)(ArtTile_MZ_Block | Tile_Pal3);
+    if ((uint8_t)v_zone == id_LZ) {
+        obGfx(o) = (uint16_t)(ArtTile_LZ_Push_Block | Tile_Pal3);
+    }
+    obRender(o) = sprite_cam_field;
+    obPriority(o) = 3;
+    pblock_origX(o) = obX(o);
+    pblock_origY(o) = obY(o);
+
+    uint8_t sub = obSubtype(o);
+    int idx = (sub * 2) & 0xE;
+    if (idx > 2) idx = 2;               /* safety: solo 2 entradas */
+    obActWid(o) = PushB_Var[idx >> 1][0];
+    obFrame(o)  = PushB_Var[idx >> 1][1];
+
+    if (sub != 0) {
+        obGfx(o) = (uint16_t)(ArtTile_MZ_Block | Tile_Pal3 | Tile_Prio);
+    }
+
+    /* .chkgone: solo un bloque a la vez */
+    uint8_t *a2 = RAM_ADDR(v_objstate);
+    uint8_t rno = obRespawnNo(o);
+    if (rno != 0) {
+        a2[2 + rno] &= (uint8_t)~0x80;    /* bclr #7 */
+        uint8_t was = a2[2 + rno] & 1;
+        a2[2 + rno] |= 1;                 /* bset #0 */
+        if (was) {
+            DeleteObject(o);
+            return;
+        }
+    }
+
+    /* Fall-through a PushB_Action */
+    PushB_Action(o);
+}
+
+/* --- Dispatcher Object 33 --- */
+static void PushBlock_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: PushB_Main(o);       break;
+        case 2: PushB_Action(o);     break;
+        case 4: PushB_ChkVisible(o); break;
     }
 }
