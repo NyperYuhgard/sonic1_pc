@@ -68,7 +68,7 @@ static const snd_map_t sfx_map[] = {
     { sfx_SSGlass,      "assets/SoundFX/Stage/GemBlockSS.wav" },
     { sfx_Door,         "assets/SoundFX/Stage/FlappingDoor.wav" },
     { sfx_Teleport,     "assets/SoundFX/Stage/Exit_SS.wav" },
-    { sfx_ChainStomp,   "assets/SoundFX/Stage/ChainPull.wav" },
+    { sfx_ChainStomp,   "assets/SoundFX/Stage/Crusher.wav" },
     { sfx_Roll,         "assets/SoundFX/Global/Rolling.wav" },
     { sfx_Continue,     "assets/SoundFX/Stage/Continue.wav" },
     { sfx_Basaran,      "assets/SoundFX/Stage/BatbrainFly.wav" },
