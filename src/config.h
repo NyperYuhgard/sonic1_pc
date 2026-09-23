@@ -10,6 +10,8 @@ typedef struct {
     int  fullscreen;      /* 0/1 */
     int  ss_alt_anim;
     int  ss_smooth;
+    int  crt;
+    int  blur;
 } Settings;
 
 extern Settings g_settings;

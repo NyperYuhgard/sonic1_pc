@@ -875,7 +875,15 @@ static void Options_BuildText(void) {
              
     snprintf(buf[opt_row_ss_smooth], opt_line_length + 1,
              "SS SMOOTH      : %-6s",
-             g_settings.ss_smooth ? "ON" : "OFF");                  
+             g_settings.ss_smooth ? "ON" : "OFF");     
+             
+    snprintf(buf[opt_row_crt], opt_line_length + 1,
+             "CRT FILTER     : %-6s",
+             g_settings.crt ? "ON" : "OFF");
+
+    snprintf(buf[opt_row_blur], opt_line_length + 1,
+             "SOFT BLUR      : %-6s",
+             g_settings.blur ? "ON" : "OFF");         
 
     snprintf(buf[opt_row_apply], opt_line_length + 1,
              "APPLY & SAVE           ");
@@ -994,7 +1002,9 @@ static void Options_Run(void) {
             case opt_row_ss_smooth:
                 g_settings.ss_smooth ^= 1;
                 Options_BuildText();
-                break;      
+                break;   
+            case opt_row_crt:   g_settings.crt  ^= 1; Options_BuildText(); break;
+            case opt_row_blur:  g_settings.blur ^= 1; Options_BuildText(); break;       
             }
         }
         if (v_jpadpress1 & btnR) {
@@ -1023,6 +1033,8 @@ static void Options_Run(void) {
                 g_settings.ss_smooth ^= 1;
                 Options_BuildText();
                 break;  
+            case opt_row_crt:   g_settings.crt  ^= 1; Options_BuildText(); break;
+            case opt_row_blur:  g_settings.blur ^= 1; Options_BuildText(); break;    
             }          
         }
 

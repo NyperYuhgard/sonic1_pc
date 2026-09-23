@@ -5,6 +5,7 @@
 #include "data.h"
 #include "planeview.h"
 #include "font8x8.h"
+#include "postprocess.h"
 #include <SDL2/SDL.h>
 #include <stdlib.h>
 #include <string.h>
@@ -667,11 +668,14 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
         tex_w = g_render_w;
     }
 
-    void *pixels;
-    int pitch;
-    SDL_LockTexture(vdp.framebuffer, NULL, &pixels, &pitch);
-    uint32_t *pix = (uint32_t *)pixels;
-    int stride = pitch / 4;
+    /* Buffer interno persistente donde renderizamos todo (mismo esquema
+       que antes, pero sin SDL_LockTexture en el camino caliente).
+       pitch es "ficticio": los planos se dibujan con stride = pitch/4,
+       por eso vale g_render_w * 4 para que stride == g_render_w. */
+    static uint32_t frame_buf[PP_MAX_W * PP_MAX_H];
+    uint32_t *pix = frame_buf;
+    int pitch = g_render_w * 4;   /* dummy, para render_plane_scanline */
+    int stride = g_render_w;
 
     /* Clear to black (color de fondo real de la Mega Drive) */
     uint16_t bg_cram_index = vdp.registers[7] & 0x3F;
@@ -872,6 +876,22 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
        porque las coords de Sonic son relativas al viewport original). */
     debug_collision_overlay(pix);
 
+        /* Post-proceso: aplicar filtros. */
+    const uint32_t *final = PP_Apply(pix, g_render_w, SCREEN_HEIGHT, &g_settings);
+
+    /* Upload al texture SDL row-by-row (por si pitch de SDL no coincide
+       con g_render_w * 4). */
+    void *pixels;
+    int sdl_pitch;
+    SDL_LockTexture(vdp.framebuffer, NULL, &pixels, &sdl_pitch);
+    {
+        int dst_stride = sdl_pitch / 4;
+        for (int y = 0; y < SCREEN_HEIGHT; y++) {
+            memcpy((uint32_t *)pixels + (size_t)y * dst_stride,
+                   final + (size_t)y * g_render_w,
+                   (size_t)g_render_w * 4);
+        }
+    }
     SDL_UnlockTexture(vdp.framebuffer);
 
     /* Present */
