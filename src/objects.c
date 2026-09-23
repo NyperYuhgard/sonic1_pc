@@ -11281,7 +11281,12 @@ static void CStom_SwitchActivated(uint8_t *o) {
     if (a2[cstom_switch(o)] == 0) goto falling;
 
     if ((int16_t)v_obj31ypos >= 0) goto checkRising;
-    if (cstom_current(o) == 0x10) goto stop;
+    /* ASM: cmpi.b #$10,cstom_current — compara el BYTE ALTO del word
+       (16.8 fixed point: 0x10 = 16px por debajo del techo). El word
+       completo nunca vale exactamente $10 durante la subida ($1000 →
+       $0F80 → … → 0), así que comparar el word dejaría al stomper
+       subir hasta el techo y empujar el PushBlock contra él. */
+    if ((uint8_t)(cstom_current(o) >> 8) == 0x10) goto stop;
 
 checkRising:
     if (cstom_current(o) == 0) goto stop;
