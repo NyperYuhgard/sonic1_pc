@@ -1,4 +1,5 @@
 #include "special.h"
+#include "config.h"
 #include "ram.h"
 #include "constants.h"
 #include "data.h"
@@ -912,7 +913,11 @@ void SS_ShowLayout(void) {
 
     /* --- Calcular matriz de rotación --- */
     int16_t sine, cosine;
-    CalcSine((uint16_t)(v_ssangle >> 8) & 0xFC, &sine, &cosine);
+    if (g_settings.ss_smooth) {
+        CalcSine((uint16_t)(v_ssangle >> 8), &sine, &cosine);
+    } else {
+        CalcSine((uint16_t)(v_ssangle >> 8) & 0xFC, &sine, &cosine);
+    }
 
     int32_t sin_step = (int32_t)sine * ss_blocksize;
     int32_t cos_step = (int32_t)cosine * ss_blocksize;

@@ -871,7 +871,11 @@ static void Options_BuildText(void) {
 
     snprintf(buf[opt_row_ss_alt_anim], opt_line_length + 1,
              "SS ALT ANIMS   : %-6s",
-             g_settings.ss_alt_anim ? "ON" : "OFF");         
+             g_settings.ss_alt_anim ? "ON" : "OFF");      
+             
+    snprintf(buf[opt_row_ss_smooth], opt_line_length + 1,
+             "SS SMOOTH      : %-6s",
+             g_settings.ss_smooth ? "ON" : "OFF");                  
 
     snprintf(buf[opt_row_apply], opt_line_length + 1,
              "APPLY & SAVE           ");
@@ -987,6 +991,10 @@ static void Options_Run(void) {
                 g_settings.ss_alt_anim ^= 1;
                 Options_BuildText();
                 break;    
+            case opt_row_ss_smooth:
+                g_settings.ss_smooth ^= 1;
+                Options_BuildText();
+                break;      
             }
         }
         if (v_jpadpress1 & btnR) {
@@ -1011,7 +1019,11 @@ static void Options_Run(void) {
                 g_settings.ss_alt_anim ^= 1;
                 Options_BuildText();
                 break;
-            }
+            case opt_row_ss_smooth:
+                g_settings.ss_smooth ^= 1;
+                Options_BuildText();
+                break;  
+            }          
         }
 
         /* --- Aceptar --- */

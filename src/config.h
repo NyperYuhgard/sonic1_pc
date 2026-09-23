@@ -9,6 +9,7 @@ typedef struct {
     int  scanlines;       /* 0/1 efecto CRT */
     int  fullscreen;      /* 0/1 */
     int  ss_alt_anim;
+    int  ss_smooth;
 } Settings;
 
 extern Settings g_settings;

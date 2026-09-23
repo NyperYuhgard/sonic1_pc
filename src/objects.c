@@ -10231,8 +10231,12 @@ static void SonicSS_AngleSpeed(uint8_t *o) {
 /* --- Jump from a wall. --- */
 static void SonicSS_Jump(uint8_t *o) {
     if (!(v_jpadpress2 & btnABC)) return;
-
-    uint8_t angle = (uint8_t)((v_ssangle >> 8) & 0xFC);
+    uint8_t angle;
+    if (g_settings.ss_smooth) {
+        angle = (uint8_t)((v_ssangle >> 8));
+    } else {
+        angle = (uint8_t)((v_ssangle >> 8) & 0xFC);
+    }  
     angle = (uint8_t)(-angle);
     angle -= 0x40;
 
@@ -10250,7 +10254,12 @@ static void SonicSS_Jump(uint8_t *o) {
 
 /* --- Gravity in the rotated frame. --- */
 static void SonicSS_Fall(uint8_t *o) {
-    uint8_t angle = (uint8_t)((v_ssangle >> 8) & 0xFC);
+    uint8_t angle;
+    if (g_settings.ss_smooth) {
+        angle = (uint8_t)((v_ssangle >> 8));
+    } else {
+        angle = (uint8_t)((v_ssangle >> 8) & 0xFC);
+    }  
     int16_t s0, s1;
     CalcSine(angle, &s0, &s1);
 
