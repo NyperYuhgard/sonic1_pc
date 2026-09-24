@@ -133,10 +133,8 @@ void BuildSprites(void) {
             int xflip = (render & sprite_xflip) ? 1 : 0;
             int yflip = (render & sprite_yflip) ? 1 : 0;
 
-            /* ---- NUEVA RAMA: raw mappings ---- */
+            /* ---- RAMA: raw mappings ---- */
             if (render & sprite_rawmappings) {
-                /* obMap apunta directamente a UNA pieza (5 bytes).
-                 *                  No se consulta Map_LookupLength ni la tabla de frames. */
                 const uint8_t *piece_data = map;
                 if (sprite_index < sprites_max) {
                     Sprites_EmitPiece(sprite_table, &sprite_index, y, x,
@@ -145,7 +143,6 @@ void BuildSprites(void) {
                 obRender(obj) |= sprite_rendered;
                 continue;
             }
-            /* ----------------------------------- */
 
             size_t map_len = Map_LookupLength(map);
             if (map_len == 0) continue;
@@ -173,7 +170,17 @@ void BuildSprites(void) {
         }
     }
 
+    /* --- Terminador del linked list (BuildSprites.asm, final) --- */
     v_spritecount = (uint8_t)sprite_index;
+    if (sprite_index < sprites_max) {
+        /* move.l #0,(a2) — unlink last sprite */
+        sprite_table[sprite_index * 8 + 3] = 0;
+    } else {
+        /* .spriteLimit: move.b #0,-5(a2) — unlink penultimate */
+        if (sprite_index >= 2) {
+            sprite_table[(sprite_index - 2) * 8 + 3] = 0;
+        }
+    }
 }
 
 void Sprites_RenderToTexture(void *texture_pixels, int pitch) {

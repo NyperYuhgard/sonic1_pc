@@ -184,5 +184,5 @@ void Sonic_WalkVertL(void *obj);
     ObjectFall — apply gravity and update position
     =========================================================================== */
 void ObjectFall(void *obj);
-
+extern uint16_t v_last_floor_block;
 #endif /* SONIC1_COLLISION_H */

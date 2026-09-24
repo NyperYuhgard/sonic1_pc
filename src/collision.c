@@ -5,6 +5,7 @@
 #include "data.h"
 #include <stdint.h>
 
+uint16_t v_last_floor_block;
 /* BE word read from the 256x256 layout (v_lvllayout_fg) */
 static inline uint16_t layout_be16(const uint8_t *p) {
     return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
@@ -26,24 +27,20 @@ static inline uint16_t block_be16(const uint8_t *p) {
      d1 = 16x16 block word (returned via out_d1)
    =========================================================================== */
 void FindNearestTile(int16_t y, int16_t x, const void *obj, uint8_t **out_a1, uint16_t *out_d1) {
-    /* d0 = (Y >> 1) & $380 + (X >> 8) & $7F: position within the layout */
     int16_t off = (int16_t)(((uint16_t)y >> 1) & 0x380)
-                + (int16_t)(((uint16_t)x >> 8) & 0x7F);
+    + (int16_t)(((uint16_t)x >> 8) & 0x7F);
 
     uint8_t chunk = RAM_ADDR(v_lvllayout_fg)[off];
 
     if (chunk == 0) {
-        /* Blank chunk. In the 68k, a1 ends up at a RAM word that is always
-           0 (v_chunk0collision); return an equivalent zero word. */
         static const uint8_t chunk0[2] = { 0, 0 };
         *out_a1 = (uint8_t *)chunk0;
         *out_d1 = 0;
+        v_last_floor_block = 0;                      /* NEW */
         return;
     }
 
     if (chunk & 0x80) {
-        /* Special chunk: if the object is "behind a loop", replace
-           chunk number $A8 with $51 (the loop-back chunk). */
         chunk &= 0x7F;
         if (obRender(obj) & sprite_looping) {
             chunk += 1;
@@ -52,16 +49,16 @@ void FindNearestTile(int16_t y, int16_t x, const void *obj, uint8_t **out_a1, ui
         }
     }
 
-    chunk -= 1;                             /* chunks start at 1 */
+    chunk -= 1;
 
-    /* Cell address: (chunk << 9) + (Y*2 & $1E0) + (X>>3 & $1E) within v_256x256 */
     uint16_t cell = (uint16_t)(((uint16_t)chunk << 9)
-                             | (((uint16_t)y << 1) & 0x1E0)
-                             | (((uint16_t)x >> 3) & 0x1E));
+    | (((uint16_t)y << 1) & 0x1E0)
+    | (((uint16_t)x >> 3) & 0x1E));
 
     uint8_t *a1 = RAM_ADDR(v_256x256) + cell;
     *out_a1 = a1;
     *out_d1 = block_be16(a1);
+    v_last_floor_block = *out_d1;                    /* NEW */
 }
 
 /* ===========================================================================

@@ -77,6 +77,10 @@ static void Button_Main(void *obj);
 static void PushBlock_Main(void *obj);
 static void MovingBlock_Main(void *obj);
 static void LavaTag_Main(void *obj);
+static void MarbleBrick_Main(void *obj);
+static void Basaran_Main(void *obj);
+static void LargeGrass_Main(void *obj);
+static void GrassFire_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -136,6 +140,10 @@ void Objects_Init(void) {
     obj_dispatch[id_PushBlock] = PushBlock_Main;
     obj_dispatch[id_MovingBlock] = MovingBlock_Main;
     obj_dispatch[id_LavaTag] = LavaTag_Main;
+    obj_dispatch[id_MarbleBrick] = MarbleBrick_Main;
+    obj_dispatch[id_Basaran] = Basaran_Main;
+    obj_dispatch[id_LargeGrass] = LargeGrass_Main;
+    obj_dispatch[id_GrassFire] = GrassFire_Main;
     /* Register Special Stage results screen objects */
     obj_dispatch[id_SSResult]  = SSResult_Main;
     obj_dispatch[id_SSRChaos]  = SSRChaos_Main;
@@ -331,8 +339,8 @@ void ObjFloorDist(void *obj, int16_t *dist, int16_t *angle) {
     int16_t d1;
     uint8_t d3;
     int16_t y = (int16_t)(obY(o) + (int8_t)obHeight(o));
-    int16_t x = obX(o);
-    FindFloor(y, x, 0x0D, 0, 0x10, &v_anglebuffer, obj, &d1);
+    int16_t x = (int16_t)(obX(o) & ~1);          /* bclr #0,d3 (FixBugs-style) */
+    FindFloor(y, x, 0x0D, 0, 0x10, &v_anglebuffer, obj, &d1);   /* ← esta línea */
     d3 = v_anglebuffer;
     if (d3 & 0x01)
         d3 = 0;
@@ -5336,6 +5344,7 @@ static void Solid_NotPushing(uint8_t *a1, uint8_t *o);
 static void Solid_ResetFloor(uint8_t *o);
 static int SolidObject(uint8_t *o, int16_t d1, int16_t d2, int16_t d3,
                        int16_t d4, int16_t *d3out, int16_t *d5out);
+static int SolidObject_Heightmap(uint8_t *o, int16_t d1, int16_t d2, const uint8_t *a2);
 
 static void Rock_Main(uint8_t *o) {
     obRoutine(o) += 2;                          /* advance to Rock_Solid */
@@ -5579,6 +5588,175 @@ solid_noreq:
     if (d3out) *d3out = d3;
     if (d5out) *d5out = d5;
     return 0;                                   /* moveq #0,d4 / rts */
+}
+
+static int SolidObject_Heightmap(uint8_t *o, int16_t d1, int16_t d2,
+                                  const uint8_t *a2) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+    int16_t d0, d3, d4, d5;
+    int16_t halfH = d2;                    /* guardar half-height original (para el "Landed") */
+
+    /* --- ASM: tst.b obRender(a0) ; bpl.w Solid_NoCollision --- */
+    if (!(obRender(o) & 0x80)) return 0;
+
+    /* --- X check ---
+       d0 = obX(a1) - obX(a0) + d1
+       bmi.w Solid_NoCollision
+       d3 = d1*2 ; cmp.w d3,d0 ; bhi.w Solid_NoCollision */
+    d0 = (int16_t)(obX(a1) - obX(o) + d1);
+    if (d0 < 0) return 0;
+    d3 = (int16_t)(d1 + d1);
+    if ((uint16_t)d0 > (uint16_t)d3) return 0;
+
+    /* --- X-flip + >>1 ---
+       d5 = d0
+       if xflip: d5 = ~d5 + d3
+       d5 >>= 1 */
+    d5 = d0;
+    if (obRender(o) & sprite_xflip) {
+        d5 = (int16_t)(~d5 + d3);
+    }
+    d5 = (int16_t)((uint16_t)d5 >> 1);
+
+    /* --- Lee heightmap y resta baseline ---
+       d3 = a2[d5]
+       sub.b (a2),d3     <-- ¡BUG ARREGLADO!
+       topY = obY(a0) - d3 */
+    d3 = (int16_t)((int8_t)a2[d5] - (int8_t)a2[0]);
+    d5 = (int16_t)(obY(o) - d3);           /* d5 = topY */
+
+    /* --- d2 += obHeight(Sonic) --- */
+    d3 = (int16_t)(int8_t)obHeight(a1);
+    d2 = (int16_t)(d2 + d3);               /* d2 = halfH + sonicH */
+
+    /* --- d3 = (sonicY - topY) + 4 + d2 ; bmi.w Solid_NoCollision --- */
+    d3 = (int16_t)(obY(a1) - d5);
+    d3 = (int16_t)(d3 + 4);
+    d3 = (int16_t)(d3 + d2);
+    if (d3 < 0) return 0;
+
+    /* --- d4 = d2*2 ; cmp.w d4,d3 ; bhs.w Solid_NoCollision --- */
+    d4 = (int16_t)(d2 + d2);
+    if ((uint16_t)d3 >= (uint16_t)d4) return 0;
+
+    /* ============ Fall-through a Solid_Collision ============ */
+    if ((int8_t)f_playerctrl < 0) goto shm_nocollision;
+    if ((uint8_t)obRoutine(a1) >= 6) goto shm_nocollision;
+    if (v_debuguse) goto shm_nocollision;
+
+    /* d5 = x pos de Sonic sobre el objeto (0..2*d1) */
+    d5 = d0;
+    if ((uint16_t)d0 > (uint16_t)d1) {          /* cmp.w d0,d1 ; bhs .sonic_left */
+        d1 = (int16_t)(d1 + d1);
+        d0 = (int16_t)(d0 - d1);
+        d5 = (int16_t)(-d0);
+    }
+
+    /* d1 = distancia Y al borde más cercano */
+    d1 = d3;
+    if ((uint16_t)d3 > (uint16_t)d2) {          /* cmp.w d3,d2 ; bhs .sonic_top */
+        d3 = (int16_t)(d3 - 4);
+        d3 = (int16_t)(d3 - d4);
+        d1 = (int16_t)(-d3);
+    }
+
+    /* cmp.w d1,d5 ; bhi.w Solid_TopBottom */
+    if ((uint16_t)d5 > (uint16_t)d1) goto shm_topbottom;
+    /* cmpi.w #4,d1 ; bls.s Solid_SideAir */
+    if ((uint16_t)d1 <= 4) goto shm_sideair;
+
+    /* tst.w d0 ; beq.s Solid_AlignToSide
+       bmi.s Solid_OnRight */
+    if (d0 == 0) goto shm_align;
+    if (d0 < 0) {
+        /* Solid_OnRight: bpl.s Solid_AlignToSide */
+        if (obVelX(a1) >= 0) goto shm_align;
+    } else {
+        /* sonic_left con d0>0: bmi.s Solid_AlignToSide */
+        if (obVelX(a1) < 0) goto shm_align;
+    }
+
+    /* Solid_StopX */
+    obInertia(a1) = 0;
+    obVelX(a1) = 0;
+
+shm_align:
+    obX(a1) = (int16_t)(obX(a1) - d0);
+    if (obStatus(a1) & (1 << 1)) goto shm_sideair;
+    obStatus(a1) |= (1 << 5);
+    obStatus(o)  |= (1 << 5);
+    return 1;
+
+shm_sideair:
+    obStatus(o)  &= ~(1 << 5);
+    obStatus(a1) &= ~(1 << 5);
+    return 1;
+
+shm_topbottom:
+    /* tst.w d3 ; bmi.s Solid_Below
+       cmpi.w #$10,d3 ; blo.s Solid_Landed
+       bra.s Solid_NoCollision */
+    if (d3 < 0) goto shm_below;
+    if (d3 < 0x10) goto shm_landed;
+    goto shm_nocollision;
+
+shm_below:
+    /* tst.w obVelY(a1) ; beq.s Solid_Squash
+       bpl.s Solid_TopBtmAir
+       tst.w d3 ; bpl.s Solid_TopBtmAir
+       [FixBugs=0: NO se hace sub.w d3,obY aquí]
+       move.w #0,obVelY(a1) */
+    if (obVelY(a1) == 0) goto shm_squash;
+    if (obVelY(a1) > 0) goto shm_topair;
+    if (d3 >= 0) goto shm_topair;
+    obVelY(a1) = 0;
+
+shm_topair:
+    return -1;
+
+shm_squash:
+    /* btst #1,obStatus(a1) ; bne.s Solid_TopBtmAir
+       KillSonic */
+    if (obStatus(a1) & (1 << 1)) goto shm_topair;
+    KillSonic(a1, NULL);
+    return -1;
+
+shm_landed:
+    /* subq.w #4,d3
+       d1 = obActWid(a0) ; d2 = d1*2
+       d1 = obX(a1) + d1 - obX(a0)
+       bmi.s Solid_Miss ; cmp.w d2,d1 ; bhs.s Solid_Miss
+       tst.w obVelY(a1) ; bmi.s Solid_Miss
+       sub.w d3,obY(a1) ; subq.w #1,obY(a1)
+       bsr.s Solid_ResetFloor
+       move.b #2,obSolid(a0) ; bset #3,obStatus(a0) */
+    d3 = (int16_t)(d3 - 4);
+    {
+        int16_t w  = (int16_t)(int8_t)obActWid(o);
+        int16_t w2 = (int16_t)(w + w);
+        int16_t xr = (int16_t)(obX(a1) + w - obX(o));
+        if (xr < 0) return 0;
+        if ((uint16_t)xr >= (uint16_t)w2) return 0;
+    }
+    if (obVelY(a1) < 0) return 0;
+    /* ASM: obY -= (d3-4) ; obY -= 1
+       → obY_new = sonicY - ((sonicY - topY) + halfH + sonicH) - 1
+                = topY - halfH - sonicH - 1
+       Con d2 = halfH + sonicH, esto es topY - d2 - 1. */
+    obY(a1) = (int16_t)(obY(a1) - d3);
+    obY(a1) = (int16_t)(obY(a1) - 1);
+    Solid_ResetFloor(o);
+    obSolid(o) = 2;
+    obStatus(o) |= (1 << 3);
+    return -1;
+
+shm_nocollision:
+    if (obStatus(o) & (1 << 5)) {
+        obAnim(a1) = id_Run;
+    }
+    obStatus(o)  &= ~(1 << 5);
+    obStatus(a1) &= ~(1 << 5);
+    return 0;
 }
 
 /* --- _incObj/44 GHZ Edge Walls.asm ------------------------------------------
@@ -12370,5 +12548,676 @@ static void LavaTag_Main(void *obj) {
     switch (obRoutine(o)) {                             /* LTag_Index */
         case 0: LTag_Main(o);   break;
         case 2: LTag_ChkDel(o); break;
+    }
+}
+/* ===========================================================================
+ *  Object 46 — Solid blocks and blocks that fall from the ceiling (MZ)
+ *  Ported verbatim from _incObj/46 MZ Bricks.asm (REV01, FixBugs=0).
+ *
+ *  Fields:
+ *    brick_origY = objoff_30 (word): initial Y-position used by wobble effect
+ *    (objoff_32 = $5C0 es un leftover de FixBugs=0, sin efecto)
+ * =========================================================================== */
+
+#define brick_origY(o) (*(int16_t *)((uint8_t *)(o) + 0x30))
+
+static void Brick_Action(uint8_t *o);
+static void Brick_Type00(uint8_t *o);
+static void Brick_Type01(uint8_t *o);
+static void Brick_Type02(uint8_t *o);
+static void Brick_Type03(uint8_t *o);
+static void Brick_Type04(uint8_t *o);
+
+/* --- Brick_Main — Routine 0 --- */
+static void Brick_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                  /* → Brick_Action */
+    obHeight(o)  = 30 / 2;
+    obWidth(o)   = 30 / 2;
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Brick;
+    obGfx(o)     = (uint16_t)(ArtTile_Level | Tile_Pal3);
+    obRender(o)  = sprite_cam_field;
+    obPriority(o)= 3;
+    obActWid(o)  = 32 / 2;
+    brick_origY(o) = obY(o);
+
+    /* FixBugs=0 leftover sin propósito conocido */
+    *(int16_t *)((uint8_t *)o + 0x32) = 0x5C0;
+
+    /* Fall-through a Brick_Action */
+    Brick_Action(o);
+}
+
+/* --- Brick_Action — Routine 2 --- */
+static void Brick_Action(uint8_t *o) {
+    if ((int8_t)obRender(o) >= 0) goto chkdel;          /* tst.b obRender / bpl.s .chkdel */
+
+    {
+        uint8_t d0 = (uint8_t)(obSubtype(o) & 7);       /* andi.w #7,d0 */
+        switch (d0) {
+            case 0: Brick_Type00(o); break;
+            case 1: Brick_Type01(o); break;
+            case 2: Brick_Type02(o); break;
+            case 3: Brick_Type03(o); break;
+            case 4: Brick_Type04(o); break;
+            /* 5..7 no tienen entrada en Brick_TypeIndex. En el ASM leerían
+             * fuera de la tabla; en la práctica no se usan. */
+        }
+    }
+
+    {
+        int16_t d1 = (int16_t)(32 / 2 + sonic_solid_width);
+        int16_t d2 = 32 / 2;
+        int16_t d3 = 34 / 2;
+        int16_t d4 = obX(o);
+        int16_t out_d3 = 0, out_d5 = 0;
+        SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5);
+    }
+
+    chkdel:
+    /* REV01 / FixBugs=0: out_of_range primero, DisplaySprite después. */
+    if (OutOfRange(o, -1)) {                            /* out_of_range.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);                                   /* bra.w DisplaySprite */
+}
+
+/* --- Tipo 00: bloque estático --- */
+static void Brick_Type00(uint8_t *o) {
+    (void)o;                                            /* rts */
+}
+
+/* --- Tipo 01: wobble rápido (techo) --- */
+static void Brick_Type01(uint8_t *o) {
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x16); /* freq 8, mid $40 */
+    if (obSubtype(o) & (1 << 3)) {                      /* btst #3,obSubtype */
+        d0 = (int16_t)(-d0);                            /* neg.w d0 */
+        d0 = (int16_t)(d0 + 0x10);                      /* addi.w #$10,d0 */
+    }
+    obY(o) = (int16_t)(brick_origY(o) - d0);            /* sub.w d0,d1 ; move.w d1,obY */
+}
+
+/* --- Tipo 02: cae cuando Sonic se acerca --- */
+static void Brick_Type02(uint8_t *o) {
+    int16_t d0 = (int16_t)(obX(RAM_ADDR(v_player)) - obX(o));
+    if (d0 < 0) d0 = (int16_t)(-d0);                    /* neg.w d0 */
+        if ((uint16_t)d0 >= 0x90) {                         /* cmpi.w #$90 / bhs.s */
+            Brick_Type01(o);                                /* no está cerca: seguir wobble */
+            return;
+        }
+        obSubtype(o) = 3;                                   /* cae */
+}
+
+/* --- Tipo 03: cae hasta tocar el piso --- */
+static void Brick_Type03(uint8_t *o) {
+    SpeedToPos(o);
+    obVelY(o) = (int16_t)(obVelY(o) + 0x18);            /* addi.w #$18 */
+
+    int16_t dist, angle;
+    ObjFloorDist(o, &dist, &angle);                     /* bsr.w ObjFloorDist */
+    if (dist >= 0) return;                              /* tst.w d1 / bpl.w .return */
+
+        obY(o) = (int16_t)(obY(o) + dist);                  /* add.w d1,obY: alinear al piso */
+        obVelY(o) = 0;                                      /* clr.w obVelY */
+        brick_origY(o) = obY(o);                            /* move.w obY,brick_origY */
+        obSubtype(o) = 4;                                   /* → wobble lento sobre lava */
+
+        /* FixBugs=0 / REV01: comprueba si el bloque 16×16 bajo el brick es lava.
+         * Después de ObjFloorDist, v_last_floor_block contiene el word del bloque
+         * que el ASM deja en a1 (mismo efecto secundario, misma semántica de
+         * "última llamada a FindNearestTile gana"). */
+        {
+            uint16_t block_id = (uint16_t)(v_last_floor_block & 0x3FF); /* andi.w #$3FF */
+            if (block_id >= 0x16A) return;                  /* cmpi.w #$16A / bhs.s .return */
+                obSubtype(o) = 0;                               /* no es lava → estático */
+        }
+}
+
+/* --- Tipo 04: wobble lento (sobre lava) --- */
+static void Brick_Type04(uint8_t *o) {
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x12); /* freq 8, mid $40 */
+    d0 = (int16_t)((uint16_t)d0 >> 3);                  /* lsr.w #3,d0 */
+    obY(o) = (int16_t)(brick_origY(o) - d0);            /* sub.w d0,d1 ; move.w d1,obY */
+}
+
+/* --- Dispatcher Object 46 --- */
+static void MarbleBrick_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                             /* Brick_Index */
+        case 0: Brick_Main(o);   break;
+        case 2: Brick_Action(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 55 — Basaran enemy (MZ)
+ *  Ported verbatim from _incObj/55 Badnik - Basaran.asm (REV01, FixBugs=0).
+ *
+ *  bas_sonicY = objoff_36 (word): copia de la Y de Sonic en el instante en
+ *                                 que el Basaran empezó a bajar; se usa para
+ *                                 detener su caída a esa altura
+ * =========================================================================== */
+
+#define bas_sonicY(o) (*(int16_t *)((uint8_t *)(o) + 0x36))
+
+static void Bas_Main(uint8_t *o);
+static void Bas_Action(uint8_t *o);
+static void Bas_Action_ChkSonic(uint8_t *o);
+static void Bas_Action_DropDown(uint8_t *o);
+static void Bas_Action_Fly(uint8_t *o);
+static void Bas_Action_BackToCeiling(uint8_t *o);
+
+/* Helper local — port de ObjHitCeiling (_incObj/sub ObjFloorDist.asm).
+ * Igual que Sonic_FindCeiling_Quick pero usando obHeight del objeto en
+ * lugar de sonic_quick_size. Devuelve d1 = distancia al techo. */
+static int16_t Bas_ObjHitCeiling(uint8_t *o) {
+    int16_t d1;
+    int16_t y = (int16_t)((obY(o) - (int8_t)obHeight(o)) ^ 0xF);
+    int16_t x = obX(o);
+    FindFloor(y, x, 0x0E, 0x1000, -0x10, &v_anglebuffer, o, &d1);
+    return d1;
+}
+
+/* --- Bas_CheckDistanceAndFaceSonic ---
+ * Entrada: d2 = tamaño de la zona de trigger (128).
+ * Salida:  obStatus bit 0 ajustado (X-flip).
+ *          *out_d1 = velocidad horizontal (0x100 o -0x100).
+ *          Devuelve 1 si Sonic está dentro de la zona (C=1 en ASM),
+ *          0 si está fuera (C=0 → bhs tomado en el ASM). */
+static int Bas_CheckDistanceAndFaceSonic(uint8_t *o, int16_t d2, int16_t *out_d1) {
+    int16_t d1 = 0x100;                             /* move.w #$100,d1 */
+    obStatus(o) |= (1 << 0);                        /* bset #0: face right */
+    int16_t d0 = (int16_t)(obX(RAM_ADDR(v_player)) - obX(o));
+    if (d0 < 0) {                                   /* bhs.s .checkDistance */
+        d0 = (int16_t)(-d0);                        /* neg.w d0 */
+        d1 = (int16_t)(-d1);                        /* neg.w d1 */
+        obStatus(o) &= (uint8_t)~(1 << 0);          /* bclr #0: face left */
+    }
+    if (out_d1) *out_d1 = d1;
+    /* cmp.w d2,d0: C=1 si d0 < d2 (in range) */
+    return (uint16_t)d0 < (uint16_t)d2;
+}
+
+/* --- Bas_Main — Routine 0 --- */
+static void Bas_Main(uint8_t *o) {
+    obRoutine(o) += 2;                              /* → Bas_Action */
+    obMap(o)      = (uint32_t)(uintptr_t)Map_Bas;
+    obGfx(o)      = (uint16_t)(ArtTile_Basaran | Tile_Prio);
+    obRender(o)   = sprite_cam_field;
+    obHeight(o)   = 24 / 2;
+    obPriority(o) = 2;
+    obColType(o)  = (uint8_t)(col_16x16 | col_badnik);
+    obActWid(o)   = 32 / 2;
+
+    /* Fall-through a Bas_Action (el ASM no tiene rts al final de Bas_Main) */
+    Bas_Action(o);
+}
+
+/* --- Bas_Action — Routine 2 --- */
+static void Bas_Action(uint8_t *o) {
+    switch (ob2ndRout(o)) {                         /* Bas_ActIndex */
+        case 0: Bas_Action_ChkSonic(o);        break;
+        case 2: Bas_Action_DropDown(o);        break;
+        case 4: Bas_Action_Fly(o);             break;
+        case 6: Bas_Action_BackToCeiling(o);   break;
+    }
+    if (Ani_Bas) AnimateSprite(o, Ani_Bas);
+    RememberState(o);
+}
+
+/* --- Bas_Action_ChkSonic — sub-rutina 0 --- */
+static void Bas_Action_ChkSonic(uint8_t *o) {
+    /* .dropcheck: comprueba distancia horizontal (128px) */
+    if (!Bas_CheckDistanceAndFaceSonic(o, 128, NULL)) return;   /* bhs.s .return */
+
+        int16_t sonicY = (int16_t)obY(RAM_ADDR(v_player));          /* move.w (v_player+obY),d0 */
+        int16_t basY   = obY(o);
+    bas_sonicY(o) = sonicY;                                     /* move.w d0,bas_sonicY */
+
+    int16_t d0 = (int16_t)(sonicY - basY);                      /* sub.w obY(a0),d0 */
+    if ((uint16_t)sonicY < (uint16_t)basY) return;              /* blo.s .return: Sonic arriba */
+        if ((uint16_t)d0 >= 128) return;                            /* cmpi.w #128 / bhs.s .return */
+            if (v_debuguse) return;                                     /* tst.w (v_debuguse).w / bne.s .return */
+
+                /* Stagger por índice de objeto + VBlank byte: sólo cae cada 8 frames */
+                uint8_t d7 = (uint8_t)((NUM_OBJECTS - 1) - Object_GetIndex(o));
+            uint8_t v  = (uint8_t)(v_vblank_byte + d7);
+        if (v & 7) return;                                          /* andi.b #7 / bne.s .return */
+
+            obAnim(o) = 1;                                              /* .drop animation */
+            ob2ndRout(o) += 2;                                          /* → Bas_Action_DropDown */
+}
+
+/* --- Bas_Action_DropDown — sub-rutina 2 --- */
+static void Bas_Action_DropDown(uint8_t *o) {
+    int16_t d1;                                                 /* guardará velocidad de Bas_Check... */
+    SpeedToPos(o);                                              /* bsr.w SpeedToPos */
+    obVelY(o) = (int16_t)(obVelY(o) + 0x18);                    /* addi.w #$18,obVelY */
+
+    /* .dropfly: la distancia se ignora pero d1 (velocidad) se usa después */
+    Bas_CheckDistanceAndFaceSonic(o, 128, &d1);
+
+    int16_t d0 = (int16_t)(bas_sonicY(o) - obY(o));             /* sub.w obY(a0),d0 */
+    if ((uint16_t)bas_sonicY(o) < (uint16_t)obY(o)) {
+        /* blo.s Bas_Action_DropDown_Delete — dead code path (Sonic "arriba") */
+        if ((int8_t)obRender(o) >= 0) {                         /* bpl.w DeleteObject */
+            DeleteObject(o);
+        }
+        return;                                                 /* .return: rts */
+    }
+    if ((uint16_t)d0 >= 16) return;                             /* cmpi.w #16 / bhs.s .return */
+
+        obVelX(o) = d1;                                             /* move.w d1,obVelX */
+        obVelY(o) = 0;                                              /* move.w #0,obVelY */
+        obAnim(o) = 2;                                              /* .fly animation */
+        ob2ndRout(o) += 2;                                          /* → Bas_Action_Fly */
+}
+
+/* --- Bas_Action_Fly — sub-rutina 4 --- */
+static void Bas_Action_Fly(uint8_t *o) {
+    /* .flapsound: sfx cada 16 frames */
+    if ((v_vblank_byte & 0x0F) == 0) {                          /* andi.b #$F / bne.s .move */
+        Sound_Queue(sfx_Basaran, false);                        /* jsr QueueSound2 */
+    }
+
+    /* .move */
+    SpeedToPos(o);
+
+    int16_t d0 = (int16_t)(obX(RAM_ADDR(v_player)) - obX(o));   /* move.w (v_player+obX),d0 ; sub.w obX */
+    if (d0 < 0) d0 = (int16_t)(-d0);                            /* neg.w d0 */
+        if ((uint16_t)d0 < 128) return;                             /* cmpi.w #128 / blo.s .return */
+
+            /* Stagger por índice de objeto + VBlank byte */
+            uint8_t d7 = (uint8_t)((NUM_OBJECTS - 1) - Object_GetIndex(o));
+        uint8_t v  = (uint8_t)(v_vblank_byte + d7);
+    if (v & 7) return;                                          /* andi.b #7 / bne.s .return */
+
+        ob2ndRout(o) += 2;                                          /* → Bas_Action_BackToCeiling */
+}
+
+/* --- Bas_Action_BackToCeiling — sub-rutina 6 --- */
+static void Bas_Action_BackToCeiling(uint8_t *o) {
+    SpeedToPos(o);                                              /* bsr.w SpeedToPos */
+    obVelY(o) = (int16_t)(obVelY(o) - 0x18);                    /* subi.w #$18,obVelY */
+
+    int16_t d1 = Bas_ObjHitCeiling(o);                          /* bsr.w ObjHitCeiling */
+    if (d1 >= 0) return;                                        /* tst.w d1 / bpl.s .return */
+
+        obY(o) = (int16_t)(obY(o) - d1);                            /* sub.w d1,obY: alinear al techo */
+        obX(o) = (int16_t)(obX(o) & 0xFFF8);                        /* andi.w #$FFF8: snap a múltiplo de 8 */
+        obVelX(o) = 0;                                              /* clr.w obVelX */
+        obVelY(o) = 0;                                              /* clr.w obVelY */
+        obAnim(o) = 0;                                              /* clr.b obAnim: .hang */
+        ob2ndRout(o) = 0;                                           /* clr.b ob2ndRout → vuelve a ChkSonic */
+}
+
+/* --- Dispatcher Object 55 --- */
+static void Basaran_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                                     /* Bas_Index */
+        case 0: Bas_Main(o);   break;
+        case 2: Bas_Action(o); break;
+    }
+}
+
+/* ====================================================================================== */
+/* Object 2F — Large Grass */
+#define lgrass_origX(o)      (*(int16_t *)((uint8_t *)(o) + 0x2A))
+#define lgrass_origY(o)      (*(int16_t *)((uint8_t *)(o) + 0x2C))
+
+#define lgrass_nudge(o)      (*(uint8_t  *)((uint8_t *)(o) + 0x34))
+#define lgrass_burning(o)    (*(uint8_t  *)((uint8_t *)(o) + 0x35))
+#define lgrass_flame_list(o) ((uint8_t  *)((uint8_t *)(o) + 0x36))
+
+/* Object 35 — Grass Fire */
+#define gfire_origX(o)       (*(int16_t *)((uint8_t *)(o) + 0x2A))
+#define gfire_origY(o)       (*(int16_t *)((uint8_t *)(o) + 0x2C))
+#define gfire_coldata(o)     (*(const uint8_t **)((uint8_t *)(o) + 0x30))
+#define gfire_platform(o)    (*(uint32_t *)((uint8_t *)(o) + 0x38))
+#define gfire_nudge(o)       (*(int16_t *)((uint8_t *)(o) + 0x3C))
+/* --- LGrass_Data_Symmetrical (frame 0): _/*\_ ---
+   14 flat + 15 up + 18 flat + 15 down + 14 flat = 76 bytes */
+static const uint8_t LGrass_Data_Symmetrical[76] = {
+    0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,
+    0x20,0x20,0x20,0x20,0x20,0x20,
+    0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x28,
+    0x29,0x2A,0x2B,0x2C,0x2D,0x2E,0x2F,
+    0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,
+    0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,
+    0x30,0x30,
+    0x2F,0x2E,0x2D,0x2C,0x2B,0x2A,0x29,0x28,
+    0x27,0x26,0x25,0x24,0x23,0x22,0x21,
+    0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,
+    0x20,0x20,0x20,0x20,0x20,0x20,
+};
+
+/* --- LGrass_Data_Column (frame 2): |**| --- 44 bytes planos */
+static const uint8_t LGrass_Data_Column[44] = {
+    0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,
+    0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,
+    0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,
+    0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,
+    0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,
+    0x30,0x30,0x30,0x30,
+};
+
+/* --- LGrass_Data_Asymmetrical (frame 1): _/*\- ---
+   6 flat + 31 up + 18 flat + 15 down + 6 flat = 76 bytes */
+static const uint8_t LGrass_Data_Asymmetrical[76] = {
+    0x20,0x20,0x20,0x20,0x20,0x20,
+    0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x28,
+    0x29,0x2A,0x2B,0x2C,0x2D,0x2E,0x2F,0x30,
+    0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,
+    0x39,0x3A,0x3B,0x3C,0x3D,0x3E,0x3F,
+    0x40,0x40,0x40,0x40,0x40,0x40,0x40,0x40,
+    0x40,0x40,0x40,0x40,0x40,0x40,0x40,0x40,
+    0x40,0x40,
+    0x3F,0x3E,0x3D,0x3C,0x3B,0x3A,0x39,0x38,
+    0x37,0x36,0x35,0x34,0x33,0x32,0x31,
+    0x30,0x30,0x30,0x30,0x30,0x30,
+};
+
+/* Tabla de setup: (heightmap, frame, actwid) por índice = subtype >> 4 */
+typedef struct {
+    const uint8_t *heightmap;
+    uint8_t frame;
+    uint8_t actwid;
+} LGrassEntry;
+
+static const LGrassEntry LGrass_Data[3] = {
+    { LGrass_Data_Symmetrical, 0, 128/2 },   /* $0x */
+    { LGrass_Data_Asymmetrical, 1, 128/2 },  /* $1x */
+    { LGrass_Data_Column,       2, 64/2  },  /* $2x */
+};
+
+static const uint8_t *LGrass_HeightmapFor(uint8_t *platform) {
+    switch (obFrame(platform)) {
+        case 0: return LGrass_Data_Symmetrical;
+        case 1: return LGrass_Data_Asymmetrical;
+        case 2: return LGrass_Data_Column;
+    }
+    return LGrass_Data_Symmetrical;
+}
+
+/* Añade el índice del hijo (fire) a la lista de hijos del padre (platform). */
+static void LGrass_AddChildToList(uint8_t *child, uint8_t *platform) {
+    uint8_t *list = lgrass_flame_list(platform);
+    uint8_t count = list[0];
+    list[0] = (uint8_t)(count + 1);
+    list[1 + count] = (uint8_t)Object_GetIndex(child);
+}
+
+static void LGrass_Main(uint8_t *o);
+static void LGrass_Action(uint8_t *o);
+static void LGrass_Stationary(uint8_t *o);
+static void LGrass_Burnable(uint8_t *o);
+static void LGrass_Display(uint8_t *o);
+static void LGrass_ChkDel(uint8_t *o);
+static void LGrass_DelFlames(uint8_t *o);
+
+
+
+/* --- LGrass_Main — Routine 0 --- */
+static void LGrass_Main(uint8_t *o) {
+    obRoutine(o) += 2;
+    obMap(o)    = (uint32_t)(uintptr_t)Map_LGrass;
+    obGfx(o)    = (uint16_t)(ArtTile_Level | Tile_Pal3 | Tile_Prio);
+    obRender(o) = sprite_cam_field;
+    obPriority(o) = 5;
+    lgrass_origY(o) = obY(o);
+    lgrass_origX(o) = obX(o);
+
+    int idx = (int)(obSubtype(o) >> 4);
+    if (idx > 2) idx = 2;
+    const LGrassEntry *data = &LGrass_Data[idx];
+
+    obFrame(o)  = data->frame;
+    obActWid(o) = data->actwid;
+
+    
+    
+
+    obSubtype(o) &= 0x0F;
+    obHeight(o) = 128 / 2;
+    obRender(o) |= sprite_customheight;
+
+    LGrass_Action(o);
+}
+
+/* --- LGrass_Action — Routine 2 --- */
+static void LGrass_Action(uint8_t *o) {
+    switch (obSubtype(o) & 7) {
+        case 0: LGrass_Stationary(o); break;
+        case 1: {
+            int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 2);
+            int16_t d1 = 0x10 * 2;
+            if (obSubtype(o) & (1 << 3)) { d0 = (int16_t)(-d0); d0 = (int16_t)(d0 + d1); }
+            obY(o) = (int16_t)(lgrass_origY(o) - d0);
+            break;
+        }
+        case 2: {
+            int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 6);
+            int16_t d1 = 0x18 * 2;
+            if (obSubtype(o) & (1 << 3)) { d0 = (int16_t)(-d0); d0 = (int16_t)(d0 + d1); }
+            obY(o) = (int16_t)(lgrass_origY(o) - d0);
+            break;
+        }
+        case 3: {
+            int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x0A);
+            int16_t d1 = 0x20 * 2;
+            if (obSubtype(o) & (1 << 3)) { d0 = (int16_t)(-d0); d0 = (int16_t)(d0 + d1); }
+            obY(o) = (int16_t)(lgrass_origY(o) - d0);
+            break;
+        }
+        case 4: {
+            int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x0E);
+            int16_t d1 = 0x30 * 2;
+            if (obSubtype(o) & (1 << 3)) { d0 = (int16_t)(-d0); d0 = (int16_t)(d0 + d1); }
+            obY(o) = (int16_t)(lgrass_origY(o) - d0);
+            break;
+        }
+        case 5: LGrass_Burnable(o); break;
+    }
+
+    if (obSolid(o) != 0) {
+        int16_t d1 = (int16_t)((int8_t)obActWid(o) + sonic_solid_width);
+        int16_t dummy;
+        ExitPlatform(o, d1, &dummy);
+
+        uint8_t *player = RAM_ADDR(v_player);
+        if (obStatus(player) & (1 << 3)) {
+            SlopeObject_AssumeStoodOn(o, d1, obX(o), LGrass_HeightmapFor(o)); /* <-- aquí */
+        } else {
+            obSolid(o) = 0;
+        }
+    } else {
+        int16_t d1 = (int16_t)((int8_t)obActWid(o) + sonic_solid_width);
+        int16_t d2 = (obFrame(o) == 2) ? (96 / 2) : (64 / 2);
+        SolidObject_Heightmap(o, d1, d2, LGrass_HeightmapFor(o));             /* <-- aquí */
+    }
+
+    LGrass_Display(o);
+}
+
+/* --- LGrass_Stationary (tipo 0) --- */
+static void LGrass_Stationary(uint8_t *o) { (void)o; }
+
+/* --- Tipo 5: plataforma que se quema --- */
+static void LGrass_Burnable(uint8_t *o) {
+    int16_t d0 = (int16_t)lgrass_nudge(o);
+
+    if (obSolid(o) != 0) {
+        d0 = (int16_t)((uint8_t)d0 + 4);
+        if (d0 >= 0x40) d0 = 0x40;
+    } else {
+        if (d0 < 2) d0 = 0;
+        else        d0 = (int16_t)(d0 - 2);
+    }
+    lgrass_nudge(o) = (uint8_t)d0;
+
+    int16_t s0, s1;
+    CalcSine((int)(uint8_t)d0, &s0, &s1);
+    int16_t y_off = (int16_t)((uint16_t)s0 >> 4);
+    obY(o) = (int16_t)(y_off + lgrass_origY(o));
+
+    if (lgrass_nudge(o) == 0x20 && lgrass_burning(o) == 0) {
+        lgrass_burning(o) = 1;
+
+        uint8_t *fire = (uint8_t *)FindNextFreeObj(o);
+        if (fire) {
+            obID(fire) = id_GrassFire;
+            obX(fire)  = (int16_t)(obX(o) - 128/2);
+            gfire_origY(fire) = (int16_t)(lgrass_origY(o) + 8 - 3);
+            gfire_coldata(fire) = LGrass_HeightmapFor(o);   /* <-- aquí */
+            gfire_platform(fire) = (uint32_t)Object_GetIndex(o);
+            LGrass_AddChildToList(fire, o);
+        }
+    }
+
+    {
+        uint8_t *list = lgrass_flame_list(o);
+        uint8_t count = list[0];
+        for (int i = 0; i < count; i++) {
+            uint8_t idx = list[1 + i];
+            uint8_t *fire = (uint8_t *)Object_GetSlot((int)idx);
+            gfire_nudge(fire) = y_off;
+        }
+    }
+}
+
+/* --- LGrass_Display --- */
+static void LGrass_Display(uint8_t *o) {
+    DisplaySprite(o);                            /* FixBugs=0: display aquí */
+    LGrass_ChkDel(o);
+}
+
+/* --- LGrass_ChkDel --- */
+static void LGrass_ChkDel(uint8_t *o) {
+    if (lgrass_burning(o) != 0 && (int8_t)obRender(o) >= 0) {
+        /* Plataforma quemándose y fuera de pantalla: borrar fuegos */
+        LGrass_DelFlames(o);
+        return;
+    }
+    if (OutOfRange(o, lgrass_origX(o))) {
+        DeleteObject(o);
+    }
+    /* FixBugs=0: rts */
+}
+
+/* --- LGrass_DelFlames --- */
+static void LGrass_DelFlames(uint8_t *o) {
+    uint8_t *list = lgrass_flame_list(o);
+    uint8_t count = list[0];
+    list[0] = 0;                                 /* clr.b (a2)+ */
+
+    for (int i = 0; i < count; i++) {
+        uint8_t idx = list[1 + i];
+        list[1 + i] = 0;
+        uint8_t *fire = (uint8_t *)Object_GetSlot((int)idx);
+        DeleteObject(fire);                      /* DeleteChild = DeleteObject */
+    }
+    lgrass_burning(o) = 0;
+    lgrass_nudge(o)   = 0;
+    /* FixBugs=0: rts */
+}
+
+static void LargeGrass_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: LGrass_Main(o);   break;
+        case 2: LGrass_Action(o); break;
+    }
+}
+
+static void GFire_Main(uint8_t *o);
+static void GFire_Spread(uint8_t *o);
+static void GFire_Move(uint8_t *o);
+static void GFire_Animate(uint8_t *o);
+
+static void GFire_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                  /* → Spread */
+    obMap(o)    = (uint32_t)(uintptr_t)Map_Fire;
+    obGfx(o)    = (uint16_t)(ArtTile_MZ_Fireball| Tile_Prio);
+    gfire_origX(o) = obX(o);
+    obRender(o) = sprite_cam_field;
+    obPriority(o) = 1;
+    obColType(o) = (uint8_t)(col_16x16 | col_hurt);
+    obActWid(o) = 16 / 2;
+
+    Sound_Queue(sfx_Burning, false);
+
+    if (obSubtype(o) == 0) {
+        GFire_Spread(o);                                /* fall-through a Spread */
+    } else {
+        obRoutine(o) += 2;                              /* → Move */
+        GFire_Move(o);
+    }
+}
+
+static void GFire_Spread(uint8_t *o) {
+    const uint8_t *a1 = gfire_coldata(o);
+    int16_t d1 = (int16_t)(obX(o) - gfire_origX(o));
+    d1 = (int16_t)(d1 + 12);
+    int16_t d0 = (int16_t)(d1 >> 1);
+    int16_t slope = a1[(uint16_t)d0];
+    d0 = (int16_t)(-slope);
+    d0 = (int16_t)(d0 + gfire_origY(o));
+    int16_t d2 = d0;                                    /* para potencial spawn */
+    d0 = (int16_t)(d0 + gfire_nudge(o));
+    obY(o) = d0;
+
+    if ((uint16_t)d1 >= 132) goto animate;              /* cmpi.w #132 / bhs.s */
+
+        /* Avanzar X a 1px/frame (16.16 fixed) */
+        {
+            int32_t x = ((uint32_t)obX(o) << 16) | (uint16_t)obSubpixelX(o);
+            x += 0x10000;
+            obX(o) = (int16_t)(x >> 16);
+            obSubpixelX(o) = (int16_t)(x & 0xFFFF);
+        }
+
+        if ((uint16_t)d1 >= 128) goto animate;
+
+        /* Comprobar si llegó a múltiplo de 16px para spawnear hijo */
+        {
+            int32_t x = ((uint32_t)obX(o) << 16) | (uint16_t)obSubpixelX(o);
+            x += 0x80000;
+            if ((x & 0xFFFFF) != 0) goto animate;
+        }
+
+        {
+            uint8_t *fire = (uint8_t *)FindNextFreeObj(o);
+            if (!fire) goto animate;
+            obID(fire) = id_GrassFire;
+            obX(fire) = obX(o);
+            gfire_origY(fire) = d2;
+            gfire_nudge(fire) = gfire_nudge(o);
+            obSubtype(fire) = 1;
+            uint8_t *platform = (uint8_t *)Object_GetSlot((int)gfire_platform(o));
+            LGrass_AddChildToList(fire, platform);
+        }
+
+        animate:
+        GFire_Animate(o);
+}
+
+static void GFire_Move(uint8_t *o) {
+    int16_t d0 = gfire_origY(o);
+    d0 = (int16_t)(d0 + gfire_nudge(o));
+    obY(o) = d0;
+    GFire_Animate(o);
+}
+
+static void GFire_Animate(uint8_t *o) {
+    if (Ani_GFire) AnimateSprite(o, Ani_GFire);
+    DisplaySprite(o);
+}
+
+static void GrassFire_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: GFire_Main(o);   break;
+        case 2: GFire_Spread(o); break;
+        case 4: GFire_Move(o);   break;
     }
 }

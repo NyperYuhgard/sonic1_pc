@@ -332,6 +332,8 @@ const uint8_t *Map_SS_Chaos3;       size_t Map_SS_Chaos3_len;
 const uint8_t *Map_Flash;           size_t Map_Flash_len;
 const uint8_t *Map_Glass;           size_t Map_Glass_len;
 const uint8_t *Map_CStom;           size_t Map_CStom_len;
+const uint8_t *Map_LGrass;          size_t Map_LGrass_len;
+const uint8_t *Map_Fire;            size_t Map_Fire_len;
 
 /* Mappings referenciados por DebugMode (aún sin portar en su mayoría) */
 const uint8_t *Map_Newt;            size_t Map_Newt_len;
@@ -353,14 +355,14 @@ const uint8_t *Map_WFall;
 const uint8_t *Map_Pole;
 const uint8_t *Map_Flap;
 const uint8_t *Map_Fire;
-const uint8_t *Map_Brick;
+const uint8_t *Map_Brick;           size_t Map_Brick_len;
 const uint8_t *Map_Geyser;
 const uint8_t *Map_LWall;
 const uint8_t *Map_Yad;
 const uint8_t *Map_Smab;
 const uint8_t *Map_MBlock;          size_t Map_MBlock_len;
 const uint8_t *Map_LTag;            size_t Map_LTag_len;
-const uint8_t *Map_Bas;
+const uint8_t *Map_Bas;             size_t Map_Bas_len;
 const uint8_t *Map_Cat;
 const uint8_t *Map_Elev;
 const uint8_t *Map_Plat_SLZ;
@@ -405,6 +407,8 @@ const uint8_t *Ani_Eggman;          size_t Ani_Eggman_len;
 const uint8_t *Ani_Monitor;         size_t Ani_Monitor_len;
 const uint8_t *Ani_Spring;          size_t Ani_Spring_len;
 const uint8_t *Ani_Newt;            size_t Ani_Newt_len;
+const uint8_t *Ani_Bas;             size_t Ani_Bas_len;
+const uint8_t *Ani_GFire;           size_t Ani_GFire_len;
 const uint8_t *SonicDynPLC;         size_t SonicDynPLC_len;
 
 /* ---------------- Layouts de nivel (Level_*) ---------------- */
@@ -838,6 +842,10 @@ int Data_Init(void) {
     LOAD_MAP("_maps/Moving Blocks (MZ and SBZ).asm", Map_MBlock);
     LOAD_MAP("_maps/Moving Blocks (LZ).asm", Map_MBlockLZ);
     LOAD_MAP("_maps/Lava Tag.asm", Map_LTag);
+    LOAD_MAP("_maps/MZ Bricks.asm", Map_Brick);
+    LOAD_MAP("_maps/Basaran.asm", Map_Bas);
+    LOAD_MAP("_maps/MZ Large Grassy Platforms.asm", Map_LGrass);
+    LOAD_MAP("_maps/Fireballs.asm", Map_Fire);
 
     /* ---------------- Animaciones ---------------- */
     LOAD_ANIM("_anim/Sonic.asm",                     Ani_Sonic);
@@ -848,22 +856,16 @@ int Data_Init(void) {
     LOAD_ANIM("_anim/Signpost.asm",                  Ani_Sign);
     LOAD_ANIM("_anim/Shield and Invincibility.asm",  Ani_Shield);
     LOAD_ANIM("_anim/Crabmeat.asm",                  Ani_Crab);
-    LOAD_ANIM("_anim/Moto Bug.asm",                   Ani_Moto);
-    LOAD_ANIM("_anim/Buzz Bomber.asm",                Ani_Buzz);
-    LOAD_ANIM("_anim/Buzz Bomber Missile.asm",               Ani_Missile);
+    LOAD_ANIM("_anim/Moto Bug.asm",                  Ani_Moto);
+    LOAD_ANIM("_anim/Buzz Bomber.asm",               Ani_Buzz);
+    LOAD_ANIM("_anim/Buzz Bomber Missile.asm",       Ani_Missile);
     LOAD_ANIM("_anim/Chopper.asm",                   Ani_Chop);
     LOAD_ANIM("_anim/Eggman.asm",                    Ani_Eggman);
     LOAD_ANIM("_anim/Monitor.asm",                   Ani_Monitor);
     LOAD_ANIM("_anim/Springs.asm",                   Ani_Spring);
     LOAD_ANIM("_anim/Newtron.asm",                   Ani_Newt);
-    fprintf(stderr, "Ani_Newt=%p len=%zu\n",
-            (void*)Ani_Newt, Ani_Newt_len);
-    if (Ani_Newt && Ani_Newt_len >= 16) {
-        for (int i = 0; i < 8; i++) {
-            uint16_t off = Ani_Newt[i*2] | (Ani_Newt[i*2+1] << 8);
-            fprintf(stderr, "  anim[%d] offset=%04X\n", i, off);
-        }
-    }
+    LOAD_ANIM("_anim/Basaran.asm",                   Ani_Bas);
+    LOAD_ANIM("_anim/Burning Grass.asm",             Ani_GFire);
     /* El DPLC de Sonic no es un anim script, pero comparte el parser:  */
     LOAD_ANIM("_maps/Sonic - Dynamic Gfx Script.asm", SonicDynPLC);
 

@@ -614,6 +614,9 @@ extern size_t   Map_Moto_len;
 extern const uint8_t *Ani_Moto;
 extern size_t   Ani_Moto_len;
 
+extern const uint8_t *Ani_Bas;
+extern size_t Ani_Bas_len;
+
 /* Buzz Bomber mappings and animation scripts */
 extern const uint8_t *Map_Buzz;
 extern size_t   Map_Buzz_len;
@@ -632,6 +635,9 @@ extern size_t   Ani_Pri_len;
 
 extern const uint8_t *Ani_Newt;
 extern size_t   Ani_Newt_len;
+
+extern const uint8_t *Ani_GFire;
+extern size_t   Ani_GFire_len;
 
 /* GHZ bridge (id_Bridge) mappings */
 extern const uint8_t *Map_Bri;
@@ -670,7 +676,7 @@ extern const uint8_t *Map_WFall;
 extern const uint8_t *Map_Pole;
 extern const uint8_t *Map_Flap;
 extern const uint8_t *Map_Fire;
-extern const uint8_t *Map_Brick;
+extern const uint8_t *Map_Brick;           extern size_t Map_Brick_len;
 extern const uint8_t *Map_Geyser;
 extern const uint8_t *Map_LWall;
 extern const uint8_t *Map_Yad;
@@ -679,7 +685,7 @@ extern const uint8_t *Map_MBlock;          extern size_t Map_MBlock_len;
 extern const uint8_t *Map_CFlo;
 extern size_t   Map_CFlo_len;
 extern const uint8_t *Map_LTag;            extern size_t Map_LTag_len;
-extern const uint8_t *Map_Bas;
+extern const uint8_t *Map_Bas;             extern size_t Map_Bas_len;
 extern const uint8_t *Map_Cat;
 extern const uint8_t *Map_Elev;
 extern const uint8_t *Map_Plat_SLZ;
@@ -717,6 +723,10 @@ extern const uint8_t *Map_Ledge;
 extern size_t   Map_Ledge_len;
 extern const uint8_t *Map_Newt;
 extern size_t   Map_Newt_len;
+extern const uint8_t *Map_LGrass;
+extern size_t Map_LGrass_len;
+extern const uint8_t *Map_Fire;
+extern size_t Map_Fire_len;
 
 /* Points object mappings (28, 29 Animals and Points.asm: Map_Points) */
 extern const uint8_t *Map_Points;
