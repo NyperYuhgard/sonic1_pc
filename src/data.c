@@ -343,7 +343,7 @@ const uint8_t *Map_Burro;
 const uint8_t *Map_Harp;
 const uint8_t *Map_Push;            size_t Map_Push_len;
 const uint8_t *Map_But;             size_t Map_But_len;
-const uint8_t *Map_MBlockLZ;
+const uint8_t *Map_MBlockLZ;        size_t Map_MBlockLZ_len;
 const uint8_t *Map_LBlock;
 const uint8_t *Map_Gar;
 const uint8_t *Map_LConv;
@@ -358,8 +358,8 @@ const uint8_t *Map_Geyser;
 const uint8_t *Map_LWall;
 const uint8_t *Map_Yad;
 const uint8_t *Map_Smab;
-const uint8_t *Map_MBlock;
-const uint8_t *Map_LTag;
+const uint8_t *Map_MBlock;          size_t Map_MBlock_len;
+const uint8_t *Map_LTag;            size_t Map_LTag_len;
 const uint8_t *Map_Bas;
 const uint8_t *Map_Cat;
 const uint8_t *Map_Elev;
@@ -835,6 +835,9 @@ int Data_Init(void) {
     LOAD_MAP("_maps/Chained Stompers.asm", Map_CStom);
     LOAD_MAP("_maps/Button.asm", Map_But);
     LOAD_MAP("_maps/Pushable Blocks.asm", Map_Push);
+    LOAD_MAP("_maps/Moving Blocks (MZ and SBZ).asm", Map_MBlock);
+    LOAD_MAP("_maps/Moving Blocks (LZ).asm", Map_MBlockLZ);
+    LOAD_MAP("_maps/Lava Tag.asm", Map_LTag);
 
     /* ---------------- Animaciones ---------------- */
     LOAD_ANIM("_anim/Sonic.asm",                     Ani_Sonic);

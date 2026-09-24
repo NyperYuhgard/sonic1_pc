@@ -75,6 +75,8 @@ static void GlassBlock_Main(void *obj);
 static void ChainStomp_Main(void *obj);
 static void Button_Main(void *obj);
 static void PushBlock_Main(void *obj);
+static void MovingBlock_Main(void *obj);
+static void LavaTag_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -132,6 +134,8 @@ void Objects_Init(void) {
     obj_dispatch[id_ChainStomp] = ChainStomp_Main;
     obj_dispatch[id_Button] = Button_Main;
     obj_dispatch[id_PushBlock] = PushBlock_Main;
+    obj_dispatch[id_MovingBlock] = MovingBlock_Main;
+    obj_dispatch[id_LavaTag] = LavaTag_Main;
     /* Register Special Stage results screen objects */
     obj_dispatch[id_SSResult]  = SSResult_Main;
     obj_dispatch[id_SSRChaos]  = SSRChaos_Main;
@@ -11120,11 +11124,11 @@ static const uint8_t CStom_SwchNums[2][2] = {
 };
 
 /* { routine, relative Y-offset (signed byte), frame } × 4 */
-static const uint8_t CStom_Var[4][3] = {
-    { 2, 0x00, 0 },   /* main block      */
-    { 4, 0x1C, 1 },   /* spikes          */
-    { 8, 0xCC, 3 },   /* chain           */
-    { 6, 0xF0, 2 },   /* ceiling base    */
+static const uint8_t CStom_Var[12] = {
+    2, 0x00, 0,   /* main block      */
+    4, 0x1C, 1,   /* spikes          */
+    8, 0xCC, 3,   /* chain           */
+    6, 0xF0, 2,   /* ceiling base    */
 };
 
 /* Chain lengths (indexed by subtype & 0xF). */
@@ -11181,10 +11185,10 @@ static void CStom_Main(uint8_t *o) {
         first = 0;
 
     makeStomper:
-        obRoutine(a1)   = CStom_Var[idx][0];
+        obRoutine(a1)   = CStom_Var[idx + 0];
         obID(a1)        = id_ChainStomp;
         obX(a1)         = obX(o);
-        obY(a1)         = (int16_t)(obY(o) + (int8_t)CStom_Var[idx][1]);
+        obY(a1)         = (int16_t)(obY(o) + (int8_t)CStom_Var[idx + 1]);
         obMap(a1)       = (uint32_t)(uintptr_t)Map_CStom;
         obGfx(a1)       = (uint16_t)ArtTile_MZ_Spike_Stomper;
         obRender(a1)    = sprite_cam_field;
@@ -11193,7 +11197,7 @@ static void CStom_Main(uint8_t *o) {
         obActWid(a1)    = 32 / 2;
         cstom_length(a1)= (int16_t)length;
         obPriority(a1)  = 4;
-        obFrame(a1)     = CStom_Var[idx][2];
+        obFrame(a1)     = CStom_Var[idx + 2];
         idx += 3;
 
         if (obFrame(a1) == 1) {         /* es el objeto de púas */
@@ -12028,5 +12032,343 @@ static void PushBlock_Main(void *obj) {
         case 0: PushB_Main(o);       break;
         case 2: PushB_Action(o);     break;
         case 4: PushB_ChkVisible(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 52 — Moving platform blocks (MZ, LZ, SBZ)
+ *  Ported verbatim from _incObj/52 Moving Blocks.asm (REV01, FixBugs=0).
+ *
+ *  Fields:
+ *    mblock_origX        = objoff_30 (word): initial X-position
+ *    mblock_origY        = objoff_32 (word): initial Y-position
+ *    mblock_slide_wait   = objoff_34 (word): delay before red sliding floor moves back
+ *    mblock_slide_goback = objoff_36 (word): set if red sliding floor is moving back
+ * =========================================================================== */
+
+#define mblock_origX(o)        (*(int16_t *)((uint8_t *)(o) + 0x30))
+#define mblock_origY(o)        (*(int16_t *)((uint8_t *)(o) + 0x32))
+#define mblock_slide_wait(o)   (*(int16_t *)((uint8_t *)(o) + 0x34))
+#define mblock_slide_goback(o) (*(int16_t *)((uint8_t *)(o) + 0x36))
+
+/* MBlock_Var aplanado: 2 bytes por entrada (width, frame). El ASM lee con
+ * `(a2)+` usando un byte-offset en d0 = (subtype >> 3) & $1E, así que el
+ * offset en bytes es exactamente 2 * (subtype >> 4) para los subtipos válidos. */
+static const uint8_t MBlock_Var[5 * 2] = {
+    32/2,  0,   /* $0x - MZ single block / LZ small raft */
+    64/2,  1,   /* $1x - MZ double block (unused)      */
+    64/2,  2,   /* $2x - SBZ short (yellow/black)      */
+    128/2, 3,   /* $3x - SBZ long (red sliding floors) */
+    96/2,  4,   /* $4x - MZ triple block               */
+};
+
+/* Helper — port de ObjHitWallRight (sub ObjHitWallRight.asm). Recibe d3 =
+ * píxeles a mirar hacia adelante desde obX; devuelve d1 = distancia a la
+ * pared (negativo si choca). Misma lógica que PushB_ObjHitWallRight. */
+static int16_t MBlock_ObjHitWallRight(uint8_t *o, int16_t d3) {
+    int16_t y = obY(o);
+    int16_t x = (int16_t)(obX(o) + d3);
+    int16_t dist = 0;
+    v_anglebuffer = 0;
+    FindWall(y, x, 0x0E, 0x0000, 0x10, &v_anglebuffer, o, &dist);
+    if (v_anglebuffer & 1) v_anglebuffer = 0xC0;
+    return dist;
+}
+
+/* Forward declarations */
+static void MBlock_Main(uint8_t *o);
+static void MBlock_Platform(uint8_t *o);
+static void MBlock_StandOn(uint8_t *o);
+static int  MBlock_Move(uint8_t *o);
+static void MBlock_DisplayOrDelete(uint8_t *o);
+
+/* --- MBlock_Main — Routine 0 --- */
+static void MBlock_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                  /* → MBlock_Platform */
+
+    obMap(o) = (uint32_t)(uintptr_t)Map_MBlock;         /* MZ/SBZ mappings */
+    obGfx(o) = (uint16_t)(ArtTile_MZ_Block | Tile_Pal3);
+
+    if ((uint8_t)v_zone == id_LZ) {                     /* LZ overrides */
+        obMap(o) = (uint32_t)(uintptr_t)Map_MBlockLZ;
+        obGfx(o) = (uint16_t)(ArtTile_LZ_Moving_Block | Tile_Pal3);
+        obHeight(o) = 14 / 2;
+    }
+
+    if ((uint8_t)v_zone == id_SBZ) {                    /* SBZ overrides */
+        obGfx(o) = (uint16_t)(ArtTile_SBZ_Moving_Block_Short | Tile_Pal2);
+        if (obSubtype(o) != 0x28) {                     /* no es corta → larga */
+            obGfx(o) = (uint16_t)(ArtTile_SBZ_Moving_Block_Long | Tile_Pal3);
+        }
+    }
+
+    obRender(o) = sprite_cam_field;
+    obPriority(o) = 4;
+
+    /* MBlock_Var lookup: d0 = (subtype >> 3) & $1E */
+    {
+        uint8_t d0 = (uint8_t)((obSubtype(o) >> 3) & 0x1E);
+        obActWid(o) = MBlock_Var[d0];
+        obFrame(o)  = MBlock_Var[d0 + 1];
+    }
+
+    mblock_origX(o) = obX(o);
+    mblock_origY(o) = obY(o);
+
+    obSubtype(o) &= 0x0F;                               /* clear upper digit */
+
+    /* Fall-through a MBlock_Platform */
+    MBlock_Platform(o);
+}
+
+/* --- MBlock_Platform — Routine 2 --- */
+static void MBlock_Platform(uint8_t *o) {
+    /* El ASM usa `bsr.w MBlock_Move`; si el tipo 7 ejecuta `addq.l #4,sp`,
+     * el rts retorna al caller de MBlock_Platform saltándose el resto.
+     * Modelamos ese caso con MBlock_Move devolviendo 1. */
+    if (MBlock_Move(o)) return;
+
+    int16_t d1 = (int16_t)obActWid(o);
+    PlatformObject(o, d1);
+
+    /* bra.s MBlock_DisplayOrDelete */
+    MBlock_DisplayOrDelete(o);
+}
+
+/* --- MBlock_StandOn — Routine 4 --- */
+static void MBlock_StandOn(uint8_t *o) {
+    int16_t d1 = (int16_t)obActWid(o);
+    int16_t dummy;
+    ExitPlatform(o, d1, &dummy);
+
+    /* El ASM guarda obX en el stack antes de MBlock_Move para pasarlo
+     * como d2 a MvSonicOnPtfm2. En FixBugs=1 se usa scratch RAM para
+     * evitar que MBlock_SecretLZ1Raft corrompa el stack; en FixBugs=0
+     * usa la pila. En C una variable local es equivalente en FixBugs=0
+     * y no rompe en el caso del raft. */
+    int16_t saved_x = obX(o);
+
+    if (MBlock_Move(o)) return;                         /* tipo 7: skip */
+
+        MvSonicOnPtfm2(o, saved_x);
+
+    /* Fall-through a MBlock_DisplayOrDelete */
+    MBlock_DisplayOrDelete(o);
+}
+
+/* --- MBlock_DisplayOrDelete --- */
+static void MBlock_DisplayOrDelete(uint8_t *o) {
+    if (OutOfRange(o, mblock_origX(o))) {               /* out_of_range.w DeleteObject,mblock_origX */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);                                   /* bra.w DisplaySprite */
+}
+
+/* --- Sub-rutinas de movimiento --- */
+
+/* Tipo 0: estacionario */
+static void MBlock_Stationary(uint8_t *o) {
+    (void)o;                                            /* rts */
+}
+
+/* Tipo 1: izquierda/derecha continuo (freq 2, mid $30) */
+static void MBlock_LeftRight(uint8_t *o) {
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x0E);
+    if (obStatus(o) & 1) {                              /* btst #0,obStatus */
+        d0 = (int16_t)(-d0);                            /* neg.w d0 */
+        d0 = (int16_t)(d0 + 0x60);                      /* add.w d1,d0 */
+    }
+    obX(o) = (int16_t)(mblock_origX(o) - d0);           /* sub.w d0,d1 ; move.w d1,obX */
+}
+
+/* Tipos 2/4/9: estacionario, avanza de subtipo cuando Sonic lo pisa */
+static void MBlock_NextWhenStoodOn(uint8_t *o) {
+    if (obRoutine(o) == 4) {                            /* cmpi.b #4,obRoutine */
+        obSubtype(o) += 1;                              /* addq.b #1,obSubtype */
+    }
+}
+
+/* Tipo 3: se mueve a la derecha, se detiene al chocar pared */
+static void MBlock_Right_StopOnWall(uint8_t *o) {
+    int16_t d3 = (int16_t)obActWid(o);
+    int16_t d1 = MBlock_ObjHitWallRight(o, d3);
+    if (d1 < 0) {                                       /* bmi.s .stopPlatform */
+        obSubtype(o) = 0;                               /* clr.b obSubtype */
+        return;
+    }
+    obX(o) += 1;                                        /* addq.w #1,obX */
+    mblock_origX(o) = obX(o);                           /* move.w obX,mblock_origX */
+}
+
+/* Tipo 5: se mueve a la derecha, cae al chocar pared */
+static void MBlock_Right_FallOnWall(uint8_t *o) {
+    int16_t d3 = (int16_t)obActWid(o);
+    int16_t d1 = MBlock_ObjHitWallRight(o, d3);
+    if (d1 < 0) {                                       /* bmi.s .fallDown */
+        obSubtype(o) += 1;                              /* → tipo 6 */
+        return;
+    }
+    obX(o) += 1;
+    mblock_origX(o) = obX(o);
+}
+
+/* Tipo 6: cae, se detiene al tocar el piso */
+static void MBlock_FallingDown(uint8_t *o) {
+    SpeedToPos(o);                                      /* bsr.w SpeedToPos */
+    obVelY(o) = (int16_t)(obVelY(o) + 0x18);            /* addi.w #$18 */
+
+    int16_t dist, angle;
+    ObjFloorDist(o, &dist, &angle);                     /* bsr.w ObjFloorDist */
+    if (dist < 0) {                                     /* tst.w d1 / bpl.s .return */
+        obY(o) = (int16_t)(obY(o) + dist);              /* add.w d1,obY */
+        obVelY(o) = 0;                                  /* clr.w obVelY */
+        obSubtype(o) = 0;                               /* clr.b obSubtype */
+    }
+}
+
+/* Tipo 7: raft secreto de LZ1 (switch ID 2). Devuelve 1 para señalizar
+ * al caller que debe saltarse PlatformObject/MvSonicOnPtfm2/DisplaySprite,
+ * replicando el `addq.l #4,sp` del ASM. */
+static int MBlock_SecretLZ1Raft(uint8_t *o) {
+    if (RAM_BYTE(f_switch + 2) != 0) {                  /* tst.b (f_switch+2) */
+        obSubtype(o) -= 3;                              /* subq.b #3 → tipo 4 */
+    }
+    /* .hidePlatform: addq.l #4,sp ; out_of_range.w DeleteObject,mblock_origX */
+    if (OutOfRange(o, mblock_origX(o))) {
+        DeleteObject(o);
+    }
+    return 1;
+}
+
+/* Tipo 8: arriba/abajo continuo (freq 4, mid $40) */
+static void MBlock_UpDown(uint8_t *o) {
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x1E);
+    if (obStatus(o) & 1) {                              /* btst #0,obStatus */
+        d0 = (int16_t)(-d0);
+        d0 = (int16_t)(d0 + 0x80);                      /* add.w d1,d0 */
+    }
+    obY(o) = (int16_t)(mblock_origY(o) - d0);
+}
+
+/* Tipo A: slide rápido a la derecha y vuelve (red sliding floors SBZ) */
+static void MBlock_SlideFast(uint8_t *o) {
+    int16_t d3 = (int16_t)(int8_t)obActWid(o);
+    d3 = (int16_t)(d3 + d3);                            /* add.w d3,d3: ancho total */
+    int16_t d1 = 8;                                     /* moveq #8,d1 */
+    if (obStatus(o) & 1) {                              /* btst #0,obStatus */
+        d1 = (int16_t)(-d1);                            /* neg.w d1 */
+        d3 = (int16_t)(-d3);                            /* neg.w d3 */
+    }
+
+    if (mblock_slide_goback(o) != 0) {                  /* tst.w / bne.s .goingBack */
+        /* .goingBack */
+        int16_t d0 = (int16_t)(obX(o) - mblock_origX(o));
+        if (d0 == 0) {                                  /* beq.s .reset */
+            mblock_slide_goback(o) = 0;                 /* clr.w */
+            obSubtype(o) -= 1;                          /* subq.b #1 → tipo 9 */
+            return;
+        }
+        obX(o) = (int16_t)(obX(o) - d1);                /* sub.w d1,obX */
+        return;
+    }
+
+    /* .slide */
+    {
+        int16_t d0 = (int16_t)(obX(o) - mblock_origX(o));
+        if (d0 == d3) {                                 /* cmp.w d3,d0 / beq.s .waiting */
+            /* .waiting */
+            mblock_slide_wait(o)--;
+            if (mblock_slide_wait(o) == 0) {            /* bne.s .return */
+                mblock_slide_goback(o) = 1;             /* move.w #1 */
+            }
+            return;
+        }
+        obX(o) = (int16_t)(obX(o) + d1);                /* add.w d1,obX */
+        mblock_slide_wait(o) = 5 * 60;                  /* move.w #5*60 */
+    }
+}
+
+/* --- MBlock_Move — dispatcher por subtype & $F ---
+ * Devuelve 1 si el caller debe saltarse el resto de su procesamiento
+ * (solo para tipo 7, replicando el `addq.l #4,sp` del ASM). */
+static int MBlock_Move(uint8_t *o) {
+    switch (obSubtype(o) & 0x0F) {
+        case 0x0: MBlock_Stationary(o);         return 0;
+        case 0x1: MBlock_LeftRight(o);          return 0;
+        case 0x2:
+        case 0x4:
+        case 0x9: MBlock_NextWhenStoodOn(o);    return 0;
+        case 0x3: MBlock_Right_StopOnWall(o);   return 0;
+        case 0x5: MBlock_Right_FallOnWall(o);   return 0;
+        case 0x6: MBlock_FallingDown(o);        return 0;
+        case 0x7: return MBlock_SecretLZ1Raft(o);
+        case 0x8: MBlock_UpDown(o);             return 0;
+        case 0xA: MBlock_SlideFast(o);          return 0;
+    }
+    return 0;
+}
+
+/* --- Dispatcher Object 52 --- */
+static void MovingBlock_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                             /* MBlock_Index */
+        case 0: MBlock_Main(o);     break;
+        case 2: MBlock_Platform(o); break;
+        case 4: MBlock_StandOn(o);  break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 54 — Invisible lava tag / hurt marker (MZ)
+ *  Ported verbatim from _incObj/54 MZ Invisible Lava Tag.asm
+ *  (REV01, FixBugs=0).
+ *
+ *  No tiene campos propios: solo configura obColType según el subtype y
+ *  deja que ReactToItem lo detecte. obRender lleva sprite_rendered para
+ *  que ReactToItem no lo saltee (ver comentario en el ASM).
+ * =========================================================================== */
+
+/* LTag_ColTypes: una entrada de 1 byte por subtype (0..2). */
+static const uint8_t LTag_ColTypes[3] = {
+    (uint8_t)(col_64x64  | col_hurt),   /* subtype 00 - pequeño  */
+    (uint8_t)(col_128x64 | col_hurt),   /* subtype 01 - mediano  */
+    (uint8_t)(col_256x64 | col_hurt),   /* subtype 02 - grande   */
+};
+
+static void LTag_Main(uint8_t *o);
+
+/* --- LTag_ChkDel — Routine 2 --- */
+static void LTag_ChkDel(uint8_t *o) {
+    /* out_of_range.w DeleteObject,obX(a0),1 ; rts
+     * El objeto se borra si está fuera de rango, pero NUNCA se muestra
+     * (mappings en blanco, y no hay DisplaySprite). */
+    if (OutOfRange(o, -1)) {                            /* usa obX(o), como el macro */
+        DeleteObject(o);
+    }
+}
+
+/* --- LTag_Main — Routine 0 --- */
+static void LTag_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                  /* → LTag_ChkDel */
+
+    {
+        uint8_t d0 = obSubtype(o);                      /* moveq #0,d0 ; move.b obSubtype */
+        obColType(o) = LTag_ColTypes[d0];               /* move.b LTag_ColTypes(pc,d0.w),obColType */
+    }
+
+    obMap(o)    = (uint32_t)(uintptr_t)Map_LTag;        /* mappings en blanco */
+    obRender(o) = sprite_rendered | sprite_cam_field;   /* $80 | $04: visible para ReactToItem */
+
+    /* Fall-through a LTag_ChkDel (no hay rts al final de LTag_Main en el ASM) */
+    LTag_ChkDel(o);
+}
+
+/* --- Dispatcher Object 54 --- */
+static void LavaTag_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                             /* LTag_Index */
+        case 0: LTag_Main(o);   break;
+        case 2: LTag_ChkDel(o); break;
     }
 }
