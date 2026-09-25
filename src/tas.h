@@ -40,4 +40,14 @@ void     TAS_LoadFile_Action(void);
 void     TAS_SaveNextState(void);
 void     TAS_LoadPrevState(void);
 void     TAS_RequestStep(void);
+
+/* Acceso directo al buffer para el editor */
+uint8_t TAS_GetInputP1(uint32_t frame);
+uint8_t TAS_GetInputP2(uint32_t frame);
+void    TAS_SetInputP1(uint32_t frame, uint8_t value);
+void    TAS_SetInputP2(uint32_t frame, uint8_t value);
+void    TAS_SetLength(uint32_t length);
+void    TAS_DeleteFrame(uint32_t at);
+void    TAS_InsertFrame(uint32_t at);
+void    TAS_DeleteRange(uint32_t start, uint32_t end);
 #endif

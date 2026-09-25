@@ -90,6 +90,8 @@ static void LavaWall_Main(void *obj);
 static void SmashBlock_Main(void *obj);
 static void BossMarble_Main(void *obj);
 static void BossFire_Main(void *obj);
+static void SpinningLight_Main(void *obj);
+static void FloatingBlock_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -162,6 +164,8 @@ void Objects_Init(void) {
     obj_dispatch[id_SmashBlock] = SmashBlock_Main; 
     obj_dispatch[id_BossMarble] = BossMarble_Main;   
     obj_dispatch[id_BossFire]   = BossFire_Main;     
+    obj_dispatch[id_SpinningLight] = SpinningLight_Main;
+    obj_dispatch[id_FloatingBlock] = FloatingBlock_Main;
     /* Register Special Stage results screen objects */
     obj_dispatch[id_SSResult]  = SSResult_Main;
     obj_dispatch[id_SSRChaos]  = SSRChaos_Main;
@@ -15286,4 +15290,551 @@ static void BossFire_Main(void *obj) {
         case 6: BossFire_TempFireDel(o); break;
     }
     DisplaySprite(o);
+}
+
+/* ===========================================================================
+ *  Object 12 — Spinning Light (SYZ hexagonal glass prism)
+ *  Ported verbatim from _incObj/12 SYZ Search Light.asm (REV01, FixBugs=0).
+ *
+ *  Objeto muy simple: al inicializarse se queda con prioridad muy baja (6)
+ *  y luego cicla por 6 frames cada 8 frames. Se autodestruye al salir de
+ *  la pantalla con out_of_range → DeleteObject.
+ * =========================================================================== */
+
+static void Light_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                   /* addq.b #2 → Light_Animate */
+    obMap(o)      = (uint32_t)(uintptr_t)Map_Light;      /* move.l #Map_Light,obMap */
+    obGfx(o)      = (uint16_t)ArtTile_Level;             /* move.w #ArtTile_Level,obGfx */
+    obRender(o)   = sprite_cam_field;                    /* move.b #sprite_cam_field,obRender */
+    obActWid(o)   = 32 / 2;                              /* move.b #32/2,obActWid */
+    obPriority(o) = 6;                                   /* move.b #6,obPriority */
+    /* ASM falls through into Light_Animate on the first frame. */
+}
+
+static void Light_Animate(uint8_t *o) {
+    obTimeFrame(o)--;                                    /* subq.b #1,obTimeFrame(a0) */
+    if ((int8_t)obTimeFrame(o) < 0) {                    /* bpl.s .chkdel (branch when time remains) */
+        obTimeFrame(o) = 8 - 1;                          /* move.b #8-1,obTimeFrame */
+        obFrame(o)++;                                    /* addq.b #1,obFrame */
+        if (obFrame(o) >= 6) {                           /* cmpi.b #6 / blo.s .chkdel */
+            obFrame(o) = 0;                              /* move.b #0,obFrame */
+        }
+    }
+
+    /* .chkdel: */
+    if (OutOfRange(o, -1)) {                             /* out_of_range.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);                                    /* bra.w DisplaySprite */
+}
+
+/* Spinning Light dispatcher — Light_Index: 0 = Main, 2 = Animate */
+static void SpinningLight_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                              /* Light_Index */
+        case 0: Light_Main(o);    break;
+        case 2: Light_Animate(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 56 — Floating Blocks (SYZ/SLZ) and Large Doors (LZ)
+ *  Ported verbatim from _incObj/56 SYZ, SLZ Floating Blocks and LZ Doors.asm
+ *  (REV01, Revision<>0). FixBugs=0.
+ *
+ *  Campos (los mismos offsets que en el ASM):
+ *    fb_origY    = objoff_30 (word): Y original
+ *    fb_origX    = objoff_34 (word): X original
+ *    fb_moving   = objoff_38 (byte): flag "está moviéndose"
+ *    fb_distance = objoff_3A (word): distancia restante a recorrer
+ *    fb_switch   = objoff_3C (byte): ID del switch que lo activa (LZ)
+ *
+ *  Dispatch por (obSubtype & $F) → FBlock_TypeIndex. SolidObject se aplica
+ *  siempre (salvo off-screen). El borrado final (out_of_range) tiene el
+ *  hack REV01 para el bloque horizontal de SYZ3 (subtype $37).
+ * =========================================================================== */
+
+#define fb_origY(o)    (*(int16_t  *)((uint8_t *)(o) + 0x30))
+#define fb_origX(o)    (*(int16_t  *)((uint8_t *)(o) + 0x34))
+#define fb_moving(o)   (*(uint8_t  *)((uint8_t *)(o) + 0x38))
+#define fb_distance(o) (*(uint16_t *)((uint8_t *)(o) + 0x3A))
+#define fb_switch(o)   (*(uint8_t  *)((uint8_t *)(o) + 0x3C))
+
+/* FBlock_Var: { half-width, half-height } por tipo. El índice es
+   (subtype >> 3) & $E, o sea (subtype >> 4) * 2 como byte offset.
+   Ocho entradas: $0x/$8x..$7x/$Fx. */
+static const uint8_t FBlock_Var[8][2] = {
+    { 32/2,  32/2 },   /* $0x/$8x — SYZ 1x1 block                        */
+    { 64/2,  64/2 },   /* $1x/$9x — SYZ 2x2 square up/down               */
+    { 32/2,  64/2 },   /* $2x/$Ax — SYZ 1x2 door                         */
+    { 64/2,  52/2 },   /* $3x/$Bx — SYZ special horizontally-moving block*/
+    { 32/2,  78/2 },   /* $4x/$Cx — (unused)                              */
+    { 32/2,  32/2 },   /* $5x/$Dx — SLZ rotating stairway block          */
+    { 16/2,  64/2 },   /* $6x/$Ex — LZ small vertical door               */
+    { 128/2, 32/2 },   /* $7x/$Fx — LZ large sideways 4x1 block          */
+};
+
+static void FBlock_Action(uint8_t *o);
+static void FBlock_Stationary(uint8_t *o);
+static void FBlock_LeftRight_Small(uint8_t *o);
+static void FBlock_LeftRight_Large(uint8_t *o);
+static void FBlock_MoveLR(uint8_t *o, int16_t d0, int16_t d1);
+static void FBlock_UpDown_Small(uint8_t *o);
+static void FBlock_UpDown_Large(uint8_t *o);
+static void FBlock_MoveUD(uint8_t *o, int16_t d0, int16_t d1);
+static void FBlock_LZSmallDoor_Open(uint8_t *o);
+static void FBlock_LZSmallDoor_Close(uint8_t *o);
+static void FBlock_HorizontalSYZ3(uint8_t *o);
+static void FBlock_SLZStair_Smallest(uint8_t *o);
+static void FBlock_SLZStair_Small(uint8_t *o);
+static void FBlock_SLZStair_Large(uint8_t *o);
+static void FBlock_SLZStair_Largest(uint8_t *o);
+static void FBlock_SLZStair_MoveSquare(uint8_t *o, int16_t d0, int16_t d1, int16_t d3);
+static void FBlock_LZHorizDoor_Open(uint8_t *o);
+static void FBlock_LZHorizDoor_Close(uint8_t *o);
+
+/* --- FBlock_Main — Routine 0 ----------------------------------------- */
+static void FBlock_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                       /* → FBlock_Action */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_FBlock;
+
+    obGfx(o) = (uint16_t)(ArtTile_Level | Tile_Pal3);
+    if ((uint8_t)v_zone == id_LZ) {
+        obGfx(o) = (uint16_t)(ArtTile_LZ_Door | Tile_Pal3);
+    }
+
+    obRender(o)   = sprite_cam_field;
+    obPriority(o) = 3;
+
+    uint8_t sub = obSubtype(o);
+    uint8_t d0  = (uint8_t)(sub >> 3);                       /* lsr.w #3,d0 */
+    d0 = (uint8_t)(d0 & 0x0E);                               /* andi.w #$E,d0 */
+
+    obActWid(o) = FBlock_Var[d0 >> 1][0];                    /* move.b (a2)+,obActWid */
+    obHeight(o) = FBlock_Var[d0 >> 1][1];                    /* move.b (a2),obHeight   */
+    obFrame(o)  = (uint8_t)(d0 >> 1);                        /* lsr.w #1,d0 → frame ID */
+
+    fb_origX(o) = obX(o);
+    fb_origY(o) = obY(o);
+
+    fb_distance(o) = (uint16_t)(FBlock_Var[d0 >> 1][1] * 2); /* d0 = 2 * half-height */
+
+    /* ---- Revision<>0: hack especial para el bloque horizontal de SYZ3 ---- */
+    if (sub == 0x37) {
+        /* Dos de estos bloques existen en el layout de SYZ3:
+           X=$1BB8 → bloque "real" del túnel.
+           X=$1F38 → bloque "fake" que cierra el túnel.
+           Solo uno de los dos se muestra, según el estado de f_obj56. */
+        if (obX(o) == 0x1BB8) {
+            /* .realBlock */
+            if (f_obj56) {
+                DeleteObject(o);
+                return;
+            }
+        } else {
+            /* .fakeBlock */
+            obSubtype(o) = 0;                                /* forzar FBlock_Stationary */
+            if (!f_obj56) {
+                DeleteObject(o);
+                return;
+            }
+        }
+    }
+
+    /* ---- Setup SLZ staircase / LZ door ---- */
+    if ((uint8_t)v_zone != id_LZ) {
+        d0 = (uint8_t)((sub & 0x0F) - 8);                    /* subq.w #8,d0 */
+        if ((d0 & 0x80) == 0) {                              /* bcs → skip si < 8 */
+            d0 = (uint8_t)(d0 << 2);                         /* lsl.w #2: 4 bytes por entrada */
+            int16_t osc = (int16_t)RAM_WORD(v_oscillate + 0x2A + 2 + d0);
+            if (osc < 0) {                                   /* bpl.s .setupLZDoor */
+                obStatus(o) ^= 1;                            /* bchg #0: invertir X-flip */
+            }
+        }
+    }
+
+    /* .setupLZDoor */
+    d0 = obSubtype(o);
+    if ((d0 & 0x80) == 0) {                                  /* bpl.s FBlock_Action */
+        FBlock_Action(o);
+        return;
+    }
+
+    /* Subtipo $80+ → LZ door activado por switch */
+    d0 &= 0x0F;
+    fb_switch(o) = d0;
+    obSubtype(o) = 5;                                        /* FBlock_LZSmallDoor_Open */
+    if (obFrame(o) == 7) {
+        obSubtype(o) = 0x0C;                                 /* FBlock_LZHorizDoor_Open */
+        fb_distance(o) = 128;
+    }
+
+    /* .chkState: comprueba si la puerta ya se abrió antes */
+    {
+        uint8_t respawn = obRespawnNo(o);
+        if (respawn != 0) {
+            uint8_t *a2 = RAM_ADDR(v_objstate);
+            a2[2 + respawn] &= (uint8_t)~0x80;               /* bclr #7: quitar flag de bloqueo */
+            if (a2[2 + respawn] & 1) {                       /* btst #0: ¿ya abierta? */
+                obSubtype(o)++;                              /* saltar a Close (ya abierta) */
+                fb_distance(o) = 0;                          /* no queda distancia por recorrer */
+            }
+        }
+    }
+
+    FBlock_Action(o);
+}
+
+/* --- FBlock_Action — Routine 2 --------------------------------------- */
+static void FBlock_Action(uint8_t *o) {
+    int16_t prev_x = obX(o);                                 /* move.w obX(a0),-(sp) */
+
+    uint8_t type = (uint8_t)(obSubtype(o) & 0x0F);
+    switch (type) {                                          /* FBlock_TypeIndex */
+        case 0x0: FBlock_Stationary(o);             break;
+        case 0x1: FBlock_LeftRight_Small(o);        break;
+        case 0x2: FBlock_LeftRight_Large(o);        break;
+        case 0x3: FBlock_UpDown_Small(o);           break;
+        case 0x4: FBlock_UpDown_Large(o);           break;
+        case 0x5: FBlock_LZSmallDoor_Open(o);       break;
+        case 0x6: FBlock_LZSmallDoor_Close(o);      break;
+        case 0x7: FBlock_HorizontalSYZ3(o);         break;
+        case 0x8: FBlock_SLZStair_Smallest(o);      break;
+        case 0x9: FBlock_SLZStair_Small(o);         break;
+        case 0xA: FBlock_SLZStair_Large(o);         break;
+        case 0xB: FBlock_SLZStair_Largest(o);       break;
+        case 0xC: FBlock_LZHorizDoor_Open(o);       break;
+        case 0xD: FBlock_LZHorizDoor_Close(o);      break;
+    }
+
+    /* SolidObject (solo si el objeto está on-screen) */
+    if ((int8_t)obRender(o) < 0) {                           /* bpl.s .chkDel */
+        int16_t d1 = (int16_t)((int16_t)obActWid(o) + sonic_solid_width);
+        int16_t d2 = (int16_t)obHeight(o);
+        int16_t d3 = (int16_t)(d2 + 1);                      /* addq.w #1,d3 */
+        int16_t out_d3 = 0, out_d5 = 0;
+        SolidObject(o, d1, d2, d3, prev_x, &out_d3, &out_d5);
+    }
+
+    /* .chkDel (REV01) */
+    if (OutOfRange(o, fb_origX(o))) {
+        /* out_of_range → .checkSYZSpecial */
+        if (type == 0x7 && fb_moving(o) != 0) {
+            /* El bloque horizontal de SYZ3 en movimiento nunca se borra:
+               aunque esté fuera de rango, sigue avanzando hasta destino. */
+        } else {
+            DeleteObject(o);
+            return;
+        }
+    }
+    DisplaySprite(o);                                        /* .display */
+}
+
+/* --- Type 0 — estacionario ------------------------------------------- */
+static void FBlock_Stationary(uint8_t *o) { (void)o; }
+
+/* --- Type 1 — L/R pequeño (freq 2, mid $20) -------------------------- */
+static void FBlock_LeftRight_Small(uint8_t *o) {
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x0A);
+    FBlock_MoveLR(o, d0, 0x20 * 2);
+}
+
+/* --- Type 2 — L/R grande (freq 4, mid $40) --------------------------- */
+static void FBlock_LeftRight_Large(uint8_t *o) {
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x1E);
+    FBlock_MoveLR(o, d0, 0x40 * 2);
+}
+
+static void FBlock_MoveLR(uint8_t *o, int16_t d0, int16_t d1) {
+    if (obStatus(o) & 1) {                                   /* btst #0,obStatus */
+        d0 = (int16_t)(-d0);                                 /* neg.w d0 */
+        d0 = (int16_t)(d0 + d1);                             /* add.w d1,d0 */
+    }
+    int16_t x = (int16_t)(fb_origX(o) - d0);                 /* sub.w d0,d1 */
+    obX(o) = x;
+}
+
+/* --- Type 3 — U/D pequeño (freq 2, mid $20) -------------------------- */
+static void FBlock_UpDown_Small(uint8_t *o) {
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x0A);
+    FBlock_MoveUD(o, d0, 0x20 * 2);
+}
+
+/* --- Type 4 — U/D grande (freq 4, mid $40) --------------------------- */
+static void FBlock_UpDown_Large(uint8_t *o) {
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x1E);
+    FBlock_MoveUD(o, d0, 0x40 * 2);
+}
+
+static void FBlock_MoveUD(uint8_t *o, int16_t d0, int16_t d1) {
+    if (obStatus(o) & 1) {
+        d0 = (int16_t)(-d0);
+        d0 = (int16_t)(d0 + d1);
+    }
+    int16_t y = (int16_t)(fb_origY(o) - d0);
+    obY(o) = y;
+}
+
+/* --- Type 5 — LZ small door: abrir al pulsar switch ------------------ */
+static void FBlock_LZSmallDoor_Open(uint8_t *o) {
+    if (fb_moving(o) == 0) {
+        /* .checkSwitch */
+        if (RAM_U16(0xFE10) == id_LZ_act1 && fb_switch(o) == 3) {
+            /* Caso especial LZ1: gestiona f_wtunneldisallow según posición */
+            f_wtunneldisallow = 0;
+            int16_t son_x = obX(RAM_ADDR(v_player));
+            if (son_x < obX(o)) {                            /* blo → Sonic a la izq */
+                f_wtunneldisallow = 1;
+            }
+        }
+
+        {
+            uint8_t *a2 = RAM_ADDR(f_switch);
+            uint8_t sw = fb_switch(o);
+            if (!(a2[sw] & 1)) {                             /* btst #0 / beq.s .updatePosition */
+                goto update_position;
+            }
+            if (RAM_U16(0xFE10) == id_LZ_act1 && sw == 3) {
+                f_wtunneldisallow = 0;                       /* permitir que el túnel succione a Sonic */
+            }
+        }
+        fb_moving(o) = 1;
+    }
+
+    /* .opening */
+    if (fb_distance(o) != 0) {
+        fb_distance(o) = (uint16_t)(fb_distance(o) - 2);
+    } else {
+        /* .fullyOpened */
+        obSubtype(o)++;
+        fb_moving(o) = 0;
+        uint8_t respawn = obRespawnNo(o);
+        if (respawn != 0) {
+            uint8_t *a2 = RAM_ADDR(v_objstate);
+            a2[2 + respawn] |= 1;                            /* bset #0 */
+        }
+    }
+
+update_position:
+    {
+        int16_t d0 = (int16_t)fb_distance(o);
+        if (obStatus(o) & 1) d0 = (int16_t)(-d0);
+        int16_t y = (int16_t)(fb_origY(o) + d0);
+        obY(o) = y;
+    }
+}
+
+/* --- Type 6 — LZ small door: cerrar (ver nota de fidelidad) ---------- */
+static void FBlock_LZSmallDoor_Close(uint8_t *o) {
+    if (fb_moving(o) == 0) {
+        uint8_t *a2 = RAM_ADDR(f_switch);
+        uint8_t sw = fb_switch(o);
+        if ((int8_t)a2[sw] < 0) {                            /* tst.b / bpl.s .updatePosition */
+            fb_moving(o) = 1;
+        } else {
+            goto update_position;
+        }
+    }
+
+    /* .closing */
+    {
+        int16_t full = (int16_t)(obHeight(o) * 2);           /* add.w d0,d0 */
+        if ((int16_t)fb_distance(o) != full) {
+            fb_distance(o) = (uint16_t)(fb_distance(o) + 2);
+        } else {
+            /* .fullyClosed */
+            obSubtype(o)--;
+            fb_moving(o) = 0;
+            uint8_t respawn = obRespawnNo(o);
+            if (respawn != 0) {
+                uint8_t *a2 = RAM_ADDR(v_objstate);
+                a2[2 + respawn] &= (uint8_t)~1;              /* bclr #0 */
+            }
+        }
+    }
+
+update_position:
+    {
+        int16_t d0 = (int16_t)fb_distance(o);
+        if (obStatus(o) & 1) d0 = (int16_t)(-d0);
+        int16_t y = (int16_t)(fb_origY(o) + d0);
+        obY(o) = y;
+    }
+}
+
+/* --- Type 7 — bloque horizontal especial de SYZ3 -------------------- */
+static void FBlock_HorizontalSYZ3(uint8_t *o) {
+    if (fb_moving(o) == 0) {
+        if (RAM_BYTE(f_switch + 0x0F) == 0) return;          /* tst.b (f_switch+$F) */
+        fb_moving(o) = 1;
+        fb_distance(o) = 0;
+    }
+
+    /* .moveRight */
+    obX(o) = (int16_t)(obX(o) + 1);                          /* addq.w #1,obX */
+    fb_origX(o) = obX(o);
+    fb_distance(o) = (uint16_t)(fb_distance(o) + 1);
+    if (fb_distance(o) != 0x380) return;                     /* cmpi.w #$380 / bne.s .return */
+
+    /* Llegó al destino ($1BB8 + $380 = $1F38) */
+    f_obj56 = 1;                                             /* marca túnel como cerrado permanentemente */
+    fb_moving(o) = 0;
+    obSubtype(o) = 0;                                        /* FBlock_Stationary */
+}
+
+/* --- Types 8/B — SLZ square stairway blocks -------------------------- */
+static void FBlock_SLZStair_Smallest(uint8_t *o) {
+    int16_t d1 = 0x10;
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x2A);
+    d0 = (int16_t)(d0 >> 1);                                 /* lsr.w #1 */
+    int16_t d3 = (int16_t)RAM_WORD(v_oscillate + 0x2C);
+    FBlock_SLZStair_MoveSquare(o, d0, d1, d3);
+}
+
+static void FBlock_SLZStair_Small(uint8_t *o) {
+    int16_t d1 = 0x30;
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x2E);
+    int16_t d3 = (int16_t)RAM_WORD(v_oscillate + 0x30);
+    FBlock_SLZStair_MoveSquare(o, d0, d1, d3);
+}
+
+static void FBlock_SLZStair_Large(uint8_t *o) {
+    int16_t d1 = 0x50;
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x32);
+    int16_t d3 = (int16_t)RAM_WORD(v_oscillate + 0x34);
+    FBlock_SLZStair_MoveSquare(o, d0, d1, d3);
+}
+
+static void FBlock_SLZStair_Largest(uint8_t *o) {
+    int16_t d1 = 0x70;
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x36);
+    int16_t d3 = (int16_t)RAM_WORD(v_oscillate + 0x38);
+    FBlock_SLZStair_MoveSquare(o, d0, d1, d3);
+}
+
+static void FBlock_SLZStair_MoveSquare(uint8_t *o, int16_t d0, int16_t d1, int16_t d3) {
+    if (d3 == 0) {                                           /* tst.w d3 / bne.s .checkFlipped */
+        obStatus(o) = (uint8_t)((obStatus(o) + 1) & 3);      /* rota los 4 estados flip */
+    }
+
+    /* .checkFlipped */
+    uint8_t d2 = (uint8_t)(obStatus(o) & 3);
+    if (d2 == 0) {
+        /* Sin flips: movimiento hacia la derecha por el borde superior */
+        int16_t x = (int16_t)(d0 - d1 + fb_origX(o));        /* sub.w d1,d0 / add.w fb_origX,d0 */
+        obX(o) = x;
+        int16_t y = (int16_t)(fb_origY(o) - d1);             /* neg.w d1 / add.w fb_origY,d1 */
+        obY(o) = y;
+        return;
+    }
+    d2 = (uint8_t)(d2 - 1);
+    if (d2 == 0) {
+        /* X-flip: movimiento hacia abajo por el borde derecho */
+        d1 = (int16_t)(d1 - 1);
+        int16_t y = (int16_t)(-(d0 - d1) + fb_origY(o));     /* sub.w d1,d0 / neg.w d0 / add fb_origY */
+        obY(o) = y;
+        d1 = (int16_t)(d1 + 1);
+        int16_t x = (int16_t)(d1 + fb_origX(o));
+        obX(o) = x;
+        return;
+    }
+    d2 = (uint8_t)(d2 - 1);
+    if (d2 == 0) {
+        /* Y-flip: movimiento hacia la izquierda por el borde inferior */
+        d1 = (int16_t)(d1 - 1);
+        int16_t x = (int16_t)(-(d0 - d1) + fb_origX(o));
+        obX(o) = x;
+        d1 = (int16_t)(d1 + 1);
+        int16_t y = (int16_t)(d1 + fb_origY(o));
+        obY(o) = y;
+        return;
+    }
+    /* XY-flip: movimiento hacia arriba por el borde izquierdo */
+    int16_t y = (int16_t)((d0 - d1) + fb_origY(o));
+    obY(o) = y;
+    int16_t x = (int16_t)(fb_origX(o) - d1);
+    obX(o) = x;
+}
+
+/* --- Type C — LZ large sideways 4x1 door: abrir ---------------------- */
+static void FBlock_LZHorizDoor_Open(uint8_t *o) {
+    if (fb_moving(o) == 0) {
+        uint8_t *a2 = RAM_ADDR(f_switch);
+        uint8_t sw = fb_switch(o);
+        if (!(a2[sw] & 1)) goto update_position;
+        fb_moving(o) = 1;
+    }
+
+    /* .opening */
+    if (fb_distance(o) != 0) {
+        fb_distance(o) = (uint16_t)(fb_distance(o) - 2);
+    } else {
+        /* .fullyOpened */
+        obSubtype(o)++;
+        fb_moving(o) = 0;
+        uint8_t respawn = obRespawnNo(o);
+        if (respawn != 0) {
+            uint8_t *a2 = RAM_ADDR(v_objstate);
+            a2[2 + respawn] |= 1;
+        }
+    }
+
+update_position:
+    {
+        int16_t d0 = (int16_t)fb_distance(o);
+        if (obStatus(o) & 1) {
+            d0 = (int16_t)(-d0);
+            d0 = (int16_t)(d0 + 128);
+        }
+        int16_t x = (int16_t)(fb_origX(o) + d0);
+        obX(o) = x;
+    }
+}
+
+/* --- Type D — LZ large sideways 4x1 door: cerrar -------------------- */
+static void FBlock_LZHorizDoor_Close(uint8_t *o) {
+    if (fb_moving(o) == 0) {
+        uint8_t *a2 = RAM_ADDR(f_switch);
+        uint8_t sw = fb_switch(o);
+        if ((int8_t)a2[sw] < 0) {
+            fb_moving(o) = 1;
+        } else {
+            goto update_position;
+        }
+    }
+
+    /* .closing */
+    if ((int16_t)fb_distance(o) != 128) {
+        fb_distance(o) = (uint16_t)(fb_distance(o) + 2);
+    } else {
+        /* .fullyClosed */
+        obSubtype(o)--;
+        fb_moving(o) = 0;
+        uint8_t respawn = obRespawnNo(o);
+        if (respawn != 0) {
+            uint8_t *a2 = RAM_ADDR(v_objstate);
+            a2[2 + respawn] &= (uint8_t)~1;
+        }
+    }
+
+update_position:
+    {
+        int16_t d0 = (int16_t)fb_distance(o);
+        if (obStatus(o) & 1) {
+            d0 = (int16_t)(-d0);
+            d0 = (int16_t)(d0 + 128);
+        }
+        int16_t x = (int16_t)(fb_origX(o) + d0);
+        obX(o) = x;
+    }
+}
+
+/* --- Dispatcher Object 56 — FBlock_Index: 0 = Main, 2 = Action ------- */
+static void FloatingBlock_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: FBlock_Main(o);   break;
+        case 2: FBlock_Action(o); break;
+    }
 }

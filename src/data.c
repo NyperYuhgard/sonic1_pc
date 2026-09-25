@@ -365,17 +365,17 @@ const uint8_t *Map_LTag;            size_t Map_LTag_len;
 const uint8_t *Map_Bas;             size_t Map_Bas_len;
 const uint8_t *Map_Cat;             size_t Map_Cat_len;
 const uint8_t *Map_Elev;
-const uint8_t *Map_Plat_SLZ;
+const uint8_t *Map_Plat_SLZ;        size_t Map_Plat_SLZ_len;
 const uint8_t *Map_Circ;
 const uint8_t *Map_Stair;
 const uint8_t *Map_Fan;
 const uint8_t *Map_Seesaw;
 const uint8_t *Map_Bomb;
 const uint8_t *Map_Roll;
-const uint8_t *Map_Light;
+const uint8_t *Map_Light;           size_t Map_Light_len;
 const uint8_t *Map_Bump;
-const uint8_t *Map_Plat_SYZ;
-const uint8_t *Map_FBlock;
+const uint8_t *Map_Plat_SYZ;        size_t Map_Plat_SYZ_len;
+const uint8_t *Map_FBlock;          size_t Map_FBlock_len;
 const uint8_t *Map_BBall;
 const uint8_t *Map_Disc;
 const uint8_t *Map_Trap;
@@ -853,6 +853,10 @@ int Data_Init(void) {
     LOAD_MAP("_maps/Lava Geyser.asm", Map_Geyser);
     LOAD_MAP("_maps/Wall of Lava.asm", Map_LWall);
     LOAD_MAP("_maps/Smashable Green Block.asm", Map_Smab);
+    LOAD_MAP("_maps/Light.asm", Map_Light);
+    LOAD_MAP("_maps/Floating Blocks and Doors.asm", Map_FBlock);
+    LOAD_MAP("_maps/Platforms (SYZ).asm", Map_Plat_SYZ);
+    LOAD_MAP("_maps/Platforms (SLZ).asm", Map_Plat_SLZ);
 
     /* ---------------- Animaciones ---------------- */
     LOAD_ANIM("_anim/Sonic.asm",                     Ani_Sonic);

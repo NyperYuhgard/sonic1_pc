@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <SDL2/SDL.h>
+#include "tas_editor.h"
 #include "tas.h"
 #include "types.h"
 #include "constants.h"
@@ -157,15 +158,18 @@ static void ProcessSDLEvents(void) {
             if (ev.window.event == SDL_WINDOWEVENT_CLOSE &&
                 (int)ev.window.windowID == SDL_GetWindowID(window)) {
                 running = 0;
-                }
-                /* Solución al bug de maximizar/redimensionar: */
-                else if (ev.window.event == SDL_WINDOWEVENT_RESIZED ||
-                    ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
-                    ev.window.event == SDL_WINDOWEVENT_EXPOSED) {
-                    /* Forzamos a SDL a re-aplicar el tamaño lógico y recalcular el viewport */
-                    SDL_RenderSetLogicalSize(renderer, Settings_RenderWidth(), SCREEN_HEIGHT);
-                    }
+            }
+            /* Solución al bug de maximizar/redimensionar */
+            else if (ev.window.event == SDL_WINDOWEVENT_RESIZED ||
+                     ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                     ev.window.event == SDL_WINDOWEVENT_EXPOSED) {
+                SDL_RenderSetLogicalSize(renderer,
+                                         Settings_RenderWidth(), SCREEN_HEIGHT);
+            }
         }
+
+        /* >>> NUEVO: reenviar el evento al editor TAS <<< */
+        TASEditor_HandleEvent(&ev);
     }
 }
 
@@ -229,6 +233,7 @@ void WaitForVBlank(void) {
     VDP_RenderFrame(renderer);
 
     TAS_EndFrame();
+    TASEditor_Render();
 
     /* Increment frame counters */
     v_framecount = v_framecount + 1;
@@ -1097,6 +1102,7 @@ static void MainGameLoop(void) {
         /* Eventos SDL y teclas de TAS (funcionan incluso pausado). */
         ProcessSDLEvents();
         Input_PollTasKeys();
+        TASEditor_PollKeys();
 
         /* Pausa TAS: bloquea aquí hasta unpause o frame-advance. */
         if (TAS_IsPaused() && !TAS_TryConsumeStep()) {

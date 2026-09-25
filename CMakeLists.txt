@@ -37,6 +37,7 @@ set(SOURCES
     src/config.c
     src/postprocess.c
     src/tas.c
+    src/tas_editor.c
 )
 
 # Executable

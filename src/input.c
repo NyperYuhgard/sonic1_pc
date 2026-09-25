@@ -1,5 +1,6 @@
 
 #include "input.h"
+#include "tas_editor.h"
 #include "tas.h"
 #include "ram.h"
 #include "constants.h"
@@ -72,10 +73,17 @@ void Input_Read(void) {
                 PlaneView_DragMove(event.motion.x, event.motion.y);
             }
         }
+        TASEditor_HandleEvent(&event);
     }
 
     /* Read keyboard state directly (more reliable than event-based for games) */
     const uint8_t *keys = SDL_GetKeyboardState(NULL);
+    static int prev_tas_editor_key = 0;
+
+    if (keys[SDL_SCANCODE_T] && !prev_tas_editor_key) {
+        TASEditor_Toggle();
+    }
+    prev_tas_editor_key = keys[SDL_SCANCODE_T];
 
     /* Debug: P toggles the real-time VRAM viewer window (down-edge only) */
     if (keys[SDL_SCANCODE_P] && !prev_vram_key) {
@@ -138,6 +146,10 @@ void Input_Read(void) {
 
     new_state[0] = TAS_OverridePlayer1(new_state[0]);
     new_state[1] = TAS_OverridePlayer2(new_state[1]);
+    if (TASEditor_HasFocus()) {
+        new_state[0] = 0;
+        new_state[1] = 0;
+    }
 
     /* Compute held/pressed (matching ReadJoypads logic) */
     for (int i = 0; i < 2; i++) {
@@ -167,6 +179,8 @@ void Input_PollTasKeys(void) {
     const uint8_t *keys = SDL_GetKeyboardState(NULL);
     static int prevF1=0, prevF2=0, prevF3=0, prevF4=0;
     static int prevF5=0, prevF6=0, prevF7=0, prevF8=0;
+
+    if (TASEditor_HasFocus()) return;
 
     int f1 = keys[SDL_SCANCODE_F1];
     int f2 = keys[SDL_SCANCODE_F2];
@@ -199,3 +213,5 @@ void Input_SetPrevState(const uint8_t in[2]) {
     prev_state[0] = in[0];
     prev_state[1] = in[1];
 }
+
+void Input_PollTasEditorKeys(void) { TASEditor_PollKeys(); }

@@ -15,5 +15,6 @@ void Input_PollTasKeys(void);
 /* Prev-state getter/setter (para savestates). */
 void Input_GetPrevState(uint8_t out[2]);
 void Input_SetPrevState(const uint8_t in[2]);
+void Input_PollTasEditorKeys(void);
 
 #endif /* SONIC1_INPUT_H */

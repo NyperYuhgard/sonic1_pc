@@ -262,3 +262,67 @@ void TAS_LoadPrevState(void) {
         else
             fprintf(stderr, "[TAS] Slot %d empty\n", slot);
 }
+
+/* ------------------------------------------------------------------ */
+/* Acceso directo al buffer (para el editor)                          */
+/* ------------------------------------------------------------------ */
+
+uint8_t TAS_GetInputP1(uint32_t frame) {
+    if (frame >= tas.length) return 0;
+    return tas.p1[frame];
+}
+uint8_t TAS_GetInputP2(uint32_t frame) {
+    if (frame >= tas.length) return 0;
+    return tas.p2[frame];
+}
+void TAS_SetInputP1(uint32_t frame, uint8_t value) {
+    if (frame >= tas.length) return;
+    tas.p1[frame] = value;
+}
+void TAS_SetInputP2(uint32_t frame, uint8_t value) {
+    if (frame >= tas.length) return;
+    tas.p2[frame] = value;
+}
+void TAS_SetLength(uint32_t length) {
+    if (length > TAS_MAX_FRAMES) length = TAS_MAX_FRAMES;
+    if (length < tas.length) {
+        /* truncar */
+    }
+    tas.length = length;
+}
+
+void TAS_DeleteFrame(uint32_t at) {
+    if (at >= tas.length) return;
+    uint32_t after = tas.length - at - 1;
+    if (after > 0) {
+        memmove(&tas.p1[at], &tas.p1[at + 1], after);
+        memmove(&tas.p2[at], &tas.p2[at + 1], after);
+    }
+    tas.length--;
+}
+
+void TAS_InsertFrame(uint32_t at) {
+    if (tas.length >= TAS_MAX_FRAMES) return;
+    if (at > tas.length) at = tas.length;
+    uint32_t after = tas.length - at;
+    if (after > 0) {
+        memmove(&tas.p1[at + 1], &tas.p1[at], after);
+        memmove(&tas.p2[at + 1], &tas.p2[at], after);
+    }
+    tas.p1[at] = 0;
+    tas.p2[at] = 0;
+    tas.length++;
+}
+
+void TAS_DeleteRange(uint32_t start, uint32_t end) {
+    if (start > end) { uint32_t t = start; start = end; end = t; }
+    if (start >= tas.length) return;
+    if (end >= tas.length) end = tas.length - 1;
+    uint32_t count = end - start + 1;
+    uint32_t after = tas.length - end - 1;
+    if (after > 0) {
+        memmove(&tas.p1[start], &tas.p1[end + 1], after);
+        memmove(&tas.p2[start], &tas.p2[end + 1], after);
+    }
+    tas.length -= count;
+}
