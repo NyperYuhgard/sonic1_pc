@@ -358,7 +358,7 @@ const uint8_t *Map_Fire;
 const uint8_t *Map_Brick;           size_t Map_Brick_len;
 const uint8_t *Map_Geyser;          size_t Map_Geyser_len;
 const uint8_t *Map_LWall;           size_t Map_LWall_len;
-const uint8_t *Map_Yad;
+const uint8_t *Map_Yad;             size_t Map_Yad_len;
 const uint8_t *Map_Smab;            size_t Map_Smab_len;
 const uint8_t *Map_MBlock;          size_t Map_MBlock_len;
 const uint8_t *Map_LTag;            size_t Map_LTag_len;
@@ -412,6 +412,8 @@ const uint8_t *Ani_GFire;           size_t Ani_GFire_len;
 const uint8_t *Ani_Fire;            size_t Ani_Fire_len;
 const uint8_t *Ani_Geyser;          size_t Ani_Geyser_len;
 const uint8_t *Ani_LWall;           size_t Ani_LWall_len;
+const uint8_t *Ani_Yad;             size_t Ani_Yad_len;
+const uint8_t *Ani_Bump;            size_t Ani_Bump_len;
 const uint8_t *SonicDynPLC;         size_t SonicDynPLC_len;
 
 /* ---------------- Layouts de nivel (Level_*) ---------------- */
@@ -857,6 +859,7 @@ int Data_Init(void) {
     LOAD_MAP("_maps/Floating Blocks and Doors.asm", Map_FBlock);
     LOAD_MAP("_maps/Platforms (SYZ).asm", Map_Plat_SYZ);
     LOAD_MAP("_maps/Platforms (SLZ).asm", Map_Plat_SLZ);
+    LOAD_MAP("_maps/Yadrin.asm", Map_Yad);
 
     /* ---------------- Animaciones ---------------- */
     LOAD_ANIM("_anim/Sonic.asm",                     Ani_Sonic);
@@ -880,6 +883,8 @@ int Data_Init(void) {
     LOAD_ANIM("_anim/Fireballs.asm",                 Ani_Fire);
     LOAD_ANIM("_anim/Lava Geyser.asm",               Ani_Geyser);
     LOAD_ANIM("_anim/Wall of Lava.asm",              Ani_LWall);
+    LOAD_ANIM("_anim/Yadrin.asm",                    Ani_Yad);
+    LOAD_ANIM("_anim/Bumper.asm",                    Ani_Bump);
     /* El DPLC de Sonic no es un anim script, pero comparte el parser:  */
     LOAD_ANIM("_maps/Sonic - Dynamic Gfx Script.asm", SonicDynPLC);
 

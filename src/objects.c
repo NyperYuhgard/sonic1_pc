@@ -92,6 +92,8 @@ static void BossMarble_Main(void *obj);
 static void BossFire_Main(void *obj);
 static void SpinningLight_Main(void *obj);
 static void FloatingBlock_Main(void *obj);
+static void Yadrin_Main(void *obj);
+static void Bumper_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -166,6 +168,8 @@ void Objects_Init(void) {
     obj_dispatch[id_BossFire]   = BossFire_Main;     
     obj_dispatch[id_SpinningLight] = SpinningLight_Main;
     obj_dispatch[id_FloatingBlock] = FloatingBlock_Main;
+    obj_dispatch[id_Yadrin] = Yadrin_Main;
+    obj_dispatch[id_Bumper] = Bumper_Main;
     /* Register Special Stage results screen objects */
     obj_dispatch[id_SSResult]  = SSResult_Main;
     obj_dispatch[id_SSRChaos]  = SSRChaos_Main;
@@ -15836,5 +15840,252 @@ static void FloatingBlock_Main(void *obj) {
     switch (obRoutine(o)) {
         case 0: FBlock_Main(o);   break;
         case 2: FBlock_Action(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 50 — Yadrin enemy (MZ [unused], SYZ)
+ *  Ported verbatim from _incObj/50 Badnik - Yadrin.asm (REV01, FixBugs=0).
+ *
+ *  yad_timedelay = objoff_30 (word): delay before turning around
+ *
+ *  FixBugs=0: se omite el chequeo "delete si cae por debajo de $7FF" del
+ *  Yad_Main (presente solo con FixBugs=1).
+ *
+ *  La subrutina ChkHitLeftRightWall viene del mismo archivo; en el prototipo
+ *  era compartida con Splats (Obj4F), pero en el juego final solo la usa
+ *  Yadrin. Se implementa como función estática local.
+ * =========================================================================== */
+
+#define yad_timedelay(o) (*(int16_t *)((uint8_t *)(o) + 0x30))
+
+static void Yad_Main(uint8_t *o);
+static void Yad_Action(uint8_t *o);
+static void Yad_Action_Wait(uint8_t *o);
+static void Yad_Action_Move(uint8_t *o);
+static int  Yad_ChkHitLeftRightWall(uint8_t *o);
+
+/* --- Yad_ChkHitLeftRightWall -------------------------------------------
+ * Chequeo de pared izquierda/derecha, ejecutado solo 1 de cada 4 frames
+ * (d0 = (v_framecount + d7) & 3; si != 0, sale). El "d7" del ASM es el
+ * enumerador OST descendente (127..0) que ExecuteObjects tiene en d7
+ * durante su bucle dbf. En el port, donde iteramos ascendente, d7 se
+ * reconstruye como (NUM_OBJECTS - 1) - índice.
+ * ---------------------------------------------------------------------- */
+static int Yad_ChkHitLeftRightWall(uint8_t *o) {
+    uint8_t d7 = (uint8_t)((NUM_OBJECTS - 1) - Object_GetIndex(o));
+
+    uint16_t d0 = (uint16_t)v_framecount + d7;               /* add.w d7,d0 */
+    d0 &= 3;                                                 /* andi.w #3,d0 */
+    if (d0 != 0) return 0;                                   /* bne.s .noWallHit */
+
+    int16_t d3 = (int16_t)(int8_t)obActWid(o);               /* moveq #0,d3 / move.b obActWid,d3 */
+
+    if ((int16_t)obVelX(o) < 0) {                            /* tst.w obVelX / bmi.s .chkLeftWall */
+        /* .chkLeftWall */
+        d3 = (int16_t)~d3;                                   /* not.w d3: mirar a la izquierda */
+        if (PushB_ObjHitWallLeft(o, d3) < 0) return 1;       /* bmi.s .wallHit */
+        return 0;                                            /* .noWallHit */
+    }
+    /* Camino derecho */
+    if (PushB_ObjHitWallRight(o, d3) < 0) return 1;
+    return 0;
+}
+
+/* --- Yad_Main — Routine 0: setup + caer hasta el suelo ---------------- */
+static void Yad_Main(uint8_t *o) {
+    obMap(o)      = (uint32_t)(uintptr_t)Map_Yad;
+    obGfx(o)      = (uint16_t)(ArtTile_Yadrin | Tile_Pal2);
+    obRender(o)   = sprite_cam_field;
+    obPriority(o) = 4;
+    obActWid(o)   = 40 / 2;
+    obHeight(o)   = 34 / 2;
+    obWidth(o)    = 16 / 2;
+    obColType(o)  = (uint8_t)(col_40x32 | col_special);
+
+    /* Cae hasta tocar el suelo (invisible mientras cae) */
+    ObjectFall(o);                                           /* bsr.w ObjectFall */
+    int16_t d1, d3;
+    ObjFloorDist(o, &d1, &d3);                               /* bsr.w ObjFloorDist */
+    if (d1 >= 0) return;                                     /* bpl.s .hide: aún no toca el suelo */
+
+    obY(o) = (int16_t)(obY(o) + d1);                         /* add.w d1,obY: pegar al suelo */
+    obVelY(o) = 0;                                           /* move.w #0,obVelY */
+    obRoutine(o) += 2;                                       /* addq.b #2 → Yad_Action */
+    obStatus(o) ^= sprite_xflip;                             /* bchg #0: spawn mirando a la izquierda */
+
+    /* FixBugs=0: se omite el chequeo "delete si obY > $7FF". */
+}
+
+/* --- Yad_Action — Routine 2 ------------------------------------------ */
+static void Yad_Action(uint8_t *o) {
+    switch (ob2ndRout(o)) {                                  /* Yad_ActIndex */
+        case 0: Yad_Action_Wait(o); break;
+        case 2: Yad_Action_Move(o); break;
+    }
+    if (Ani_Yad) AnimateSprite(o, Ani_Yad);                  /* lea (Ani_Yad).l,a1 */
+    RememberState(o);                                        /* bra.w RememberState */
+}
+
+/* --- Yad_Action_Wait — sub-rutina 0: pausa y luego gira --------------- */
+static void Yad_Action_Wait(uint8_t *o) {
+    yad_timedelay(o)--;                                      /* subq.w #1,yad_timedelay */
+    if (yad_timedelay(o) >= 0) return;                       /* bpl.s .return: aún esperando */
+
+    ob2ndRout(o) += 2;                                       /* addq.b #2 → Yad_Action_Move */
+    obVelX(o) = (int16_t)-0x100;                             /* move.w #-$100,obVelX: mirar izquierda */
+    obAnim(o) = 1;                                           /* move.b #1,obAnim: walk */
+    obStatus(o) ^= sprite_xflip;                             /* bchg #0,obStatus: invertir orientación */
+    /* bne.s .return saltaba si el bit ANTERIOR era 1; tras el XOR,
+       "current bit = 1" ⟺ "old bit = 0". */
+    if (obStatus(o) & sprite_xflip) {
+        obVelX(o) = (int16_t)(-obVelX(o));                   /* neg.w obVelX: derecha */
+    }
+}
+
+/* --- Yad_Action_Move — sub-rutina 2: caminar y detectar bordes ------- */
+static void Yad_Action_Move(uint8_t *o) {
+    SpeedToPos(o);                                           /* bsr.w SpeedToPos */
+
+    int16_t d1, d3;
+    ObjFloorDist(o, &d1, &d3);                               /* bsr.w ObjFloorDist */
+    if (d1 < -8) goto pause;                                 /* cmpi.w #-8 / blt.s .pause */
+    if (d1 >= 0x0C) goto pause;                              /* cmpi.w #$C / bge.s .pause */
+    obY(o) = (int16_t)(obY(o) + d1);                         /* add.w d1,obY: pegar al piso */
+
+    if (Yad_ChkHitLeftRightWall(o)) goto pause;              /* bne.s .pause */
+    return;
+
+pause:
+    ob2ndRout(o) -= 2;                                       /* subq.b #2 → Yad_Action_Wait */
+    yad_timedelay(o) = 60 - 1;                               /* move.w #60-1: 1 segundo de pausa */
+    obVelX(o) = 0;                                           /* move.w #0,obVelX: parar */
+    obAnim(o) = 0;                                           /* move.b #0,obAnim: wait */
+}
+
+/* --- Dispatcher Object 50 — Yad_Index: 0 = Main, 2 = Action ---------- */
+static void Yadrin_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                                  /* Yad_Index */
+        case 0: Yad_Main(o);   break;
+        case 2: Yad_Action(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 47 — Pinball Bumper (SYZ)
+ *  Ported verbatim from _incObj/47 SYZ Bumper.asm (REV01, FixBugs=0).
+ *
+ *  ReactToItem incrementa obColProp cuando Sonic toca el bumper
+ *  (col_16x16_alt | col_special → React_Special). Bump_Hit detecta el flag,
+ *  calcula el ángulo Sonic→bumper, y lanza a Sonic en dirección opuesta con
+ *  una fuerza de $700 (16.8 fixed point).
+ *
+ *  El respawn byte cuenta los impactos; al llegar a $8A (bit 7 + 10 en
+ *  los bits bajos, según la convención del ASM) deja de dar puntos.
+ * =========================================================================== */
+
+static void Bump_Main(uint8_t *o);
+static void Bump_Hit(uint8_t *o);
+static void Bump_Display(uint8_t *o);
+
+/* --- Bump_Main — Routine 0 ------------------------------------------- */
+static void Bump_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                       /* → Bump_Hit */
+    obMap(o)      = (uint32_t)(uintptr_t)Map_Bump;
+    obGfx(o)      = (uint16_t)ArtTile_SYZ_Bumper;
+    obRender(o)   = sprite_cam_field;
+    obActWid(o)   = 32 / 2;
+    obPriority(o) = 1;                                       /* encima de Sonic */
+    obColType(o)  = (uint8_t)(col_16x16_alt | col_special);  /* ReactToItem → D7 */
+    /* ASM falls through into Bump_Hit on the first frame. */
+    Bump_Hit(o);
+}
+
+/* --- Bump_Hit — Routine 2 -------------------------------------------- */
+static void Bump_Hit(uint8_t *o) {
+    if (obColProp(o) == 0) {                                 /* tst.b obColProp / beq.w Bump_Display */
+        Bump_Display(o);
+        return;
+    }
+    obColProp(o) = 0;                                        /* clr.b obColProp: consumir flag */
+
+    uint8_t *player = RAM_ADDR(v_player);
+
+    /* d1 = bumper_x - sonic_x, d2 = bumper_y - sonic_y */
+    int16_t d1 = (int16_t)(obX(o) - obX(player));
+    int16_t d2 = (int16_t)(obY(o) - obY(player));
+
+    /* Ángulo Sonic→bumper, y su seno/coseno */
+    uint8_t angle = CalcAngle(d1, d2);
+    int16_t s0, s1;
+    CalcSine(angle, &s0, &s1);                               /* s0=sin, s1=cos */
+
+    /* Fuerza de rebote $700 en 16.8 fixed, con signo negativo (alejar). */
+    int16_t vx = (int16_t)(((int32_t)s1 * -0x700) >> 8);     /* cos * -$700 */
+    int16_t vy = (int16_t)(((int32_t)s0 * -0x700) >> 8);     /* sin * -$700 */
+    obVelX(player) = vx;
+    obVelY(player) = vy;
+
+    obStatus(player) |=  (1 << 1);                           /* bset #1: airborne */
+    obStatus(player) &= ~(1 << 4);                           /* bclr #4: roll-jump */
+    obStatus(player) &= ~(1 << 5);                           /* bclr #5: push */
+    jumping(player) = 0;                                     /* clr.b jumping */
+
+    obAnim(o) = 1;                                           /* bumper: animación "hit" */
+    Sound_Queue(sfx_Bumper, false);                          /* QueueSound2 */
+
+    /* Puntuación condicional: cuenta impactos en el respawn byte */
+    {
+        uint8_t *a2 = RAM_ADDR(v_objstate);
+        uint8_t d0 = obRespawnNo(o);
+        if (d0 != 0) {
+            /* cmpi.b #10+$80, 2(a2,d0.w) → si >= $8A, no dar más puntos */
+            if (a2[2 + d0] >= 0x8A) {
+                Bump_Display(o);
+                return;
+            }
+            a2[2 + d0] = (uint8_t)(a2[2 + d0] + 1);
+        }
+    }
+    AddPoints(1);                                            /* moveq #1,d0 → 10 pts */
+
+    /* Spawn de objeto Points con frame "10" */
+    {
+        uint8_t *slot = (uint8_t *)FindFreeObj();
+        if (slot != NULL) {
+            obID(slot)    = id_Points;
+            obX(slot)     = obX(o);
+            obY(slot)     = obY(o);
+            obFrame(slot) = 4;                               /* frame "10" */
+        }
+    }
+
+    Bump_Display(o);
+}
+
+/* --- Bump_Display ---------------------------------------------------- */
+static void Bump_Display(uint8_t *o) {
+    if (Ani_Bump) AnimateSprite(o, Ani_Bump);                /* lea (Ani_Bump).l,a1 */
+
+    if (OutOfRange(o, -1)) {                                 /* out_of_range.s .delete */
+        /* .delete: limpiar flag de respawn-block y borrar */
+        uint8_t *a2 = RAM_ADDR(v_objstate);
+        uint8_t d0 = obRespawnNo(o);
+        if (d0 != 0) {
+            a2[2 + d0] &= (uint8_t)~0x80;                    /* bclr #7: permitir respawn */
+        }
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);                                        /* bra.w DisplaySprite */
+}
+
+/* --- Dispatcher Object 47 — Bump_Index: 0 = Main, 2 = Hit ----------- */
+static void Bumper_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                                  /* Bump_Index */
+        case 0: Bump_Main(o); break;
+        case 2: Bump_Hit(o);  break;
     }
 }

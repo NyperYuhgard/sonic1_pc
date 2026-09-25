@@ -617,6 +617,9 @@ extern size_t   Ani_Moto_len;
 extern const uint8_t *Ani_Bas;
 extern size_t Ani_Bas_len;
 
+extern const uint8_t *Ani_Bump;            
+extern size_t Ani_Bump_len;
+
 /* Buzz Bomber mappings and animation scripts */
 extern const uint8_t *Map_Buzz;
 extern size_t   Map_Buzz_len;
@@ -647,6 +650,9 @@ extern size_t   Ani_Geyser_len;
 
 extern const uint8_t *Ani_LWall;           
 extern size_t Ani_LWall_len;
+
+extern const uint8_t *Ani_Yad;             
+extern size_t Ani_Yad_len;
 
 /* GHZ bridge (id_Bridge) mappings */
 extern const uint8_t *Map_Bri;
@@ -688,7 +694,7 @@ extern const uint8_t *Map_Fire;
 extern const uint8_t *Map_Brick;           extern size_t Map_Brick_len;
 extern const uint8_t *Map_Geyser;          extern size_t Map_Geyser_len;
 extern const uint8_t *Map_LWall;           extern size_t Map_LWall_len;
-extern const uint8_t *Map_Yad;
+extern const uint8_t *Map_Yad;             extern size_t Map_Yad_len;
 extern const uint8_t *Map_Smab;            extern size_t Map_Smab_len;
 extern const uint8_t *Map_MBlock;          extern size_t Map_MBlock_len;
 extern const uint8_t *Map_CFlo;            extern size_t   Map_CFlo_len;
