@@ -10,4 +10,10 @@ void Input_Read(void);
 extern uint8_t joypad_hold[2];    /* held buttons, per joypad */
 extern uint8_t joypad_press[2];   /* newly pressed buttons, per joypad */
 
+void Input_PollTasKeys(void);
+
+/* Prev-state getter/setter (para savestates). */
+void Input_GetPrevState(uint8_t out[2]);
+void Input_SetPrevState(const uint8_t in[2]);
+
 #endif /* SONIC1_INPUT_H */

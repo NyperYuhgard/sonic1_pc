@@ -81,6 +81,15 @@ static void MarbleBrick_Main(void *obj);
 static void Basaran_Main(void *obj);
 static void LargeGrass_Main(void *obj);
 static void GrassFire_Main(void *obj);
+static void Caterkiller_Main(void *obj);
+static void LavaMaker_Main(void *obj);
+static void LavaBall_Main(void *obj);
+static void GeyserMaker_Main(void *obj);
+static void LavaGeyser_Main(void *obj);
+static void LavaWall_Main(void *obj);
+static void SmashBlock_Main(void *obj);
+static void BossMarble_Main(void *obj);
+static void BossFire_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -144,6 +153,15 @@ void Objects_Init(void) {
     obj_dispatch[id_Basaran] = Basaran_Main;
     obj_dispatch[id_LargeGrass] = LargeGrass_Main;
     obj_dispatch[id_GrassFire] = GrassFire_Main;
+    obj_dispatch[id_Caterkiller] = Caterkiller_Main;
+    obj_dispatch[id_LavaMaker] = LavaMaker_Main;
+    obj_dispatch[id_LavaBall]  = LavaBall_Main;   
+    obj_dispatch[id_GeyserMaker]  = GeyserMaker_Main;   
+    obj_dispatch[id_LavaGeyser] = LavaGeyser_Main;   
+    obj_dispatch[id_LavaWall] = LavaWall_Main;
+    obj_dispatch[id_SmashBlock] = SmashBlock_Main; 
+    obj_dispatch[id_BossMarble] = BossMarble_Main;   
+    obj_dispatch[id_BossFire]   = BossFire_Main;     
     /* Register Special Stage results screen objects */
     obj_dispatch[id_SSResult]  = SSResult_Main;
     obj_dispatch[id_SSRChaos]  = SSRChaos_Main;
@@ -3134,8 +3152,8 @@ static void Sonic_FloorLeft(void *obj) {
 static void Sonic_FloorUp(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     int16_t d1;
+    uint8_t d3;                              /* <-- nuevo: capturamos el ángulo */
 
-    /* Pared izquierda: restar, no sumar */
     d1 = Sonic_FindWallLeft_Quick(o);
     if (d1 < 0) {
         obX(o) = (int16_t)(obX(o) - d1);
@@ -3146,13 +3164,32 @@ static void Sonic_FloorUp(void *obj) {
         obX(o) = (int16_t)(obX(o) + d1);
         obVelX(o) = 0;
     }
-    Sonic_FindCeiling(o, NULL, &d1, NULL);
-    if (d1 < 0) {
-        obY(o) = (int16_t)(obY(o) - d1);   /* SUB, no sum */
-        if (obVelY(o) < 0) {
-            obVelY(o) = 0;
+
+    Sonic_FindCeiling(o, NULL, &d1, &d3);    /* <-- ya no descartamos d3 */
+    if (d1 >= 0) {
+        return;
+    }
+
+    obY(o) = (int16_t)(obY(o) - d1);
+
+    /* ¿Techo inclinado? (ASM: addi #$20 / andi #$40 / bne) */
+    {
+        uint8_t d0 = (uint8_t)(d3 + 0x20);
+        if (d0 & 0x40) {
+            /* Tratarlo como suelo: adopta el ángulo, resetea estado,
+               y convierte velY en inertia conservando el impulso. */
+            obAngle(o) = d3;
+            Sonic_ResetOnFloor(o);
+            obInertia(o) = obVelY(o);
+            if ((int8_t)d3 < 0) {
+                obInertia(o) = (int16_t)(-obInertia(o));
+            }
+            return;
         }
     }
+
+    /* Techo plano: parar Y como antes. */
+    obVelY(o) = 0;
 }
 
 static void Sonic_FloorRight(void *obj) {
@@ -13220,4 +13257,2033 @@ static void GrassFire_Main(void *obj) {
         case 2: GFire_Spread(o); break;
         case 4: GFire_Move(o);   break;
     }
+}
+
+/* ===========================================================================
+ *  Object 78 — Caterkiller enemy (MZ, SBZ)
+ *  Ported verbatim from _incObj/78 Badnik - Caterkiller.asm (REV01, FixBugs=0).
+ *
+ *  cat_waittime  = objoff_2A (byte): time between actions
+ *  cat_mode      = objoff_2B (byte): bit 4 = mouth open/closed, bit 7 = update anim
+ *  cat_floormap  = objoff_2C (16 bytes): floor height map
+ *  cat_parent    = objoff_3C (4 bytes): parent SLOT INDEX (ASM stored an address)
+ *  cat_segmentpos: In the ASM this shares the high byte of cat_parent; here we
+ *                  stash it in obSubtype's byte since Caterkiller never uses
+ *                  obSubtype.
+ * =========================================================================== */
+
+#define cat_waittime(o)   (*(uint8_t  *)((uint8_t *)(o) + 0x2A))
+#define cat_mode(o)       (*(uint8_t  *)((uint8_t *)(o) + 0x2B))
+#define cat_floormap(o)   ((uint8_t  *)((uint8_t *)(o) + 0x2C))
+#define cat_parent(o)     (*(uint32_t *)((uint8_t *)(o) + 0x3C))
+#define cat_segmentpos(o) (*(uint8_t  *)((uint8_t *)(o) + 0x28))  /* reuses obSubtype */
+
+static const int16_t Cat_FragSpeed[4] = {
+    -0x200, -0x180, 0x180, 0x200
+};
+
+/* Ani_Cat — NON-STANDARD animation script (128 bytes of frame IDs).
+   Indexed by (obAngle & $7F). $FF means "stop animating". */
+static const uint8_t Ani_Cat[128] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3,
+    4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6,
+    6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 0xFF, 7, 7, 0xFF,
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 6,
+    6, 6, 6, 6, 6, 6, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4,
+    4, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1,
+    1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0, 0, 0xFF
+};
+
+static void Cat_Main(uint8_t *o);
+static void Cat_Head(uint8_t *o);
+static void Cat_BodySeg1(uint8_t *o);
+static void Cat_BodySeg2(uint8_t *o);
+static void Cat_Delete(uint8_t *o);
+static void Cat_Fragment(uint8_t *o);
+static void Cat_Despawn(uint8_t *o);
+static void Cat_Undulate(uint8_t *o);
+static void Cat_Floor(uint8_t *o);
+static void Cat_FragmentateBody(uint8_t *o);
+static void Cat_FragmentateBody_NotifyHead(uint8_t *o);
+
+/* Cat_Despawn — Cat_ChkGone: clear respawn block, then mark for deletion */
+static void Cat_Despawn(uint8_t *o) {
+    uint8_t *a2 = RAM_ADDR(v_objstate);
+    uint8_t d0 = obRespawnNo(o);
+    if (d0 != 0) {
+        a2[2 + d0] &= 0x7F;    /* bclr #7,2(a2,d0.w) */
+    }
+    obRoutine(o) = 0x0A;       /* → Cat_Delete */
+}
+
+/* Cat_Delete — routine $A */
+static void Cat_Delete(uint8_t *o) {
+    DeleteObject(o);
+}
+
+/* Cat_Main — routine 0 */
+static void Cat_Main(uint8_t *o) {
+    int16_t d1, d3, d5, d2;
+    uint8_t d6, d4;
+    uint8_t *a2;
+    int loop;
+
+    obHeight(o) = 14 / 2;
+    obWidth(o)  = 16 / 2;
+
+    /* Fall until floor collision */
+    ObjectFall(o);
+    ObjFloorDist(o, &d1, &d3);
+    if (d1 >= 0) {
+        /* Cat_HideForInit with FixBugs: delete if fallen below $7FF */
+        if ((uint16_t)obY(o) > 0x7FF) Cat_Despawn(o);
+        return;
+    }
+    obY(o) = (int16_t)(obY(o) + d1);
+    obVelY(o) = 0;
+    obRoutine(o) += 2;
+    obMap(o) = (uint32_t)(uintptr_t)Map_Cat;
+
+    obGfx(o) = (uint16_t)(ArtTile_SBZ_Caterkiller | Tile_Pal2);
+    if ((uint8_t)v_zone != id_SBZ) {
+        obGfx(o) = (uint16_t)(ArtTile_MZ_SYZ_Caterkiller | Tile_Pal2);
+    }
+
+    obRender(o) &= (sprite_xflip | sprite_yflip);
+    obRender(o) |= sprite_cam_field;
+    obStatus(o) = obRender(o);
+    obPriority(o) = 4;
+    obActWid(o)   = 16 / 2;
+    obColType(o)  = (uint8_t)(col_16x16 | col_badnik);
+
+    /* Spawn 3 body segments */
+    d2 = obX(o);
+    d5 = 12;
+    if (obStatus(o) & 1) d5 = (int16_t)-d5;
+
+    d6 = 4;                  /* start routine for first segment: Cat_BodySeg1 */
+    d4 = 4;                  /* segmentpos for first segment */
+    a2 = o;                  /* parent = head */
+    loop = 3 - 1;            /* 3 segments */
+
+    for (;;) {
+        uint8_t *a1 = (uint8_t *)FindNextFreeObj(a2);
+        if (!a1) {
+            /* REV01: delete the whole Caterkiller if object RAM is full */
+            Cat_Despawn(o);
+            return;
+        }
+        obID(a1) = id_Caterkiller;
+        obRoutine(a1) = d6;
+        d6 = (uint8_t)(d6 + 2);
+        obMap(a1) = obMap(o);
+        obGfx(a1) = obGfx(o);
+        obPriority(a1) = 5;
+        obActWid(a1)   = 16 / 2;
+        obColType(a1)  = (uint8_t)(col_16x16 | col_special);
+        d2 = (int16_t)(d2 + d5);
+        obX(a1) = d2;
+        obY(a1) = obY(o);
+        obStatus(a1) = obStatus(o);
+        obRender(a1) = obStatus(o);
+        obFrame(a1)  = 8;
+        cat_parent(a1) = (uint32_t)Object_GetIndex(a2);
+        cat_segmentpos(a1) = d4;
+        d4 = (uint8_t)(d4 + 4);
+        a2 = a1;             /* next segment's parent is this one */
+
+        if (--loop == -1) break;
+    }
+
+    cat_waittime(o) = 8 - 1;
+    cat_segmentpos(o) = 0;
+}
+
+/* Cat_Undulate — Cat_Head .wait */
+static void Cat_Undulate(uint8_t *o) {
+    uint8_t was_set;
+
+    cat_waittime(o)--;
+    if ((int8_t)cat_waittime(o) >= 0) return;
+
+    /* .move */
+    ob2ndRout(o) += 2;
+    cat_waittime(o) = 17 - 1;
+    obVelX(o) = (int16_t)-0xC0;
+    obInertia(o) = 0x40;
+
+    /* bchg #4,cat_mode ; bne.s .updateHeadSprite.
+       bne branches if the OLD bit was set (Z=0). */
+    was_set = cat_mode(o) & 0x10;
+    cat_mode(o) ^= 0x10;
+    if (!was_set) {
+        obVelX(o) = 0;
+        obInertia(o) = (int16_t)(-obInertia(o));
+    }
+    /* .updateHeadSprite */
+    cat_mode(o) |= 0x80;
+}
+
+/* Cat_Floor — Cat_Head .move */
+static void Cat_Floor(uint8_t *o) {
+    int32_t d2, d3;
+    int16_t d0, old_x, dist, angle;
+    uint8_t d0b;
+
+    cat_waittime(o)--;
+    if ((int8_t)cat_waittime(o) < 0) {
+        /* .undulateNext */
+        ob2ndRout(o) -= 2;
+        cat_waittime(o) = 8 - 1;
+        obVelX(o) = 0;
+        obInertia(o) = 0;                  /* REV01 */
+        return;
+    }
+
+    /* REV01: skip all horizontal work when head isn't moving */
+    if (obVelX(o) == 0) return;
+
+    d2 = ((uint32_t)obX(o) << 16) | (uint16_t)obSubpixelX(o);
+    d3 = d2;                                /* backup of X before update */
+    d0 = obVelX(o);
+    if (obStatus(o) & 1) d0 = (int16_t)-d0;
+    d2 += ((int32_t)d0) << 8;
+    obX(o) = (int16_t)((uint32_t)d2 >> 16);
+    obSubpixelX(o) = (int16_t)(d2 & 0xFFFF);
+
+    old_x = (int16_t)((uint32_t)d3 >> 16);
+    if (old_x == obX(o)) return;            /* didn't move this frame */
+
+    ObjFloorDist(o, &dist, &angle);
+    if (dist < -8 || dist >= 0x0C) {
+        /* .ledgeHit */
+        d0b = cat_segmentpos(o);
+        cat_floormap(o)[d0b] = 0x80;
+        obSubpixelX(o) = (int16_t)(-obSubpixelX(o));
+        if (obSubpixelX(o) != 0 && (obStatus(o) & 1)) {
+            obX(o) = (int16_t)(obX(o) - 1);
+            cat_segmentpos(o) = (uint8_t)(cat_segmentpos(o) + 1);
+            cat_floormap(o)[cat_segmentpos(o) & 0x0F] = 0;
+        }
+        /* .faceLeft */
+        obStatus(o) ^= 1;
+        obRender(o) = obStatus(o);
+        cat_segmentpos(o) = (uint8_t)((cat_segmentpos(o) + 1) & 0x0F);
+        return;
+    }
+
+    /* Align to floor + record height */
+    obY(o) = (int16_t)(obY(o) + dist);
+    d0b = cat_segmentpos(o);
+    cat_segmentpos(o) = (uint8_t)((cat_segmentpos(o) + 1) & 0x0F);
+    cat_floormap(o)[d0b] = (uint8_t)dist;
+}
+
+/* Cat_Head — routine 2 */
+static void Cat_Head(uint8_t *o) {
+    uint8_t d0, d1, idx, frame, mask;
+
+    if ((int8_t)obStatus(o) < 0) {
+        Cat_FragmentateBody(o);
+        return;
+    }
+
+    d0 = ob2ndRout(o);
+    if (d0 == 0)      Cat_Undulate(o);
+    else if (d0 == 2) Cat_Floor(o);
+
+    d1 = cat_mode(o);
+    if ((int8_t)d1 >= 0) goto display;
+
+    /* Animation update (special non-standard script) */
+    idx = obAngle(o) & 0x7F;
+    obAngle(o) = (uint8_t)(obAngle(o) + 4);
+    frame = Ani_Cat[idx];
+    if ((int8_t)frame < 0) {
+        cat_mode(o) &= (uint8_t)~0x80;      /* disable animation */
+        goto display;
+    }
+    mask = d1 & 0x10;                        /* mouth open bit adds $10 to frame */
+    frame = (uint8_t)(frame + mask);
+    obFrame(o) = frame;
+
+display:
+    if (OutOfRange(o, -1)) {
+        Cat_Despawn(o);
+        return;
+    }
+    DisplaySprite(o);
+}
+
+/* Cat_BodySeg1 — routines 4, 8 */
+static void Cat_BodySeg1(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)cat_parent(o));
+    int16_t d0, old_x, dist, angle;
+    int32_t d2, d3;
+    uint8_t d0b, d1b;
+
+    if ((int8_t)obStatus(o) < 0) {
+        Cat_FragmentateBody_NotifyHead(o);
+        return;
+    }
+
+    cat_mode(o) = cat_mode(a1);
+    ob2ndRout(o) = ob2ndRout(a1);
+    if (ob2ndRout(o) == 0) goto chk_broken;
+
+    obInertia(o) = obInertia(a1);
+    d0 = obVelX(a1);
+    /* REV01: add self's inertia (was parent's in REV00) */
+    d0 = (int16_t)(d0 + obInertia(o));
+    obVelX(o) = d0;
+
+    d2 = ((uint32_t)obX(o) << 16) | (uint16_t)obSubpixelX(o);
+    d3 = d2;
+    d0 = obVelX(o);
+    if (obStatus(o) & 1) d0 = (int16_t)-d0;
+    d2 += ((int32_t)d0) << 8;
+    obX(o) = (int16_t)((uint32_t)d2 >> 16);
+    obSubpixelX(o) = (int16_t)(d2 & 0xFFFF);
+
+    old_x = (int16_t)((uint32_t)d3 >> 16);
+    if (old_x == obX(o)) goto chk_broken;
+
+    d0b = cat_segmentpos(o);
+    d1b = cat_floormap(a1)[d0b];
+    if (d1b == 0x80) {
+        /* Wall/drop ahead: mirror subpixel handling of REV01 */
+        cat_floormap(o)[d0b] = d1b;
+        obSubpixelX(o) = (int16_t)(-obSubpixelX(o));
+        if (obSubpixelX(o) != 0 && (obStatus(o) & 1) && obVelX(o) == (int16_t)-0xC0) {
+            obX(o) = (int16_t)(obX(o) - 1);
+            cat_segmentpos(o) = (uint8_t)(cat_segmentpos(o) + 1);
+            cat_floormap(o)[cat_segmentpos(o) & 0x0F] = 0;
+        }
+        /* .faceLeft */
+        obStatus(o) ^= 1;
+        obRender(o) = obStatus(o);
+        cat_segmentpos(o) = (uint8_t)((cat_segmentpos(o) + 1) & 0x0F);
+        goto chk_broken;
+    }
+
+    /* .alignToFloor */
+    obY(o) = (int16_t)(obY(o) + (int8_t)d1b);
+    cat_segmentpos(o) = (uint8_t)((cat_segmentpos(o) + 1) & 0x0F);
+    cat_floormap(o)[d0b] = d1b;
+
+chk_broken:
+    if (obRoutine(a1) == 0x0C) {
+        Cat_FragmentateBody_NotifyHead(o);
+        return;
+    }
+    if (obID(a1) == id_ExplosionItem) goto delete_self;
+    if (obRoutine(a1) == 0x0A)         goto delete_self;
+
+    DisplaySprite(o);
+    return;
+
+delete_self:
+    obRoutine(o) = 0x0A;
+    /* FixBugs=0: fall through and display this frame */
+    DisplaySprite(o);
+}
+
+/* Cat_BodySeg2 — routine 6 */
+static void Cat_BodySeg2(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)cat_parent(o));
+    uint8_t d0, frame;
+
+    cat_mode(o) = cat_mode(a1);
+    if ((int8_t)cat_mode(o) >= 0) {
+        Cat_BodySeg1(o);
+        return;
+    }
+
+    /* Animation update (special: skips $FF bytes 4 ahead) */
+    d0 = obAngle(o) & 0x7F;
+    obAngle(o) = (uint8_t)(obAngle(o) + 4);
+    if ((int8_t)Ani_Cat[(d0 + 4) & 0x7F] < 0) {
+        obAngle(o) = (uint8_t)(obAngle(o) + 4);   /* skip another step */
+    }
+    frame = Ani_Cat[d0];
+    frame = (uint8_t)(frame + 8);                 /* body frames start at +8 */
+    obFrame(o) = frame;
+
+    Cat_BodySeg1(o);
+}
+
+/* Cat_FragmentateBody_NotifyHead — set parent's broken flag, then fragment self */
+static void Cat_FragmentateBody_NotifyHead(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)cat_parent(o));
+    obStatus(a1) |= 0x80;                         /* bset #7 */
+    Cat_FragmentateBody(o);
+}
+
+/* Cat_FragmentateBody — Cat_FragmentateBody:
+   X-speed is picked by obRoutine: 2→-0x200, 4→-0x180, 6→+0x180, 8→+0x200
+   (inverted by X-flip). Launches upward at -$400. */
+static void Cat_FragmentateBody(uint8_t *o) {
+    uint8_t r = obRoutine(o);
+    int16_t d0 = Cat_FragSpeed[(r - 2) / 2];
+    if (obStatus(o) & 1) d0 = (int16_t)-d0;
+    obVelX(o) = d0;
+    obVelY(o) = (int16_t)-0x400;
+    obRoutine(o) = 0x0C;
+    obFrame(o) &= 0xF8;                           /* reset to frame 0 per segment */
+    /* ASM falls through to Cat_Fragment */
+    Cat_Fragment(o);
+}
+
+/* Cat_Fragment — routine $C: bounce and eventually despawn */
+static void Cat_Fragment(uint8_t *o) {
+    int16_t dist, angle;
+
+    ObjectFall(o);
+    if ((int16_t)obVelY(o) >= 0) {
+        ObjFloorDist(o, &dist, &angle);
+        if (dist < 0) {
+            obY(o) = (int16_t)(obY(o) + dist);
+            obVelY(o) = (int16_t)-0x400;          /* bounce */
+        }
+    }
+    if ((int8_t)obRender(o) >= 0) {               /* offscreen? */
+        Cat_Despawn(o);
+        return;
+    }
+    DisplaySprite(o);
+}
+
+/* Caterkiller dispatcher — Cat_Index */
+static void Caterkiller_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0x00: Cat_Main(o);     break;
+        case 0x02: Cat_Head(o);     break;
+        case 0x04: Cat_BodySeg1(o); break;
+        case 0x06: Cat_BodySeg2(o); break;
+        case 0x08: Cat_BodySeg1(o); break;
+        case 0x0A: Cat_Delete(o);   break;
+        case 0x0C: Cat_Fragment(o); break;
+    }
+}
+/* ===========================================================================
+ *  Object 13 — Lava Maker (MZ, SLZ)
+ *  Object 14 — Lava Ball   (MZ, SLZ)
+ *  Ported verbatim from _incObj/13, 14 MZ, SLZ Fire Balls and Maker.asm
+ *  (REV01, FixBugs=0).
+ *
+ *  LavaMaker fields:
+ *    obDelayAni ($1C, byte): firing interval, loaded from LavaM_Rates
+ *    obTimeFrame($1B, byte): countdown to next spawn
+ *    obSubtype upper nibble : index into LavaM_Rates
+ *    obSubtype lower nibble : copied to the spawned lava ball
+ *
+ *  LavaBall fields:
+ *    lball_fromboss = objoff_29 (byte): set by MZ boss, bumps obPriority by 2
+ *    lball_origY    = objoff_30 (word): original Y for the rise-and-fall types
+ * =========================================================================== */
+
+#define lball_fromboss(o) (*(uint8_t *)((uint8_t *)(o) + 0x29))
+#define lball_origY(o)    (*(int16_t *)((uint8_t *)(o) + 0x30))
+
+/* Firing interval per subtype upper-nibble. */
+static const uint8_t LavaM_Rates[6] = { 30, 60, 90, 120, 150, 180 };
+
+/* Initial vertical velocity per subtype. Types 6/7 copy it to velX. */
+static const int16_t LBall_Speeds[9] = {
+    -0x400, -0x500, -0x600, -0x700,
+    -0x200,  0x200,
+    -0x200,  0x200,
+         0,
+};
+
+static void LavaM_Main(uint8_t *o);
+static void LavaM_MakeLava(uint8_t *o);
+static void LBall_Main(uint8_t *o);
+static void LBall_Action(uint8_t *o);
+static void LBall_Delete(uint8_t *o);
+static void LBall_RiseAndFall(uint8_t *o);
+static void LBall_Up(uint8_t *o);
+static void LBall_Down(uint8_t *o);
+static void LBall_Left(uint8_t *o);
+static void LBall_Right(uint8_t *o);
+static void LBall_DoNothing(uint8_t *o);
+
+/* Local helper: exact port of _incObj/sub ObjFloorDist.asm ObjHitCeiling.
+   Returns d1 (distance to ceiling; negative = hit). */
+static int16_t LBall_ObjHitCeiling(uint8_t *o) {
+    int16_t d1;
+    int16_t y = (int16_t)((obY(o) - (int8_t)obHeight(o)) ^ 0xF);
+    int16_t x = obX(o);
+    FindFloor(y, x, 0x0E, 0x1000, -0x10, &v_anglebuffer, o, &d1);
+    return d1;
+}
+
+/* --- LavaM_Main — routine 0 --- */
+static void LavaM_Main(uint8_t *o) {
+    obRoutine(o) += 2;                       /* → LavaM_MakeLava */
+
+    uint8_t d0 = obSubtype(o) >> 4;
+    if (d0 > 5) d0 = 5;                      /* ASM reads OOB; clamp for safety */
+    obDelayAni(o)  = LavaM_Rates[d0];
+    obTimeFrame(o) = obDelayAni(o);
+    obSubtype(o)  &= 0x0F;                   /* clear upper subtype digit */
+
+    /* ASM falls through into LavaM_MakeLava on the first frame */
+    LavaM_MakeLava(o);
+}
+
+/* --- LavaM_MakeLava — routine 2 --- */
+static void LavaM_MakeLava(uint8_t *o) {
+    obTimeFrame(o)--;
+    if (obTimeFrame(o) != 0) return;
+    obTimeFrame(o) = obDelayAni(o);
+
+    /* ChkObjectVisible: maker has no obActWid/obHeight set (both 0), so the
+       check reduces to "is (obX, obY) inside the visible window?". */
+    {
+        int16_t sx = (int16_t)(obX(o) - (int16_t)v_screenposx);
+        int16_t sy = (int16_t)(obY(o) - (int16_t)v_screenposy);
+        if (sx < 0 || sx >= 320) return;
+        if (sy < 0 || sy >= 224) return;
+    }
+
+    uint8_t *a1 = (uint8_t *)FindFreeObj();
+    if (!a1) return;
+
+    obID(a1)      = id_LavaBall;
+    obX(a1)       = obX(o);
+    obY(a1)       = obY(o);
+    obSubtype(a1) = obSubtype(o);
+}
+
+/* --- LavaMaker dispatcher ---
+   ASM (FixBugs=0): jsr LavaM_Index ; bra.w LBall_ChkDel.
+   LBall_ChkDel (FixBugs=0) does out_of_range → DeleteObject, then rts.
+   No DisplaySprite anywhere: LavaMaker is invisible. */
+static void LavaMaker_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: LavaM_Main(o);     break;
+        case 2: LavaM_MakeLava(o); break;
+    }
+    if (OutOfRange(o, -1)) {
+        DeleteObject(o);
+    }
+}
+
+/* --- LBall_Main — routine 0 --- */
+static void LBall_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                  /* → LBall_Action */
+    obHeight(o) = 16 / 2;
+    obWidth(o)  = 16 / 2;
+    obMap(o)    = (uint32_t)(uintptr_t)Map_Fire;
+
+    obGfx(o) = (uint16_t)ArtTile_MZ_Fireball;
+    if ((uint8_t)v_zone == id_SLZ) {
+        obGfx(o) = (uint16_t)ArtTile_SLZ_Fireball;
+    }
+
+    obRender(o)   = sprite_cam_field;
+    obPriority(o) = 3;
+    obColType(o)  = (uint8_t)(col_16x16 | col_hurt);
+    lball_origY(o) = obY(o);
+
+    if (lball_fromboss(o) != 0) {
+        obPriority(o) += 2;                              /* lower priority */
+    }
+
+    {
+        uint8_t d0 = obSubtype(o);
+        if (d0 > 8) d0 = 8;                              /* clamp for safety */
+        obVelY(o) = LBall_Speeds[d0];
+    }
+    obActWid(o) = 16 / 2;
+
+    if (obSubtype(o) >= 6) {
+        /* Horizontal ball */
+        obActWid(o) = 32 / 2;
+        obAnim(o)   = 2;
+        obVelX(o)   = obVelY(o);
+        obVelY(o)   = 0;
+    }
+
+    Sound_Queue(sfx_Fireball, false);
+
+    /* ASM falls through into LBall_Action on the first frame */
+    LBall_Action(o);
+}
+
+/* --- LBall_RiseAndFall — subtypes 0..3 --- */
+static void LBall_RiseAndFall(uint8_t *o) {
+    int16_t d0;
+
+    obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+
+    d0 = lball_origY(o);
+    /* cmp.w obY(a0),d0 ; bhs.s .checkYFlip — unsigned compare */
+    if ((uint16_t)d0 < (uint16_t)obY(o)) {
+        /* Fell back to (or past) original Y → schedule delete next frame */
+        obRoutine(o) += 2;
+    }
+
+    /* .checkYFlip */
+    obStatus(o) &= ~(1 << 1);              /* face down */
+    if ((int16_t)obVelY(o) < 0) {
+        obStatus(o) |= (1 << 1);           /* face up */
+    }
+}
+
+/* --- LBall_Up — subtype 4 --- */
+static void LBall_Up(uint8_t *o) {
+    obStatus(o) |= (1 << 1);               /* face up */
+
+    if (LBall_ObjHitCeiling(o) < 0) {
+        obSubtype(o) = 8;                  /* → LBall_DoNothing */
+        obAnim(o)    = 1;                  /* wall-collide (vertical) */
+        obVelY(o)    = 0;
+    }
+}
+
+/* --- LBall_Down — subtype 5 --- */
+static void LBall_Down(uint8_t *o) {
+    int16_t d1, angle;
+
+    obStatus(o) &= ~(1 << 1);              /* face down */
+
+    ObjFloorDist(o, &d1, &angle);
+    if (d1 < 0) {
+        obSubtype(o) = 8;
+        obAnim(o)    = 1;
+        obVelY(o)    = 0;
+    }
+}
+
+/* --- LBall_Left — subtype 6 --- */
+static void LBall_Left(uint8_t *o) {
+    obStatus(o) |= (1 << 0);               /* face left */
+
+    if (PushB_ObjHitWallLeft(o, -8) < 0) {
+        obSubtype(o) = 8;
+        obAnim(o)    = 3;                  /* wall-collide (horizontal) */
+        obVelX(o)    = 0;
+    }
+}
+
+/* --- LBall_Right — subtype 7 --- */
+static void LBall_Right(uint8_t *o) {
+    obStatus(o) &= ~(1 << 0);              /* face right */
+
+    if (PushB_ObjHitWallRight(o, 8) < 0) {
+        obSubtype(o) = 8;
+        obAnim(o)    = 3;
+        obVelX(o)    = 0;
+    }
+}
+
+/* --- LBall_DoNothing — subtype 8 --- */
+static void LBall_DoNothing(uint8_t *o) { (void)o; }
+
+/* --- LBall_Action — routine 2 --- */
+static void LBall_Action(uint8_t *o) {
+    switch (obSubtype(o)) {
+        case 0: case 1: case 2: case 3:
+            LBall_RiseAndFall(o); break;
+        case 4: LBall_Up(o);          break;
+        case 5: LBall_Down(o);        break;
+        case 6: LBall_Left(o);        break;
+        case 7: LBall_Right(o);       break;
+        default: LBall_DoNothing(o);  break;   /* subtype 8 and any OOB value */
+    }
+
+    SpeedToPos(o);
+    if (Ani_Fire) AnimateSprite(o, Ani_Fire);
+
+    /* LBall_ChkDel (FixBugs=0): only the out_of_range check, no DisplaySprite */
+    if (OutOfRange(o, -1)) {
+        DeleteObject(o);
+    }
+}
+
+/* --- LBall_Delete — routine 4 --- */
+static void LBall_Delete(uint8_t *o) {
+    DeleteObject(o);
+}
+
+/* --- LavaBall dispatcher ---
+   ASM (FixBugs=0): jsr LBall_Index ; bra.w DisplaySprite.
+   DisplaySprite runs even when the routine has just deleted the object; the
+   sprite queue entry is harmless because BuildSprites skips obID == 0. */
+static void LavaBall_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: LBall_Main(o);   break;
+        case 2: LBall_Action(o); break;
+        case 4: LBall_Delete(o); break;
+    }
+    DisplaySprite(o);
+}
+
+/* ===========================================================================
+ *  Object 4C — Lava Geyser Maker  (MZ)
+ *  Object 4D — Lava Geyser / Lavafall (MZ)
+ *  Ported verbatim from _incObj/4C, 4D MZ Lava Geyser and Maker.asm
+ *  (REV01, FixBugs=0).
+ *
+ *  GeyserMaker fields:
+ *    gmake_timer  = objoff_32 (word): current countdown
+ *    gmake_time   = objoff_34 (word): reload value
+ *    gmake_parent = objoff_3C (4 bytes): parent PushBlock SLOT INDEX
+ *                                         (ASM stored a pointer)
+ *
+ *  LavaGeyser fields:
+ *    geyser_origY = objoff_30 (word): initial Y
+ *    gmake_parent = objoff_3C: parent SLOT INDEX (top tip for the wall,
+ *                              maker for the bottom tip of lavafall)
+ *
+ *  Layout of the group (see .configureLavaObjects):
+ *    top tip  → spawned by maker (subtype 0 in MZ1, 1 for lavafall)
+ *    wall     → 2nd object spawned by Geyser_Main; routine 4 (BigLavaWall);
+ *               follows the top tip's Y + $60
+ *    bottom   → only for lavafall: routine 2 (Action); follows top tip's Y+$100
+ * =========================================================================== */
+
+#define gmake_timer(o)   (*(int16_t *)((uint8_t *)(o) + 0x32))
+#define gmake_time(o)    (*(int16_t *)((uint8_t *)(o) + 0x34))
+#define gmake_parent(o)  (*(uint32_t *)((uint8_t *)(o) + 0x3C))
+
+#define geyser_origY(o)  (*(int16_t *)((uint8_t *)(o) + 0x30))
+
+static const int16_t Geyser_Speeds[2] = { -0x500, 0 };
+
+static void GMake_Main(uint8_t *o);
+static void GMake_Wait(uint8_t *o);
+static void GMake_ChkType(uint8_t *o);
+static void GMake_MakeLava(uint8_t *o);
+static void GMake_Display(uint8_t *o);
+static void GMake_Delete(uint8_t *o);
+
+static void Geyser_Main(uint8_t *o);
+static void Geyser_Action(uint8_t *o);
+static void Geyser_BigLavaWall(uint8_t *o);
+static void Geyser_Delete(uint8_t *o);
+
+/* --- Geyser_MakeChild: port del .makeLava interno.
+       Setup de un nuevo LavaGeyser hijo copiando X/Y/subtype de a0.
+       FixBugs=0: obActWid = 64/2 (el wall "desaparece" un poco antes de
+       salir de pantalla — bug replicado). */
+static void Geyser_MakeChild(uint8_t *a1, uint8_t *a0) {
+    obID(a1)       = id_LavaGeyser;
+    obMap(a1)      = (uint32_t)(uintptr_t)Map_Geyser;
+    obGfx(a1)      = (uint16_t)(ArtTile_MZ_Lava | Tile_Pal4);
+    obRender(a1)   = sprite_cam_field;
+    obActWid(a1)   = 64 / 2;
+    obX(a1)        = obX(a0);
+    obY(a1)        = obY(a0);
+    obSubtype(a1)  = obSubtype(a0);
+    obPriority(a1) = 1;
+
+    obAnim(a1) = 5;                        /* ".bubble4" (geyser) */
+    if (obSubtype(a0) != 0) {
+        obAnim(a1) = 2;                    /* ".end" (lavafall) */
+    }
+}
+
+/* ===========================================================================
+ *  GeyserMaker (Object 4C)
+ * =========================================================================== */
+
+static void GMake_Main(uint8_t *o) {
+    obRoutine(o) += 2;
+    obMap(o)    = (uint32_t)(uintptr_t)Map_Geyser;
+    obGfx(o)    = (uint16_t)(ArtTile_MZ_Lava | Tile_Pal4 | Tile_Prio);
+    obRender(o) = sprite_cam_field;
+    obPriority(o) = 1;
+    obActWid(o)   = 112 / 2;
+    gmake_time(o) = 120;
+    /* ASM falls through to GMake_Wait on the same frame. */
+    GMake_Wait(o);
+}
+
+static void GMake_Wait(uint8_t *o) {
+    gmake_timer(o)--;
+    if (gmake_timer(o) >= 0) return;
+
+    gmake_timer(o) = gmake_time(o);
+
+    int16_t son_y   = obY(RAM_ADDR(v_player));
+    int16_t maker_y = obY(o);
+    /* cmp.w d1,d0 / bhs → skip when sonY >= makerY (Sonic below) */
+    if ((uint16_t)son_y >= (uint16_t)maker_y) return;
+    int16_t ceiling = (int16_t)(maker_y - 0x170);
+    /* cmp.w d1,d0 / blo → skip when sonY < ceiling (too far above) */
+    if ((uint16_t)son_y < (uint16_t)ceiling) return;
+
+    obRoutine(o) += 2;                     /* → GMake_ChkType (4) */
+}
+
+static void GMake_ChkType(uint8_t *o) {
+    if (obSubtype(o) == 0) {
+        /* Geyser: falls through to Display, routine STAYS at 4 until the
+           bubbling animation (Ani_Geyser) finishes and advances it via
+           afRoutine ($FC) to routine 6. */
+        GMake_Display(o);
+        return;
+    }
+    obRoutine(o) += 2;                     /* lavafall → GMake_MakeLava (6) */
+}
+
+static void GMake_MakeLava(uint8_t *o) {
+    obRoutine(o) += 2;                     /* → GMake_Display (8) */
+
+    uint8_t *a1 = (uint8_t *)FindFreeObj();
+    if (a1 != NULL) {
+        obID(a1)       = id_LavaGeyser;
+        obX(a1)        = obX(o);
+        obY(a1)        = obY(o);
+        obSubtype(a1)  = obSubtype(o);
+        gmake_parent(a1) = (uint32_t)Object_GetIndex(o);
+    }
+
+    obAnim(o) = 1;                         /* ".bubble2" */
+    if (obSubtype(o) != 0) {
+        obAnim(o) = 4;                     /* ".blank" for lavafall */
+        GMake_Display(o);
+        return;
+    }
+
+    /* .shootUpPushBlock: only for subtype 0.
+       gmake_parent(maker) points to the PushBlock that spawned this maker. */
+    {
+        uint8_t *block = (uint8_t *)Object_GetSlot((int)gmake_parent(o));
+        obStatus(block) |= (1 << 1);       /* bset #1 */
+        obVelY(block) = (int16_t)-0x580;
+    }
+
+    GMake_Display(o);
+}
+
+static void GMake_Display(uint8_t *o) {
+    if (Ani_Geyser) AnimateSprite(o, Ani_Geyser);
+    DisplaySprite(o);
+}
+
+static void GMake_Delete(uint8_t *o) {
+    obAnim(o)    = 0;
+    obRoutine(o) = 2;                      /* → GMake_Wait */
+    if (obSubtype(o) == 0) {
+        DeleteObject(o);                   /* geyser self-deletes after one shot */
+    }
+    /* lavafall stays alive indefinitely */
+}
+
+/* Dispatcher — FixBugs=0: jsr routine, then Geyser_ChkDel
+   (out_of_range → DeleteObject, no DisplaySprite at dispatcher level). */
+static void GeyserMaker_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0x00: GMake_Main(o);     break;
+        case 0x02: GMake_Wait(o);     break;
+        case 0x04: GMake_ChkType(o);  break;
+        case 0x06: GMake_MakeLava(o); break;
+        case 0x08: GMake_Display(o);  break;
+        case 0x0A: GMake_Delete(o);   break;
+    }
+    if (OutOfRange(o, -1)) {
+        DeleteObject(o);
+    }
+}
+
+/* ===========================================================================
+ *  LavaGeyser (Object 4D)
+ * =========================================================================== */
+
+static void Geyser_Main(uint8_t *o) {
+    obRoutine(o) += 2;
+    geyser_origY(o) = obY(o);
+
+    if (obSubtype(o) != 0) {
+        /* Lavafall sits $250px above the maker's Y */
+        obY(o) = (int16_t)(obY(o) - 0x250);
+    }
+
+    {
+        uint8_t s = obSubtype(o);
+        if (s > 1) s = 1;                  /* clamp (ASM reads OOB for safety) */
+        obVelY(o) = Geyser_Speeds[s];
+    }
+
+    uint8_t *tip = o;
+
+    /* bsr .makeLava: a1 = a0 (top tip).
+       dbf d1 (1 → 0) loops once: FindNextFreeObj + .makeLava → wall. */
+    Geyser_MakeChild(tip, tip);
+    uint8_t *wall = (uint8_t *)FindNextFreeObj(tip);
+    if (wall != NULL) {
+        Geyser_MakeChild(wall, tip);
+    }
+
+    /* .configureLavaObjects: a0 = top tip, a1 = wall */
+    if (wall != NULL) {
+        obY(wall)           = (int16_t)(obY(wall) + 0x60);
+        geyser_origY(wall)  = (int16_t)(geyser_origY(tip) + 0x60);
+        obColType(wall)     = (uint8_t)(col_64x224 | col_hurt);
+        obHeight(wall)      = 256 / 2;
+        obRender(wall)     |= sprite_customheight;
+        obRoutine(wall)    += 4;           /* → Geyser_BigLavaWall */
+        gmake_parent(wall)  = (uint32_t)Object_GetIndex(tip);
+    }
+
+    /* Lavafall only: third object (bottom tip) */
+    if (obSubtype(tip) != 0) {
+        uint8_t *after   = (wall != NULL) ? wall : tip;
+        uint8_t *bottom  = (uint8_t *)FindNextFreeObj(after);
+        if (bottom != NULL) {
+            Geyser_MakeChild(bottom, tip);
+            obRoutine(bottom) += 2;        /* → Geyser_Action (2) */
+            
+            /* The original disassembly used this line, but it causes issues in the port; 
+               commenting it out fixes the problem. 
+               However, the visual fidelity isn't quite the same, though the difference 
+               is barely noticeable unless you examine it frame by frame. */
+            
+            //obGfx(bottom)     |= 0x10;     /* bset #4,obGfx (custom height) */
+
+            obY(bottom)        = (int16_t)(obY(bottom) + 0x100);
+            obPriority(bottom) = 0;
+            geyser_origY(bottom) = geyser_origY(tip);
+            /* ASM: move.l gmake_parent(a0),gmake_parent(a1)
+               copies the TIP's parent (= maker slot) into the bottom tip.
+               The comment says "top tip" but the code copies the parent. */
+            gmake_parent(bottom) = gmake_parent(tip);
+            obSubtype(tip) = 0;            /* top tip is now a plain geyser */
+        }
+    }
+
+    Sound_Queue(sfx_Burning, false);
+
+    /* ASM falls through into Geyser_Action on the same frame. */
+    Geyser_Action(o);
+}
+
+static void Geyser_Action(uint8_t *o) {
+    uint8_t s = obSubtype(o);
+    if (s > 1) s = 1;
+
+    if (s == 0) {
+        /* Geyser_Type00 */
+        obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+        if ((uint16_t)geyser_origY(o) < (uint16_t)obY(o)) {
+            obRoutine(o) += 4;             /* → Geyser_Delete */
+            uint8_t *parent = (uint8_t *)Object_GetSlot((int)gmake_parent(o));
+            obAnim(parent) = 3;            /* tell parent (maker) to show ".bubble3" */
+        }
+    } else {
+        /* Geyser_Type01 */
+        obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+        if ((uint16_t)geyser_origY(o) < (uint16_t)obY(o)) {
+            obRoutine(o) += 4;
+            uint8_t *parent = (uint8_t *)Object_GetSlot((int)gmake_parent(o));
+            obAnim(parent) = 1;            /* ".bubble1" */
+        }
+    }
+
+    SpeedToPos(o);
+    if (Ani_Geyser) AnimateSprite(o, Ani_Geyser);
+
+    /* Geyser_ChkDel (FixBugs=0) */
+    if (OutOfRange(o, -1)) {
+        DeleteObject(o);
+    }
+}
+
+static void Geyser_BigLavaWall(uint8_t *o) {
+    uint8_t *parent = (uint8_t *)Object_GetSlot((int)gmake_parent(o));
+    if (obRoutine(parent) == 6) {
+        DeleteObject(o);                   /* parent marked for delete → die too */
+        return;
+    }
+
+    int16_t d0 = (int16_t)(obY(parent) + 0x60);
+    obY(o) = d0;
+
+    d0 = (int16_t)(d0 - geyser_origY(o));
+    d0 = (int16_t)(-d0);                   /* neg.w d0 */
+
+    int16_t d1 = 8;                        /* medium frame base */
+    if (d0 < 0x40) {
+        d1 = 0x0B;                         /* short */
+    }
+    if (d0 > 0x80) {
+        d1 = 0x0E;                         /* long */
+    }
+
+    obTimeFrame(o)--;
+    if ((int8_t)obTimeFrame(o) < 0) {
+        obTimeFrame(o) = 8 - 1;
+        obAniFrame(o)++;
+        if (obAniFrame(o) >= 2) {
+            obAniFrame(o) = 0;
+        }
+    }
+
+    d0 = (int16_t)(int8_t)obAniFrame(o);
+    d0 = (int16_t)((int8_t)d1 + (int8_t)d0);
+    obFrame(o) = (uint8_t)d0;
+
+    /* Geyser_ChkDel (FixBugs=0) */
+    if (OutOfRange(o, -1)) {
+        DeleteObject(o);
+    }
+}
+
+static void Geyser_Delete(uint8_t *o) {
+    DeleteObject(o);
+}
+
+/* Dispatcher — FixBugs=0: jsr routine, then bra DisplaySprite. */
+static void LavaGeyser_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: Geyser_Main(o);        break;
+        case 2: Geyser_Action(o);      break;
+        case 4: Geyser_BigLavaWall(o); break;
+        case 6: Geyser_Delete(o);      break;
+    }
+    DisplaySprite(o);
+}
+
+/* ===========================================================================
+ *  Object 4E — Wall of Lava (MZ Act 2)
+ *  Ported verbatim from _incObj/4E MZ Wall of Lava.asm (REV01, FixBugs=0).
+ *
+ *  lwall_flag   = objoff_36 (byte): set when the lava wall is moving
+ *  lwall_parent = objoff_3C (4 bytes): parent SLOT INDEX
+ *                                     (ASM stored an address)
+ *
+ *  The object is created as a group: the root slot becomes the parent
+ *  (routine 4, "ChkSonic") and a second slot is allocated as the child
+ *  (routine 6, "BackChild"). The child mirrors the parent's X minus 128.
+ *
+ *  MZ2 hardcodes the stop coordinate $6A0; the wall stops moving when it
+ *  reaches that X.
+ * =========================================================================== */
+
+#define lwall_flag(o)   (*(uint8_t  *)((uint8_t *)(o) + 0x36))
+#define lwall_parent(o) (*(uint32_t *)((uint8_t *)(o) + 0x3C))
+
+static void LWall_Main(uint8_t *o);
+static void LWall_Solid(uint8_t *o);
+static void LWall_ChkSonic(uint8_t *o);
+static void LWall_BackChild(uint8_t *o);
+static void LWall_Delete(uint8_t *o);
+
+/* --- LWall_Main — routine 0 --- */
+static void LWall_Main(uint8_t *o) {
+    obRoutine(o) += 4;              /* → LWall_ChkSonic (4) */
+
+    uint8_t *a1 = o;
+    int first_iter = 1;
+
+    /* ASM: moveq #2-1,d1 ; bra.s .make ; .loop: FindNextFreeObj ;
+       bne.s .next ; .make: setup ; .next: dbf d1,.loop
+       The first iteration reuses this slot (no FindNextFreeObj); the
+       second allocates a fresh slot for the child. If FindNextFreeObj
+       fails on the second iteration, a1 stays on the parent and the
+       parent's routine gets bumped by 6 (replicating the ASM edge case). */
+    for (int d1 = 2 - 1; d1 >= 0; d1--) {
+        if (!first_iter) {
+            uint8_t *slot = (uint8_t *)FindNextFreeObj(a1);
+            if (!slot) continue;    /* ASM: bne.s .next → skip .make */
+            a1 = slot;
+        }
+        first_iter = 0;
+
+        /* .make */
+        obID(a1)         = id_LavaWall;
+        obMap(a1)        = (uint32_t)(uintptr_t)Map_LWall;
+        obGfx(a1)        = (uint16_t)(ArtTile_MZ_Lava | Tile_Pal4);
+        obRender(a1)     = sprite_cam_field;
+        obActWid(a1)     = 160 / 2;
+        obX(a1)          = obX(o);
+        obY(a1)          = obY(o);
+        obPriority(a1)   = 1;
+        obAnim(a1)       = 0;
+        obColType(a1)    = (uint8_t)(col_128x64 | col_hurt);
+        lwall_parent(a1) = (uint32_t)Object_GetIndex(o);
+    }
+
+    /* Child gets routine 6 and frame 4. */
+    obRoutine(a1) += 6;             /* → LWall_BackChild (6) */
+    obFrame(a1)   = 4;              /* ".lava_back" */
+
+    /* ASM falls through into LWall_ChkSonic. */
+    LWall_ChkSonic(o);
+}
+
+/* --- LWall_ChkSonic — routine 4 --- */
+static void LWall_ChkSonic(uint8_t *o) {
+    int16_t d0;
+
+    /* Horizontal range check: |sonic_x - lava_x| < 192? */
+    d0 = (int16_t)(obX(RAM_ADDR(v_player)) - obX(o));
+    if (d0 < 0) d0 = (int16_t)(-d0);
+    if ((uint16_t)d0 < 192) {
+        /* Vertical range check: |sonic_y - lava_y| < 96? */
+        d0 = (int16_t)(obY(RAM_ADDR(v_player)) - obY(o));
+        if (d0 < 0) d0 = (int16_t)(-d0);
+        if ((uint16_t)d0 < 96) {
+            lwall_flag(o) = 1;      /* Sonic is close: arm the lava wall */
+            LWall_Solid(o);
+            return;
+        }
+    }
+
+    /* .checkMoveStart */
+    if (lwall_flag(o) != 0) {
+        obVelX(o) = 0x180;          /* start sliding to the right */
+        obRoutine(o) -= 2;          /* → LWall_Solid (2) */
+    }
+    /* ASM falls through to LWall_Solid in both paths. */
+    LWall_Solid(o);
+}
+
+/* --- LWall_Solid — routine 2 --- */
+static void LWall_Solid(uint8_t *o) {
+    /* ASM saves obRoutine to the stack because SolidObject clobbers d0.
+       In C, obRoutine lives in the object struct and SolidObject doesn't
+       touch it, but we replicate the save/restore for fidelity. */
+    uint8_t saved_routine = obRoutine(o);
+
+    {
+        int16_t d1 = (int16_t)(64 / 2 + sonic_solid_width);
+        int16_t d2 = 48 / 2;
+        int16_t d3 = (int16_t)(d2 + 1);   /* stood-on height = initial+1 */
+        int16_t d4 = obX(o);
+        int16_t out_d3 = 0, out_d5 = 0;
+        SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5);
+    }
+
+    obRoutine(o) = saved_routine;
+
+    /* Hardcoded MZ2 stop coordinate: freeze at X = $6A0. */
+    if ((uint16_t)obX(o) == 0x6A0) {
+        obVelX(o) = 0;
+        lwall_flag(o) = 0;
+    }
+
+    /* .animateAndMove */
+    if (Ani_LWall) AnimateSprite(o, Ani_LWall);
+
+    /* Skip SpeedToPos while Sonic is hurt/dying so the wall doesn't slide
+       into him mid-animation. */
+    if ((uint8_t)obRoutine(RAM_ADDR(v_player)) < 4) {
+        SpeedToPos(o);
+    }
+
+    /* FixBugs=0: DisplaySprite BEFORE the out_of_range delete check. */
+    DisplaySprite(o);
+    if (lwall_flag(o) != 0) return;     /* bne.s .show */
+
+    if (OutOfRange(o, -1)) {
+        /* .startDelete
+         * FixBugs=0 does NOT check obRespawnNo != 0 before bclr;
+         * that's the known bug where placement in debug mode can corrupt
+         * an unrelated respawn byte. Replicated verbatim. */
+        uint8_t *a2 = RAM_ADDR(v_objstate);
+        uint8_t d0 = obRespawnNo(o);
+        a2[2 + d0] &= 0x7F;             /* bclr #7,2(a2,d0.w) */
+        obRoutine(o) = 8;               /* → LWall_Delete */
+    }
+}
+
+/* --- LWall_BackChild — routine 6 --- */
+static void LWall_BackChild(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)lwall_parent(o));
+
+    if (obRoutine(a1) == 8) {           /* parent marked for deletion? */
+        LWall_Delete(o);
+        return;
+    }
+
+    obX(o) = (int16_t)(obX(a1) - 128);  /* child is 128 px to the left */
+    DisplaySprite(o);
+}
+
+/* --- LWall_Delete — routine 8 --- */
+static void LWall_Delete(uint8_t *o) {
+    DeleteObject(o);
+}
+
+/* --- Dispatcher Object 4E --- */
+static void LavaWall_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: LWall_Main(o);      break;
+        case 2: LWall_Solid(o);     break;
+        case 4: LWall_ChkSonic(o);  break;
+        case 6: LWall_BackChild(o); break;
+        case 8: LWall_Delete(o);    break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 51 — Smashable Green Block (MZ)
+ *  Ported verbatim from _incObj/51 MZ Smashable Green Block.asm
+ *  (REV01, FixBugs=0).
+ *
+ *  smab_sonani = objoff_32 (byte): backup of Sonic's animation before
+ *                                   SolidObject (which can clobber it)
+ *  smab_combo  = objoff_34 (word): combo score chain cached before
+ *                                   SolidObject (Sonic_ResetOnFloor zeroes
+ *                                   v_itembonus inside SolidObject)
+ *
+ *  Reuses SmashObject() from Object 3C (GHZ Smashable Wall). The parent slot
+ *  is converted into fragment #0, and obID stays id_SmashBlock, so fragments
+ *  are dispatched back into Smab_Fragment via routine 4.
+ * =========================================================================== */
+
+#define smab_sonani(o) (*(uint8_t  *)((uint8_t *)(o) + 0x32))
+#define smab_combo(o)  (*(int16_t  *)((uint8_t *)(o) + 0x34))
+
+static void Smab_Main(uint8_t *o);
+static void Smab_Solid(uint8_t *o);
+static void Smab_Fragment(uint8_t *o);
+
+/* Fragment launch velocities (x, y). Word pairs, indexed by a4+2*n. */
+static const int16_t Smab_Speeds[8] = {
+    -0x200, -0x200,   /* fragment 1 */
+    -0x100, -0x100,   /* fragment 2 */
+     0x200, -0x200,   /* fragment 3 */
+     0x100, -0x100,   /* fragment 4 */
+};
+
+/* Points awarded per block (index = combo count / 2).
+   The 16th and subsequent smashes are hardcoded to 10000 pts. */
+static const uint16_t Smab_Scores[4] = { 10, 20, 50, 100 };
+
+/* --- Smab_Main — routine 0 --- */
+static void Smab_Main(uint8_t *o) {
+    obRoutine(o) += 2;                      /* → Smab_Solid */
+    obMap(o)     = (uint32_t)(uintptr_t)Map_Smab;
+    obGfx(o)     = (uint16_t)(ArtTile_MZ_Block | Tile_Pal3);
+    obRender(o)  = sprite_cam_field;
+    obActWid(o)  = 32 / 2;
+    obPriority(o)= 4;
+
+    /* FixBugs=0: leftover from a copy-paste of Object 3C. Uses subtype as
+       frame ID (0 = two-piece frame, 1 = four-piece, unused). Kept as-is. */
+    obFrame(o)   = obSubtype(o);
+
+    /* ASM falls through to Smab_Solid on the first frame. */
+    Smab_Solid(o);
+}
+
+/* --- Smab_Solid — routine 2 --- */
+static void Smab_Solid(uint8_t *o) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+    int16_t d1;
+    int16_t d2;
+    int16_t d3;
+
+    /* Cache the combo chain before SolidObject (Sonic_ResetOnFloor inside
+       SolidObject would zero v_itembonus if Sonic lands on the block). */
+    smab_combo(o)  = v_itembonus;
+    smab_sonani(o) = obAnim(a1);
+
+    d1 = (int16_t)(32 / 2 + sonic_solid_width);
+    d2 = 32 / 2;
+    d3 = 34 / 2;
+    {
+        int16_t out_d3 = 0, out_d5 = 0;
+        SolidObject(o, d1, d2, d3, obX(o), &out_d3, &out_d5);
+    }
+
+    /* btst #3,obStatus(a0) / bne.s .smash */
+    if (!(obStatus(o) & (1 << 3))) {
+        return;                             /* .return: rts */
+    }
+
+    /* .smash: only smash if Sonic is rolling/jumping */
+    if (smab_sonani(o) != id_Roll) {
+        return;                             /* .return */
+    }
+
+    /* Restore the cached combo chain (Sonic_ResetOnFloor zeroed it). */
+    v_itembonus = smab_combo(o);
+
+    /* Force Sonic to remain rolling after the rebound. */
+    obStatus(a1) |=  (1 << 2);              /* bset #2: rolling flag */
+    obHeight(a1)  = sonic_roll_height;
+    obWidth(a1)   = sonic_roll_width;
+    obAnim(a1)    = id_Roll;
+    obVelY(a1)    = (int16_t)-0x300;        /* bounce up */
+    obStatus(a1) |=  (1 << 1);              /* bset #1: airborne */
+    obStatus(a1) &= ~(1 << 3);              /* bclr #3: not on platform */
+    obRoutine(a1) = 2;                      /* → Sonic_Control */
+    obStatus(o)  &= ~(1 << 3);              /* clear block's stood-on flag */
+    obSolid(o)    = 0;                      /* clear block solidity */
+
+    /* Switch to the four-piece frame for a nicer fragmentation. */
+    obFrame(o) = 1;
+
+    /* Smash into four fragments. d2 (gravity) is the counter-gravity applied
+       to the first fragment when the parent is before Sonic in RAM. */
+    SmashObject(o, Smab_Speeds, 4 - 1, (int16_t)gravity);
+
+    /* Spawn floating points object. */
+    {
+        uint8_t *slot = (uint8_t *)FindFreeObj();
+        if (slot != NULL) {
+            obID(slot) = id_Points;
+            obX(slot)  = obX(o);
+            obY(slot)  = obY(o);
+
+            uint16_t d2b = v_itembonus;              /* old combo */
+            v_itembonus += 2;                        /* increment by 1*2 */
+            if (d2b >= 3 * 2) d2b = 3 * 2;           /* cap index */
+
+            int16_t d0 = (int16_t)Smab_Scores[d2b / 2];
+            if ((uint16_t)v_itembonus >= 16 * 2) {
+                d0 = 1000;
+                d2b = 5 * 2;                         /* frame 5 = 10000 pts */
+            }
+            AddPoints(d0);
+
+            d2b >>= 1;
+            obFrame(slot) = (uint8_t)d2b;
+        }
+    }
+
+    /* ASM falls through into Smab_Fragment. The parent object has been
+       converted into fragment #0 by SmashObject, so calling it here is
+       exactly what the original does. */
+    Smab_Fragment(o);
+}
+
+/* --- Smab_Fragment — routine 4 --- */
+static void Smab_Fragment(uint8_t *o) {
+    SpeedToPos(o);
+    obVelY(o) = (int16_t)(obVelY(o) + gravity);
+
+    /* FixBugs=0: DisplaySprite first, then delete-if-offscreen, then rts.
+       The dispatcher's trailing RememberState (see SmashBlock_Main) will
+       re-queue the fragment on the same frame, exactly as the original. */
+    DisplaySprite(o);
+    if (!(obRender(o) & 0x80)) {
+        DeleteObject(o);
+    }
+}
+
+/* --- Dispatcher Object 51 ---
+ * ASM (FixBugs=0): jsr Smab_Index ; bra.w RememberState.
+ * RememberState runs after every routine, including after Smab_Fragment
+ * (which may have just deleted the object; harmless because RememberState
+ * checks obID == 0 in the sprite queue). */
+static void SmashBlock_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: Smab_Main(o);     break;
+        case 2: Smab_Solid(o);    break;
+        case 4: Smab_Fragment(o); break;
+    }
+    RememberState(obj);
+}
+
+/* ===========================================================================
+ *  Object 73 — Eggman (MZ)
+ *  Object 74 — Lava ball dropped by Eggman (MZ)
+ *  Ported verbatim from _incObj/73, 74 Boss - MZ Main and Fire.asm
+ *  (REV01, FixBugs=0).
+ *
+ *  BossMarble fields:
+ *    bmz_lavatimer   = objoff_34 (byte): countdown between LavaBall spawns
+ *                                        (shares the high byte of bmz_parentobj)
+ *    bmz_parentobj   = objoff_34 (4 bytes): parent SLOT INDEX
+ *    bmz_generictimer= objoff_3C (word): action timer
+ *    bmz_sinecounter = objoff_3F (byte): sine phase for bobbing
+ *    obBossX/Y       = objoff_30 / $38 (long)
+ *    obBossFlash     = objoff_3E (byte)
+ *    obBossHits      = objoff_3A (byte)
+ *
+ *  BossFire fields:
+ *    bfire_timer     = objoff_29 (byte): drop wait / burn timer
+ *    bfire_spreadx   = objoff_32 (word): last spawn X for edge detection
+ * =========================================================================== */
+
+#define bmz_parentobj(o)    (*(uint32_t *)((uint8_t *)(o) + 0x34))
+#define bmz_lavatimer(o)    (*(uint8_t  *)((uint8_t *)(o) + 0x34))
+#define bmz_generictimer(o) (*(int16_t  *)((uint8_t *)(o) + 0x3C))
+#define bmz_sinecounter(o)  (*(uint8_t  *)((uint8_t *)(o) + 0x3F))
+
+#define bfire_timer(o)      (*(uint8_t  *)((uint8_t *)(o) + 0x29))
+#define bfire_spreadx(o)    (*(int16_t  *)((uint8_t *)(o) + 0x32))
+
+/* BossMarble_ObjData: {routine, anim, priority} × 4 */
+static const uint8_t BossMarble_ObjData[4][3] = {
+    { 2, 0, 4 },   /* Ship  */
+    { 4, 1, 4 },   /* Face  */
+    { 6, 7, 4 },   /* Flame */
+    { 8, 0, 3 },   /* Tube  */
+};
+
+static void BossMarble_ShipMain(uint8_t *o);
+static void BossMarble_FaceMain(uint8_t *o);
+static void BossMarble_FlameMain(uint8_t *o);
+static void BossMarble_TubeMain(uint8_t *o);
+static void BossMarble_ShipUpdate(uint8_t *o);
+static void BossMarble_Display(uint8_t *o);
+static void BossMarble_SetBits(uint8_t *o);
+static void BMZ_ShipStart(uint8_t *o);
+static void BMZ_ShipMove(uint8_t *o);
+static void BMZ_ChgDir(uint8_t *o);
+static void BMZ_DropFire(uint8_t *o);
+static void BMZ_Explode(uint8_t *o);
+static void BMZ_Recover(uint8_t *o);
+static void BMZ_Escape(uint8_t *o);
+static void BMZ_Defeated(uint8_t *o);
+static void BMZ_MakeLava(uint8_t *o);
+
+/* ===========================================================================
+ *  BossMarble (Object 73)
+ * =========================================================================== */
+
+/* --- BossMarble_Main — routine 0: spawn ship + face + flame + tube --- */
+static void BMZ_Main_Init(uint8_t *o) {
+    obBossX(o) = ((int32_t)(int16_t)obX(o)) << 16;
+    obBossY(o) = ((int32_t)(int16_t)obY(o)) << 16;
+    obColType(o) = (uint8_t)(col_48x48 | col_boss);
+    obBossHits(o) = 8;
+
+    const uint8_t *a2 = (const uint8_t *)BossMarble_ObjData;
+    uint8_t *a1 = o;
+
+    /* 4 iterations (dbf d1 con d1=3). La primera reutiliza el slot actual. */
+    for (int d1 = 3; d1 >= 0; d1--) {
+        if (d1 < 3) {                          /* .loop: FindNextFreeObj */
+            uint8_t *slot = (uint8_t *)FindNextFreeObj(a1);
+            if (slot == NULL) {
+                /* ASM: bne.s BossMarble_ShipMain → no hay slot libre */
+                BossMarble_ShipMain(o);
+                return;
+            }
+            obID(slot) = id_BossMarble;
+            obX(slot)  = obX(o);
+            obY(slot)  = obY(o);
+            a1 = slot;
+        }
+
+        /* BossMarble_LoadBoss */
+        obStatus(o) &= (uint8_t)~0x01;          /* bclr #0 en a0 (el main) */
+        ob2ndRout(a1) = 0;
+        obRoutine(a1) = a2[0];
+        obAnim(a1)    = a2[1];
+        obPriority(a1)= a2[2];
+        a2 += 3;
+        obMap(a1)     = (uint32_t)(uintptr_t)Map_Eggman;
+        obGfx(a1)     = (uint16_t)ArtTile_Eggman;
+        obRender(a1)  = sprite_cam_field;
+        obActWid(a1)  = 64 / 2;
+        bmz_parentobj(a1) = (uint32_t)Object_GetIndex(o);
+    }
+
+    /* Fall-through a ShipMain. */
+    BossMarble_ShipMain(o);
+}
+
+/* --- BossMarble_ShipMain — routine 2 --- */
+static void BossMarble_ShipMain(uint8_t *o) {
+    switch (ob2ndRout(o)) {
+        case 0x00: BMZ_ShipStart(o); break;
+        case 0x02: BMZ_ShipMove(o);  break;
+        case 0x04: BMZ_Explode(o);   break;
+        case 0x06: BMZ_Recover(o);   break;
+        case 0x08: BMZ_Escape(o);    break;
+    }
+
+    if (Ani_Eggman) AnimateSprite(o, Ani_Eggman);
+
+    /* Mover los bits de X/Y-flip de obStatus a obRender. */
+    uint8_t d0 = obStatus(o) & (sprite_xflip | sprite_yflip);
+    obRender(o) &= (uint8_t)~(sprite_xflip | sprite_yflip);
+    obRender(o) |= d0;
+
+    DisplaySprite(o);
+}
+
+/* --- BossMarble_ShipUpdate — cola común de ShipStart / ShipMove / etc. --- */
+static void BossMarble_ShipUpdate(uint8_t *o) {
+    /* Copiar posición del boss a obX/obY (high word). */
+    obY(o) = (int16_t)(obBossY(o) >> 16);
+    obX(o) = (int16_t)(obBossX(o) >> 16);
+
+    if (ob2ndRout(o) >= 4) return;              /* Explode/Recover/Escape: nada */
+    if ((int8_t)obStatus(o) < 0) {              /* bit 7 = defeated */
+        BMZ_Defeated(o);
+        return;
+    }
+    if (obColType(o) != 0) return;              /* no golpeado: salir */
+
+    /* .flash */
+    if (obBossFlash(o) == 0) {
+        obBossFlash(o) = 0x28;
+        Sound_Queue(sfx_HitBoss, false);
+    }
+    {
+        uint16_t *pal = (uint16_t *)((uint8_t *)RAM_ADDR(v_palette) + 0x22);
+        uint16_t col = (*pal != 0) ? 0 : cWhite;
+        *pal = col;
+    }
+    obBossFlash(o)--;
+    if (obBossFlash(o) == 0) {
+        obColType(o) = (uint8_t)(col_48x48 | col_boss);
+    }
+}
+
+/* --- BMZ_ShipStart — sub-rutina 0 del ShipIndex --- */
+static void BMZ_ShipStart(uint8_t *o) {
+    uint8_t old = bmz_sinecounter(o);
+    bmz_sinecounter(o) += 2;
+
+    int16_t s0, s1;
+    CalcSine(old, &s0, &s1);
+    obVelY(o) = (int16_t)(s0 >> 2);
+    obVelX(o) = (int16_t)-0x100;
+
+    BossMove(o);
+
+    if ((int16_t)(obBossX(o) >> 16) == (int16_t)(boss_mz_x + 0x110)) {
+        /* Llegamos al borde: pasar a ShipMove (ob2ndRout = 2). */
+        ob2ndRout(o) += 2;
+        obSubtype(o) = 0;
+        obVelX(o) = 0;
+        obVelY(o) = 0;
+    }
+
+    /* .continue: obtener nuevo timer aleatorio para spawn de LavaBall. */
+    bmz_lavatimer(o) = (uint8_t)RandomNumber();
+
+    BossMarble_ShipUpdate(o);
+}
+
+/* --- BMZ_ShipMove — sub-rutina 2 del ShipIndex (dispatch por obSubtype) --- */
+static void BMZ_ShipMove(uint8_t *o) {
+    switch (obSubtype(o)) {
+        case 0: case 4: BMZ_ChgDir(o);   break;
+        case 2: case 6: BMZ_DropFire(o); break;
+        default: break;                          /* valores inválidos: no-op */
+    }
+    obSubtype(o) &= 0x06;
+    BossMarble_ShipUpdate(o);
+}
+
+/* --- BMZ_ChgDir — sub-rutina 0/2 de ShipMove_Index --- */
+static void BMZ_ChgDir(uint8_t *o) {
+    if (obVelX(o) == 0) {
+        int16_t d0 = 0x40;
+        int16_t cur_y = (int16_t)(obBossY(o) >> 16);
+        int16_t target = (int16_t)(boss_mz_y + 0x1C);
+
+        if (cur_y == target) {
+            /* .swoop */
+            obVelX(o) = 0x200;
+            obVelY(o) = 0x100;
+            if (!(obStatus(o) & 1)) {
+                obVelX(o) = (int16_t)(-obVelX(o));
+            }
+        } else {
+            if (cur_y < target) {
+                /* .above: d0 positivo → mover hacia abajo */
+            } else {
+                d0 = (int16_t)(-d0);
+            }
+            obVelY(o) = d0;
+            BossMove(o);
+        }
+    }
+
+    /* .skip */
+    if ((uint8_t)obBossFlash(o) < 0x18) {
+        BossMove(o);
+        obVelY(o) = (int16_t)(obVelY(o) - 4);
+    }
+
+    /* BossMarble_MakeLava (inline en el ASM) */
+    BMZ_MakeLava(o);
+}
+
+/* --- BMZ_DropFire — sub-rutina 1/3 de ShipMove_Index --- */
+static void BMZ_DropFire(uint8_t *o) {
+    BossMove(o);
+
+    int16_t d0 = (int16_t)((int16_t)(obBossY(o) >> 16) - (int16_t)(boss_mz_y + 0x1C));
+    if (d0 > 0) return;                          /* todavía subiendo */
+
+    if (obVelY(o) != 0) {
+        obVelY(o) = 0;
+        bmz_generictimer(o) = 80;
+        obStatus(o) ^= 1;
+
+        uint8_t *slot = (uint8_t *)FindFreeObj();
+        if (slot != NULL) {
+            obX(slot) = (int16_t)(obBossX(o) >> 16);
+            obY(slot) = (int16_t)((obBossY(o) >> 16) + 0x18);
+            obID(slot) = id_BossFire;
+            obSubtype(slot) = 1;
+        }
+    }
+
+    bmz_generictimer(o)--;
+    if (bmz_generictimer(o) == 0) {
+        obSubtype(o) += 2;
+    }
+}
+
+/* --- BMZ_MakeLava: spawn de LavaBall con timer aleatorio --- */
+static void BMZ_MakeLava(uint8_t *o) {
+    /* bcc.s .checkRight: saltar si el timer NO expiró (old != 0). */
+    if (bmz_lavatimer(o)-- != 0) goto check_right;
+
+    {
+        uint8_t *slot = (uint8_t *)FindFreeObj();
+        if (slot != NULL) {
+            obID(slot) = id_LavaBall;
+            obY(slot)  = (int16_t)(boss_mz_y + 0xD8);
+
+            uint16_t r = RandomNumber();
+            obX(slot)  = (int16_t)(boss_mz_x + 0x78 + (r % 0x50));
+
+            /* ASM: move.w #$FF,obSubtype(a1) → obSubtype=0, objoff_29=0xFF */
+            obSubtype(slot) = 0;
+            lball_fromboss(slot) = 0xFF;
+        }
+    }
+
+    /* .generateTimer */
+    {
+        uint16_t r = RandomNumber();
+        bmz_lavatimer(o) = (uint8_t)((r & 0x1F) + 0x40);
+    }
+
+check_right:
+    if (obStatus(o) & 1) {
+        /* Facing right */
+        if ((int16_t)(obBossX(o) >> 16) < (int16_t)(boss_mz_x + 0x110)) return;
+        obBossX(o) = (int32_t)((int16_t)(boss_mz_x + 0x110)) << 16;
+    } else {
+        if ((int16_t)(obBossX(o) >> 16) > (int16_t)(boss_mz_x + 0x30)) return;
+        obBossX(o) = (int32_t)((int16_t)(boss_mz_x + 0x30)) << 16;
+    }
+
+    /* .rise */
+    obVelX(o) = 0;
+    obVelY(o) = (int16_t)-0x180;
+    if ((int16_t)(obBossY(o) >> 16) < (int16_t)(boss_mz_y + 0x1C)) {
+        obVelY(o) = (int16_t)(-obVelY(o));
+    }
+    obSubtype(o) += 2;
+}
+
+/* --- BMZ_Explode — sub-rutina 2 del ShipIndex --- */
+static void BMZ_Explode(uint8_t *o) {
+    bmz_generictimer(o)--;
+    if (bmz_generictimer(o) < 0) {
+        /* .transition */
+        obStatus(o) |= 1;
+        obStatus(o) &= (uint8_t)~0x80;
+        obVelX(o) = 0;
+        ob2ndRout(o) += 2;
+        bmz_generictimer(o) = -38;
+        if (v_bossstatus == 0) {
+            v_bossstatus = 1;
+            obVelY(o) = 0;
+        }
+        return;
+    }
+    BossDefeated(o);
+}
+
+/* --- BMZ_Recover — sub-rutina 3 del ShipIndex --- */
+static void BMZ_Recover(uint8_t *o) {
+    bmz_generictimer(o)++;
+    int16_t t = bmz_generictimer(o);
+
+    if (t == 0) {
+        obVelY(o) = 0;
+        bmz_generictimer(o) = 0;
+        goto exit_recover;
+    }
+    if (t > 0) {
+        if (t >= 48) {
+            if (t == 48) {
+                obVelY(o) = 0;
+                Sound_Queue(bgm_MZ, false);
+                goto exit_recover;
+            }
+            if (t < 56) goto exit_recover;
+            ob2ndRout(o) += 2;
+            goto exit_recover;
+        }
+        /* t in (0, 48): .rise */
+        obVelY(o) = (int16_t)(obVelY(o) - 8);
+        goto exit_recover;
+    }
+
+    /* t < 0 */
+    if ((uint16_t)(obBossY(o) >> 16) >= (uint16_t)(boss_mz_y + 0x60)) {
+        obVelY(o) = 0;
+        bmz_generictimer(o) = 0;
+        goto exit_recover;
+    }
+    obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+
+exit_recover:
+    BossMove(o);
+    BossMarble_ShipUpdate(o);
+}
+
+/* --- BMZ_Escape — sub-rutina 4 del ShipIndex --- */
+static void BMZ_Escape(uint8_t *o) {
+    obVelX(o) = 0x500;
+    obVelY(o) = (int16_t)-0x40;
+
+    if ((uint16_t)v_limitright2 >= (uint16_t)boss_mz_end) {
+        /* .checkOffScreen */
+        if ((int8_t)obRender(o) >= 0) {
+            DeleteObject(o);
+            return;
+        }
+    } else {
+        v_limitright2 += 2;
+    }
+
+    /* .flee */
+    BossMove(o);
+    BossMarble_ShipUpdate(o);
+}
+
+/* --- BMZ_Defeated: helper llamado desde ShipUpdate cuando bit 7 de status --- */
+static void BMZ_Defeated(uint8_t *o) {
+    AddPoints(100);
+    ob2ndRout(o) = 4;
+    bmz_generictimer(o) = 180;
+    obVelX(o) = 0;
+    obVelY(o) = 0;
+}
+
+/* --- BossMarble_FaceMain — routine 4 --- */
+static void BossMarble_FaceMain(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)bmz_parentobj(o));
+    int16_t d0 = (int16_t)(int8_t)ob2ndRout(a1);
+    int16_t d1 = 1;                          /* facenormal1 */
+
+    d0 -= 2;
+    if (d0 == 0) {
+        /* Estamos en ShipMove */
+        if (obSubtype(a1) & 2) {
+            if (obVelY(a1) == 0) {
+                d1 = 4;                      /* facelaugh */
+            }
+        }
+    } else {
+        d0 -= 2;
+        if (d0 >= 0) {
+            d1 = 0x0A;                       /* defeated */
+        } else {
+            /* Chequear hit / Sonic hurt */
+            if (obColType(a1) == 0) {
+                d1 = 5;                      /* facehit */
+            } else if ((uint8_t)obRoutine(RAM_ADDR(v_player)) >= 4) {
+                d1 = 4;                      /* facelaugh */
+            }
+        }
+    }
+
+    obAnim(o) = (uint8_t)d1;
+
+    /* Escape: facepanic */
+    d0 -= 4;
+    if (d0 == 0) {
+        obAnim(o) = 6;
+        if ((int8_t)obRender(o) >= 0) {
+            DeleteObject(o);
+            return;
+        }
+    }
+
+    BossMarble_Display(o);
+}
+
+/* --- BossMarble_FlameMain — routine 6 --- */
+static void BossMarble_FlameMain(uint8_t *o) {
+    obAnim(o) = 7;
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)bmz_parentobj(o));
+
+    if (ob2ndRout(a1) >= 8) {
+        /* Escape: thruster */
+        obAnim(o) = 0xB;
+        if ((int8_t)obRender(o) >= 0) {
+            DeleteObject(o);
+            return;
+        }
+        BossMarble_Display(o);
+        return;
+    }
+
+    if (obVelX(a1) != 0) {
+        obAnim(o) = 8;                       /* flame visible */
+    }
+    BossMarble_Display(o);
+}
+
+/* --- BossMarble_TubeMain — routine 8 --- */
+static void BossMarble_TubeMain(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)bmz_parentobj(o));
+
+    if (ob2ndRout(a1) == 8) {
+        if ((int8_t)obRender(o) >= 0) {
+            DeleteObject(o);
+            return;
+        }
+    }
+
+    obMap(o)     = (uint32_t)(uintptr_t)Map_BossItems;
+    obGfx(o)     = (uint16_t)(ArtTile_Eggman_Weapons | Tile_Pal2);
+    obFrame(o)   = 4;
+    BossMarble_SetBits(o);
+}
+
+/* --- BossMarble_Display --- */
+static void BossMarble_Display(uint8_t *o) {
+    if (Ani_Eggman) AnimateSprite(o, Ani_Eggman);
+    BossMarble_SetBits(o);
+}
+
+/* --- BossMarble_SetBits: sincroniza posición y flips con el padre --- */
+static void BossMarble_SetBits(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)bmz_parentobj(o));
+    obX(o)      = obX(a1);
+    obY(o)      = obY(a1);
+    obStatus(o) = obStatus(a1);
+
+    uint8_t d0 = obStatus(o) & (sprite_xflip | sprite_yflip);
+    obRender(o) &= (uint8_t)~(sprite_xflip | sprite_yflip);
+    obRender(o) |= d0;
+    DisplaySprite(o);
+}
+
+/* --- Dispatcher Object 73 --- */
+static void BossMarble_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: BMZ_Main_Init(o);      break;  /* no recurse — ver nota abajo */
+        case 2: BossMarble_ShipMain(o);  break;
+        case 4: BossMarble_FaceMain(o);  break;
+        case 6: BossMarble_FlameMain(o); break;
+        case 8: BossMarble_TubeMain(o);  break;
+    }
+}
+
+/* ===========================================================================
+ *  BossFire (Object 74)
+ * =========================================================================== */
+
+static void BF_Drop(uint8_t *o);
+static void BF_MakeFlame(uint8_t *o);
+static void BF_Duplicate(uint8_t *o);
+static void BF_Duplicate2(uint8_t *o);
+static void BF_FallEdge(uint8_t *o);
+static void BossFire_TempFire(uint8_t *o);
+static void BossFire_Action(uint8_t *o);
+
+/* --- BossFire_Main — routine 0 --- */
+static void BF_Main_Init(uint8_t *o) {
+    obHeight(o) = 16 / 2;
+    obWidth(o)  = 16 / 2;
+    obMap(o)    = (uint32_t)(uintptr_t)Map_Fire;
+    obGfx(o)    = (uint16_t)ArtTile_MZ_Fireball;
+    obRender(o) = sprite_cam_field;
+    obPriority(o) = 5;
+    obBossY(o)  = ((int32_t)(int16_t)obY(o)) << 16;
+    obActWid(o) = 16 / 2;
+    obRoutine(o) += 2;
+
+    if (obSubtype(o) == 0) {
+        /* Temp fire: salta a routine 4 */
+        obColType(o) = (uint8_t)(col_16x16 | col_hurt);
+        obRoutine(o) += 2;
+        BossFire_TempFire(o);
+        return;
+    }
+
+    /* Real fire */
+    bfire_timer(o) = 30;
+    Sound_Queue(sfx_Fireball, false);
+
+    /* Fall-through a BossFire_Action */
+    BossFire_Action(o);
+}
+
+/* --- BossFire_Action — routine 2 --- */
+static void BossFire_Action(uint8_t *o) {
+    switch (ob2ndRout(o)) {
+        case 0: BF_Drop(o);      break;
+        case 2: BF_MakeFlame(o); break;
+        case 4: BF_Duplicate(o); break;
+        case 6: BF_FallEdge(o);  break;
+    }
+
+    SpeedToPos(o);
+    if (Ani_Fire) AnimateSprite(o, Ani_Fire);
+
+    if ((uint16_t)obY(o) > (uint16_t)(boss_mz_y + 0xD8)) {
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);
+}
+
+/* --- BF_Drop — sub-rutina 0 --- */
+static void BF_Drop(uint8_t *o) {
+    obStatus(o) |= (1 << 1);                 /* face up */
+    bfire_timer(o)--;
+
+    if ((int8_t)bfire_timer(o) >= 0) return; /* todavía esperando */
+
+    obColType(o) = (uint8_t)(col_16x16 | col_hurt);
+    obSubtype(o) = 0;
+    obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+    obStatus(o) &= ~(1 << 1);                /* face down */
+
+    {
+        int16_t dist, angle;
+        ObjFloorDist(o, &dist, &angle);
+        if (dist < 0) {
+            ob2ndRout(o) += 2;
+        }
+    }
+}
+
+/* --- BF_MakeFlame — sub-rutina 2 --- */
+static void BF_MakeFlame(uint8_t *o) {
+    obY(o) = (int16_t)(obY(o) - 2);
+    obGfx(o) |= 0x8000;                      /* bset #7: prioridad alta */
+    obVelX(o) = 0xA0;
+    obVelY(o) = 0;
+    obBossX(o) = ((int32_t)(int16_t)obX(o)) << 16;
+    obBossY(o) = ((int32_t)(int16_t)obY(o)) << 16;
+    bfire_timer(o) = 3;
+
+    uint8_t *slot = (uint8_t *)FindNextFreeObj(o);
+    if (slot != NULL) {
+        memcpy(slot, o, OBJECT_SIZE);
+        obVelX(slot) = (int16_t)(-obVelX(slot));
+        ob2ndRout(slot) += 2;
+    }
+
+    ob2ndRout(o) += 2;
+}
+
+/* --- BF_Duplicate2: spawn de un temp fire extra --- */
+static void BF_Duplicate2(uint8_t *o) {
+    uint8_t *slot = (uint8_t *)FindNextFreeObj(o);
+    if (slot == NULL) return;
+
+    obX(slot) = obX(o);
+    obY(slot) = obY(o);
+    obID(slot) = id_BossFire;
+    /* ASM: move.w #103,obSubtype(a1) → obSubtype=0, bfire_timer=103 */
+    obSubtype(slot) = 0;
+    bfire_timer(slot) = 103;
+}
+
+/* --- BF_Duplicate — sub-rutina 4 --- */
+static void BF_Duplicate(uint8_t *o) {
+    int16_t dist, angle;
+    ObjFloorDist(o, &dist, &angle);
+    if (dist >= 0) {                         /* no toca suelo: ir a FallEdge */
+        ob2ndRout(o) += 2;
+        return;
+    }
+
+    int16_t cur_x = obX(o);
+    if (cur_x > (int16_t)(boss_mz_x + 0x140)) {
+        obRoutine(o) += 2;                   /* preparar para borrar */
+        return;
+    }
+
+    int16_t last_x = (int16_t)(obBossX(o) >> 16);
+    if (cur_x == last_x) goto copy_position;
+
+    if ((cur_x & 0x10) != (last_x & 0x10)) {
+        BF_Duplicate2(o);
+        bfire_spreadx(o) = obX(o);
+    }
+
+copy_position:
+    obBossX(o) = ((int32_t)(int16_t)obX(o)) << 16;
+}
+
+/* --- BF_FallEdge — sub-rutina 6 --- */
+static void BF_FallEdge(uint8_t *o) {
+    obStatus(o) &= ~(1 << 1);
+    obVelY(o) = (int16_t)(obVelY(o) + 0x24);
+
+    int16_t d0 = (int16_t)(obX(o) - bfire_spreadx(o));
+    if (d0 < 0) d0 = (int16_t)(-d0);
+
+    if (d0 == 0x12) {
+        obGfx(o) &= (uint16_t)~0x8000;       /* bclr #7: prioridad baja */
+    }
+
+    {
+        int16_t dist, angle;
+        ObjFloorDist(o, &dist, &angle);
+        if (dist >= 0) return;
+    }
+
+    bfire_timer(o)--;
+    if (bfire_timer(o) == 0) {
+        DeleteObject(o);
+        return;
+    }
+
+    obVelY(o) = 0;
+    obX(o) = bfire_spreadx(o);
+    obY(o) = (int16_t)(obBossY(o) >> 16);
+    obGfx(o) |= 0x8000;
+    ob2ndRout(o) -= 2;
+}
+
+/* --- BossFire_TempFire — routine 4 --- */
+static void BossFire_TempFire(uint8_t *o) {
+    obGfx(o) |= 0x8000;
+    bfire_timer(o)--;
+
+    if (bfire_timer(o) == 0) {
+        obAnim(o) = 1;
+        obY(o) = (int16_t)(obY(o) - 4);
+        obColType(o) = col_none;
+    }
+
+    if (Ani_Fire) AnimateSprite(o, Ani_Fire);
+    DisplaySprite(o);
+}
+
+/* --- BossFire_TempFireDel — routine 6 --- */
+static void BossFire_TempFireDel(uint8_t *o) {
+    DeleteObject(o);
+}
+
+/* --- Dispatcher Object 74 --- */
+static void BossFire_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: BF_Main_Init(o);     break;  /* no recurse — ver nota */
+        case 2: BossFire_Action(o);   break;
+        case 4: BossFire_TempFire(o); break;
+        case 6: BossFire_TempFireDel(o); break;
+    }
+    DisplaySprite(o);
 }

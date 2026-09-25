@@ -36,6 +36,7 @@ set(SOURCES
     src/enddemo.c
     src/config.c
     src/postprocess.c
+    src/tas.c
 )
 
 # Executable

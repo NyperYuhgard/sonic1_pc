@@ -1,3 +1,4 @@
+#include "tas.h"
 #include "vdp.h"
 #include "ram.h"
 #include "palette.h"

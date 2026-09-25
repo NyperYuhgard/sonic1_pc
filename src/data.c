@@ -356,14 +356,14 @@ const uint8_t *Map_Pole;
 const uint8_t *Map_Flap;
 const uint8_t *Map_Fire;
 const uint8_t *Map_Brick;           size_t Map_Brick_len;
-const uint8_t *Map_Geyser;
-const uint8_t *Map_LWall;
+const uint8_t *Map_Geyser;          size_t Map_Geyser_len;
+const uint8_t *Map_LWall;           size_t Map_LWall_len;
 const uint8_t *Map_Yad;
-const uint8_t *Map_Smab;
+const uint8_t *Map_Smab;            size_t Map_Smab_len;
 const uint8_t *Map_MBlock;          size_t Map_MBlock_len;
 const uint8_t *Map_LTag;            size_t Map_LTag_len;
 const uint8_t *Map_Bas;             size_t Map_Bas_len;
-const uint8_t *Map_Cat;
+const uint8_t *Map_Cat;             size_t Map_Cat_len;
 const uint8_t *Map_Elev;
 const uint8_t *Map_Plat_SLZ;
 const uint8_t *Map_Circ;
@@ -409,6 +409,9 @@ const uint8_t *Ani_Spring;          size_t Ani_Spring_len;
 const uint8_t *Ani_Newt;            size_t Ani_Newt_len;
 const uint8_t *Ani_Bas;             size_t Ani_Bas_len;
 const uint8_t *Ani_GFire;           size_t Ani_GFire_len;
+const uint8_t *Ani_Fire;            size_t Ani_Fire_len;
+const uint8_t *Ani_Geyser;          size_t Ani_Geyser_len;
+const uint8_t *Ani_LWall;           size_t Ani_LWall_len;
 const uint8_t *SonicDynPLC;         size_t SonicDynPLC_len;
 
 /* ---------------- Layouts de nivel (Level_*) ---------------- */
@@ -846,6 +849,10 @@ int Data_Init(void) {
     LOAD_MAP("_maps/Basaran.asm", Map_Bas);
     LOAD_MAP("_maps/MZ Large Grassy Platforms.asm", Map_LGrass);
     LOAD_MAP("_maps/Fireballs.asm", Map_Fire);
+    LOAD_MAP("_maps/Caterkiller.asm", Map_Cat);
+    LOAD_MAP("_maps/Lava Geyser.asm", Map_Geyser);
+    LOAD_MAP("_maps/Wall of Lava.asm", Map_LWall);
+    LOAD_MAP("_maps/Smashable Green Block.asm", Map_Smab);
 
     /* ---------------- Animaciones ---------------- */
     LOAD_ANIM("_anim/Sonic.asm",                     Ani_Sonic);
@@ -866,6 +873,9 @@ int Data_Init(void) {
     LOAD_ANIM("_anim/Newtron.asm",                   Ani_Newt);
     LOAD_ANIM("_anim/Basaran.asm",                   Ani_Bas);
     LOAD_ANIM("_anim/Burning Grass.asm",             Ani_GFire);
+    LOAD_ANIM("_anim/Fireballs.asm",                 Ani_Fire);
+    LOAD_ANIM("_anim/Lava Geyser.asm",               Ani_Geyser);
+    LOAD_ANIM("_anim/Wall of Lava.asm",              Ani_LWall);
     /* El DPLC de Sonic no es un anim script, pero comparte el parser:  */
     LOAD_ANIM("_maps/Sonic - Dynamic Gfx Script.asm", SonicDynPLC);
 

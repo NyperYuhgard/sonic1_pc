@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <SDL2/SDL.h>
-
+#include "tas.h"
 #include "types.h"
 #include "constants.h"
 #include "options.h"
@@ -227,6 +227,8 @@ void WaitForVBlank(void) {
     /* Render VDP frame (SDL_RenderPresent dentro de VDP_RenderFrame
        es lo que aplica el Vsync y da el timing de 60 Hz) */
     VDP_RenderFrame(renderer);
+
+    TAS_EndFrame();
 
     /* Increment frame counters */
     v_framecount = v_framecount + 1;
@@ -1092,23 +1094,28 @@ static const GameModeFunc game_mode_table[] = {
    =================================================================== */
 static void MainGameLoop(void) {
     while (running) {
+        /* Eventos SDL y teclas de TAS (funcionan incluso pausado). */
+        ProcessSDLEvents();
+        Input_PollTasKeys();
+
+        /* Pausa TAS: bloquea aquí hasta unpause o frame-advance. */
+        if (TAS_IsPaused() && !TAS_TryConsumeStep()) {
+            SDL_Delay(16);
+            continue;
+        }
+
         /* Get current game mode */
-        uint8_t mode = v_gamemode & 0x3C;  /* expanded mask (bits 2-5) to support GM_EndDemo ($20) */
+        uint8_t mode = v_gamemode & 0x3C;
         int index = mode >> 2;
 
         if (index < (int)GAME_MODE_TABLE_SIZE && game_mode_table[index]) {
             game_mode_table[index]();
         }
 
-        /* Record the mode dispatched this frame; set AFTER the handler so a
-           handler that changed v_gamemode is seen as a fresh entry next
-           frame (g_last_mode still holds the previous mode when the new
-           mode's handler runs next iteration). */
         g_last_mode = mode;
 
         if (!running) break;
 
-        /* Small delay to prevent CPU spin when game mode is instant */
         SDL_Delay(16);
     }
 }
@@ -1201,6 +1208,7 @@ int main(int argc, char *argv[]) {
     DACDriverLoad();
     JoypadInit();
     Objects_Init();
+    TAS_Init();
     Sound_Init();
 
     /* Set first game mode */
