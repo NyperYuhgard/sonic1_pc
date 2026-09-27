@@ -111,6 +111,11 @@ falling back to `disasm/`, so you can either:
 
 ## Controls
 
+The game takes **no command-line arguments** — `main()` discards
+`argc`/`argv` explicitly (`src/main.c:1185-1187`) and there is no `getopt`
+anywhere in `src/`. Everything is keyboard-driven, and every persistent
+setting lives in the in-game options menu (see below).
+
 ### Player 1
 
 | Action | Key |
@@ -123,30 +128,167 @@ falling back to `disasm/`, so you can either:
 
 ### Player 2 (partial)
 
-`I / J / K / L` move, `U / Y / O` are the ABC buttons, `P` is Start.
+> **Provisional mapping.** Sonic 1 has no two-player mode, so these bindings
+> exist only to feed `v_jpadhold2` / `v_jpadpress2`. They are expected to be
+> remapped — treat this table as temporary.
+
+| Action | Key |
+|---|---|
+| Move | `I` `J` `K` `L` |
+| Jump | `U` (A button) |
+| Jump (alt) | `Y` (B button) |
+| Roll / spin | `O` (C button) |
+| Start | `P` |
+
+⚠️ `O` and `P` double as the Object RAM / VRAM viewer toggles, so with player
+2 active every `O` or `P` press also opens or closes a viewer window. That
+collision is one of the reasons this mapping needs to change.
+
+The game actually *reads* player 2 in one place: the LZ water tunnels let the
+second pad steer Sonic up/down while the wind pushes him along
+(`src/level.c:926-927`).
 
 ### PC debug keys
+
+All of these work at any time, in any game mode, from the main window:
 
 | Key | Effect |
 |---|---|
 | `P` | Toggle the VRAM viewer (tile sheet with VRAM address labels, OSD of plane bases/scrolls, palette_main + CRAM strips) |
 | `O` | Toggle the Object RAM viewer (live object slots) |
 | `G` | Toggle the Plane A/B viewer (full nametables, adapts to window size without stretching: side-by-side or stacked, wheel/drag scroll) |
-| `ESC` (window title bar) | Quit |
+| `V` | Plane viewer: toggle the 128-row wrap mode (BlastEm-style) |
+| `R` | Toggle the RAM viewer (live hex + decimal, grouped into labelled sections) |
+| `F` | Toggle the free camera |
+| `T` | Toggle the TAS editor window |
+| `F1`–`F8` | TAS actions (see below) |
+| `ESC` | Quit (window title bar) |
+
+Each viewer is a separate SDL window that refreshes at 60 Hz from the end of
+`VDP_RenderFrame`, and closing one with the window manager toggles it back off
+(`src/input.c:42-53`).
+
+**Viewer navigation** — the Plane viewer scrolls with the mouse wheel and pans
+with left-drag, but only while the pointer is inside that window
+(`src/input.c:55-75`). The RAM viewer is read-only; its sections are GAME
+STATE, BOUNDS & CAMERA, SONIC, LOOP/ROLL/TRACK, FLAGS, SYNC/OSCILLATE and
+MISC (`src/ramview.c:219-227`).
+
+### Free camera
+
+`F` toggles it. The camera then pans 8 px per frame, clamped to the level
+bounds (`v_limitleft2` / `v_limitright2` / `v_limittop2` / `v_limitbtm2`):
+
+| Key | Direction |
+|---|---|
+| `Home` | Up |
+| `End` | Down |
+| `PageUp` | Right |
+| `Delete` | Left |
+
+It moves the real 16.16 world camera and forces a full FG redraw so the plane
+refreshes while panning (`src/freecamera.c:31-51`).
+
+### TAS keys
+
+| Key | Action |
+|---|---|
+| `F1` | Toggle recording (LIVE → RECORD → LIVE, or cancel playback) |
+| `F2` | Replay from the first frame |
+| `F3` | Save `tas.bin` |
+| `F4` | Load `tas.bin` |
+| `F5` | Save state to the next slot (8 slots, round-robin) |
+| `F6` | Load the previous slot |
+| `F7` | Pause / unpause |
+| `F8` | Advance one frame (only while paused) |
+
+Playback feeds the recorded pad values straight into `v_jpadhold1` /
+`v_jpadpress1`, overriding the keyboard (`src/input.c:147-148`).
+
+### TAS editor keys
+
+| Key | Action |
+|---|---|
+| `Esc` | Close the editor |
+| `Space` | Pause / unpause |
+| `R` | Pause and replay from frame 0 |
+| `←` / `→` | Move the frame cursor |
+| `Home` / `End` | Jump to the first / last frame |
+| `PageUp` / `PageDown` | Scroll by one page of frames |
+| `.` | Single frame step |
+| `Delete` / `Backspace` | Delete the selected frame(s) |
+| `Insert` | Insert a frame at the cursor |
+| `A` | Select all |
+| `Ctrl+S` / `Ctrl+O` | Save / load `tas.bin` |
+| `F5` / `F6` | Save state / load state |
+
+While the editor window has focus, game input is zeroed so the keyboard cannot
+perturb the run (`src/input.c:149-152`).
+
+## In-game options menu
+
+Reached from the title screen: hold **A** and press **Start** (level select),
+then press **B** (`src/main.c:635`). `↑`/`↓` pick the row, `←`/`→` change the
+value, `A`/`C`/`Start` confirm.
+
+| Row | Values | Effect |
+|---|---|---|
+| WIDESCREEN | OFF / 398 / 424 / 480 | Render width (`VDP_ApplyWidescreen`, `src/config.c:40-44`) |
+| FPS INTERP. | ON / OFF | **Not implemented** — the flag is stored and toggled but never read by the renderer. Listed for parity with the planned 60→120 Hz interpolation |
+| SCANLINES | ON / OFF | Scanline overlay (`src/postprocess.c:14`) |
+| FULLSCREEN | ON / OFF | `SDL_WINDOW_FULLSCREEN_DESKTOP` |
+| SS ALT ANIM | ON / OFF | Alternative Special Stage exit animation (`SonicSS_ExitStage`) |
+| SS SMOOTH | ON / OFF | Smooth scrolling in the Special Stage maze |
+| CRT | ON / OFF | Barrel curvature + subtle vignette, nearest sampling (`src/postprocess.c:48`) |
+| BLUR | ON / OFF | Separable H+V blur (`src/postprocess.c:138`, `:160`) |
+| APPLY & SAVE | — | Write the config to disk |
+| BACK | — | Return to the level select |
+
+Post-processing runs in a fixed order — scanlines, blur H, blur V, CRT — over
+two internal buffers, with a maximum render width of 640
+(`src/postprocess.h:8-9`, `src/postprocess.c:205-221`).
+
+Settings are persisted to **`sonic1.cfg`**, a *binary* file in the current
+working directory: the 4-byte magic `S1CF`, a `uint32_t` version (currently
+`4`), then the raw `Settings` struct (`src/config.c:17-38`). It is loaded once
+at startup (`src/main.c:1196`) and written on APPLY & SAVE, on BACK and on
+exit. Delete the file to get the defaults back.
 
 ## Cheat codes
 
-All cheats are enabled by default (`f_*cheat = 1` in `main.c`).
+All four cheats are enabled at boot (`f_*cheat = 1`, `src/main.c:1225-1229`,
+mirroring `CheatsEnabled=1` in `sonic.asm:420-425`):
 
-- **Level select**: on the title screen, enter `Up, Down, Left, Right` on the
-  D-Pad, then hold **A** (`Z`) and press **Start** (`Enter`). Move with
-  `Up/Down`, confirm with any action button.
+| Flag | RAM | Effect | Default |
+|---|---|---|---|
+| `f_levselcheat` | `$FFE0` | Level select screen | on |
+| `f_slomocheat` | `$FFE1` | Slow motion from the pause screen | on |
+| `f_debugcheat` | `$FFE2` | Debug mode in level | on |
+| `f_creditscheat` | `$FFE3` | Hidden Japanese credits / ending | on |
+
+- **Level select**: on the title screen, hold **A** (`Z`) and press **Start**
+  (`Enter`) — the ASM checks `f_levselcheat` and `A` held while `Start` is
+  pressed (`disasm/sonic.asm:2166-2170`). Move with `Up/Down`, confirm with any
+  action button.
   - The last level-select row is **Sound Select** (`Left/Right` to browse).
   - Reaching sound `$9E` (with credits cheat) opens the Credits; `$9F` opens the
     Ending.
-  - The Special Stage row jumps to the (currently stubbed) special stage state.
+  - The **Special Stage** row starts a real special stage (3 lives, 0 rings,
+    `v_emldlist` cleared) — it is not a stub.
+  - Pressing **B** on any row opens the options menu.
+- **Slow motion**: while paused, hold **B** (`X`) or tap **C** to enter
+  slow-motion; press **A** (`Z`) to quit back to the title screen
+  (`src/level.c:1278-1281`).
 - **Debug mode**: `Start` during gameplay with debug enabled spawns the debug
   object palette (ported from `_incObj/DebugMode.asm`).
+- **Re-arming the cheats** (`Tit_ActivateCheat`, `disasm/sonic.asm:2113-2128`,
+  ported at `src/main.c:702-723`): entering `Up, Down, Left, Right` on the
+  title-screen D-Pad re-enables one cheat, chosen by how many times **C** was
+  pressed (0-1 level select, 2-3 slow motion, 4-5 debug, 6-7 credits). On
+  non-Japanese regions (`v_megadrive >= 0`) two or more C presses always force
+  slow motion + debug, and the credits cheat stays unreachable — exactly like
+  the original. Since the port boots with all four already on, this code is
+  only observable if something clears them.
 
 ## Game flow (ported game modes)
 
@@ -162,6 +304,7 @@ The `game_mode_table` in `src/main.c` mirrors `GameModeArray` from `sonic.asm`:
 | Continue | `$14` | ⛔ Stub (`TODO`) |
 | Ending | `$18` | ⛔ Stub (`TODO`) |
 | Credits | `$1C` | ⛔ Stub (`TODO`) |
+| End Demo | `$20` | ✅ Port-only SDL screen ("END DEMO" / "DEVELOPED BY" + logos), not the ASM routine — build-time demo ending only |
 
 ## Currently ported gameplay (Green Hill Zone)
 
@@ -182,33 +325,94 @@ The `game_mode_table` in `src/main.c` mirrors `GameModeArray` from `sonic.asm`:
 - Collision index for the charset (`ColIndexLoad`, `ConvertCollisionArray`).
 - Animated level graphics per zone (GHZ) and zone palette cycling.
 - **Special Stage**: full 1:1 flow (white fades, maze physics, results screen
-  with card elements, ring bonus tally, Chaos Emeralds, exit to next level).
+  with card elements, ring bonus tally, Chaos Emeralds, exit to next level),
+  including `PalCycle_SS` / `PalCycle_SS_2` from `SpecCode.asm`.
+
+## Labyrinth Zone water system
+
+Ported 1:1 from `disasm/_inc/LZWaterFeatures.asm` (the `NUEVO` markers in
+`src/level.c` mean "newly ported", not "invented"):
+
+- **Per-act water height** — `WaterHeight[4]` for LZ1/LZ2/LZ3/SBZ3
+  (`level.c:597`) applied to `v_waterpos1..3` by `LZ_LevelWaterSetup`
+  (`level.c:630`).
+- **`LZWindTunnels`** (`level.c:878`) — waterfall wind tunnels, located from
+  `LZWind_Data` at offset `8+(act<<3)` (two entries on act 1). Inside a tunnel
+  `sfx_Waterfall` plays every `$40` frames, Sonic is pushed along at
+  `obVelX = $400` in the `id_Float2` animation, a suction zone near the left
+  wall lifts or drops him, and **player 2's** `Up`/`Down` nudges him
+  vertically. Sets `f_wtunnelmode` and honours `f_wtunneldisallow`.
+- **`LZWaterSlides`** (`level.c:939`) — water slides matched by chunk id
+  against `Slide_Chunks[7]`.
+- **`LZDynamicWater`** (`level.c:1130`) — the state machine that walks
+  `v_waterpos2` towards `v_waterpos3`, including the hardcoded Act 3 targets
+  (`$0508`, `$0608`, `$07C0`, `$0128`).
+- **Per-scanline palette** — the renderer selects `palette_water_main` for the
+  submerged region from `f_wtr_state` (whole screen under water) and
+  `v_hblank_line` (water line), refreshed from `v_palette_water` once per frame
+  (`vdp.c:677`, `vdp.c:714-729`).
+- **Water surface spawn** in `Level_ChkWater` (`level.c:756`) and the active
+  underwater palette load before the fade-in (`level.c:745`).
+- **Assets** — `palette/Labyrinth Zone Underwater.bin`,
+  `palette/Sonic - LZ Underwater.bin`, `artnem/LZ Water Surface.nem`,
+  `artnem/LZ Water & Splashes.nem`, `artunc/GHZ Waterfall.unc`
+  (`data.c:62-63`, `data.c:673-674`, `data.c:764`).
+
+## Port-only additions
+
+None of this exists in the Mega Drive game — it is the PC layer.
+
+| System | File(s) | What it does |
+|---|---|---|
+| Options menu + config | `config.c/.h`, `options.h`, `main.c` | 10-row in-game menu persisted to the binary `sonic1.cfg` |
+| Post-processing | `postprocess.c/.h` | Scanlines, separable blur, CRT curvature + vignette; widescreen widths 398/424/480 |
+| VRAM viewer (`P`) | `vdp.c` | 2048-tile sheet, VRAM address labels, OSD of plane bases + hscroll, palette_main and CRAM strips |
+| Object RAM viewer (`O`) | `objview.c` | Live object slots |
+| Plane A/B viewer (`G`, `V`) | `planeview.c` | Full nametables with a rectangle over the sampled 320x224 region, 128-row wrap toggle |
+| RAM viewer (`R`) | `ramview.c` | Live hex + decimal of `ram[]` in 7 labelled sections |
+| Free camera (`F`) | `freecamera.c` | Pans the real 16.16 world camera, clamped to the level bounds |
+| Collision overlay | `vdp.c` | `SONIC_DEBUG_COLLISION` paints every 16x16 collision cell, coloured by the surface flags `FindNearestTile` returns |
+| TAS | `tas.c`, `tas.h`, `tas_editor.c/.h` | Record/replay up to 1 h @ 60 Hz, `tas.bin` (`TASFILE` v1), 8 full-state savestates (64 KB RAM + VRAM + CRAM + VSRAM + VDP registers), plus a frame editor |
+| End Demo screen | `enddemo.c` | SDL screen with a hand-rolled vector pixel font instead of the ASM routine |
+| Shared 8x8 font | `font8x8.h` | Bitmap font reused by the three viewers, no external font dependency |
 
 ## Project layout
 
 ```
 src/
-├── main.c        — main loop, game mode dispatch, title screen, level select
-├── ram.h/.c      — global RAM grid (ram[]) + typed accessors + obj macros
-├── constants.h   — IDs, collision types, bank/port addresses, PLC ids
-├── vdp.c/.h      — Mega Drive VDP model + SDL rendering (PC system layer)
-├── input.c/.h    — keyboard → joypad RAM (PC system layer)
-├── sound.c/.h    — SDL_mixer music/SFX by bgm/sfx id (PC system layer)
-├── level.c/.h    — Level_Enter/Process, ObjPosLoad, scrolling, drawing helpers
-├── objects.c/.h  — object dispatch, Sonic, rings, ReactToItem, title cards
-├── sprites.c/.h  — BuildSprites / sprite rendering from sprite_queue
-├── data.c/.h     — all tables/pointers/asset loading from build/assets/
-├── assets.c/.h   — binary file loader (with decompressor slack padding)
-├── decomp.c/.h   — Nemesis / Enigma / Kosinski decompressors
-├── plc.c/.h      — Pattern Load Cue queue (NewPLC / RunPLC)
-├── hud.c/.h      — HUD digit patters + per-frame refresh
-├── palette.c/.h  — palettes, PalLoad, fade in/out, PaletteCycle
-├── deform.c/.h   — background deformation + camera scroll
-├── collision.c/.h— 16x16 collision index for the level charset
-├── objview.c/.h  — Object RAM debug viewer window
-└── debugmode.c/.h— debug object placement (from _incObj/DebugMode.asm)
+├── main.c         — main loop, game mode dispatch, title screen, level select, options menu
+├── ram.h/.c       — global RAM grid (ram[]) + typed accessors + obj macros
+├── constants.h    — IDs, collision types, bank/port addresses, PLC ids
+├── types.h        — shared fixed-width typedefs
+├── vdp.c/.h       — Mega Drive VDP model + SDL rendering (PC system layer)
+├── input.c/.h     — keyboard → joypad RAM (PC system layer)
+├── sound.c/.h     — SDL_mixer music/SFX by bgm/sfx id (PC system layer)
+├── postprocess.c/.h — scanlines / blur / CRT / widescreen pipeline
+├── config.c/.h    — sonic1.cfg load/save (binary, magic "S1CF")
+├── options.h      — options menu row indices + VRAM layout
+├── level.c/.h     — Level_Enter/Process, ObjPosLoad, scrolling, LZ water system
+├── objects.c/.h   — object dispatch, Sonic, rings, ReactToItem, title cards
+├── special.c/.h   — Special Stage state machine + PalCycle_SS
+├── sprites.c/.h   — BuildSprites / sprite rendering from sprite_queue
+├── data.c/.h      — all tables/pointers/asset loading from build/assets/
+├── assets.c/.h    — binary file loader (with decompressor slack padding)
+├── decomp.c/.h    — Nemesis / Enigma / Kosinski decompressors
+├── plc.c/.h       — Pattern Load Cue queue (NewPLC / RunPLC)
+├── hud.c/.h       — HUD digit patters + per-frame refresh
+├── palette.c/.h   — palettes, PalLoad, fade in/out, PaletteCycle
+├── deform.c/.h    — background deformation + camera scroll
+├── collision.c/.h — 16x16 collision index for the level charset
+├── enddemo.c/.h   — port-only "END DEMO" screen
+├── tas.c/.h       — TAS record / playback / savestates
+├── tas_editor.c/.h— TAS frame editor window
+├── font8x8.h      — shared 8x8 bitmap font for the viewers
+├── freecamera.c/.h— debug free camera
+├── objview.c/.h   — Object RAM debug viewer window
+├── planeview.c/.h — Plane A/B debug viewer window
+├── ramview.c/.h   — RAM debug viewer window
+└── debugmode.c/.h — debug object placement (from _incObj/DebugMode.asm)
 
-disasm/           — original Sega disassembly + uncompressed assets (source of truth)
+disasm/            — original Sega disassembly + uncompressed assets (source of truth)
 ```
 
 ## Architecture notes
@@ -373,8 +577,29 @@ suffix convention above rather than mixing styles ad hoc.
 
 ## Debugging
 
-- **Env-var probes** are used so debug output never ships in normal runs, e.g.
-  `SONIC_DEBUG_REACT` (ring/collision diagnostics in `ReactToItem`).
+### Env-var probes
+
+Debug output never ships in a normal run — every probe is gated behind an
+environment variable read once at startup:
+
+| Variable | Effect |
+|---|---|
+| `SONIC_DEBUG_COLLISION` | Paint every visible 16x16 collision cell. Coloured by the surface flags `FindNearestTile` returns: grey = 3 faces, green = top, blue = left/right, yellow = bottom, dark red = no surface. `=fill` fills the cell instead of only its border |
+| `SONIC_DEBUG_REACT` | Ring/collision diagnostics in `ReactToItem` (object range + pointers) |
+| `SONIC_LOG_SPEED` | Inertia / angle / velocity of the player, every 4 frames |
+| `SONIC_DUMP_VRAM` | Dump VRAM, CRAM, VSRAM and the planes to disk once, when `v_generictimer <= SONIC_DUMP_TDINT` (default 286) |
+| `SONIC_DUMP_FRAMES` | Dump frames while `SONIC_DUMP_TMIN <= v_generictimer <= SONIC_DUMP_TMAX` (defaults 300..376) |
+| `SONIC_DUMP_TDINT` | Generic timer limit for the VRAM dump |
+| `SONIC_DUMP_TMIN` / `SONIC_DUMP_TMAX` | First / last timer value of the frame dump |
+| `SONIC_GARBAGE` | Output folder for the dumps |
+
+⚠️ When `SONIC_GARBAGE` is unset, the dump paths fall back to a
+**hardcoded absolute path** of the original machine
+(`src/main.c:552`, `src/main.c:579`) and the dumps silently go nowhere useful
+on anyone else's box. Always set it.
+
+### Other debugging notes
+
 - **gdb without `-g`** (default build): `ram` has no type — cast raw addresses
   (`p/x *(char*)ADDR`). With ASLR disabled the image base is
   `0x555555554000`; `nm build/sonic1` gives absolute global addresses.
@@ -383,15 +608,36 @@ suffix convention above rather than mixing styles ad hoc.
   boot (object placement, palettes, PLC state).
 - Sanitizer build (`-DSONIC_SANITIZE=ON`) is the first stop for wild memory
   access.
+- The collision overlay + free camera + RAM viewer cover most "why is this
+  object in the wrong place" questions without any image inspection.
 
 ## Roadmap / known stubs
 
-- Demo mode.
-- Continue, Ending and Credits screens (state machines only).
-- Zones other than Green Hill — data structures/tables are ported where the ASM
-  requires them; asset pointers may be `NULL`.
-- Software "Delay"-style VBlank features and the Z80 sound driver (the PC sound
-  system replaces the Z80).
+**Not implemented**
+
+- **FPS interpolation** — the options-menu row and the `fps_interp` setting
+  exist, but nothing in the renderer reads them.
+- Demo mode (`$08` handler is `NULL`, `GotoDemo()` just returns to the Sega
+  screen).
+- Continue, Ending and Credits screens (`TODO` state machines only, reached
+  through the level-select cheats).
+- Software "Delay"-style VBlank features and the Z80 sound driver (the PC
+  sound system replaces the Z80). `DACDriverLoad()` is an empty stub.
+- **Object coverage**: 72 IDs are registered in `obj_dispatch[]` out of the
+  136 object sources in `disasm/_incObj/`. Unregistered IDs fall through to
+  `NullObject` → `DeleteObject` (`objects.c:105`), so most badniks, springs,
+  platforms and triggers simply do not spawn yet.
+- `Render the VDP sprite table to an SDL texture` (`sprites.c:187`) — sprites
+  are composited in software instead.
+- `Object 4C` is referenced but not ported (`objects.c:12196`).
+
+**Partially ported**
+
+- Zones other than Green Hill — data structures/tables are ported where the
+  ASM requires them; asset pointers may be `NULL`, so level select reaches
+  those zones but they are not fully playable.
+- Level entry is verified end-to-end only on GHZ.
+
 
 ## License / disclaimer
 

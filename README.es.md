@@ -112,6 +112,11 @@ recayendo en `disasm/`, así que puedes:
 
 ## Controles
 
+El juego **no acepta argumentos de línea de comandos** — `main()` descarta
+`argc`/`argv` explícitamente (`src/main.c:1185-1187`) y no hay `getopt` en
+ningún sitio de `src/`. Todo va por teclado, y todos los ajustes persistentes
+viven en el menú de opciones del juego (ver abajo).
+
 ### Jugador 1
 
 | Acción | Tecla |
@@ -124,30 +129,173 @@ recayendo en `disasm/`, así que puedes:
 
 ### Jugador 2 (parcial)
 
-`I / J / K / L` mueven, `U / Y / O` son los botones ABC, `P` es Start.
+> **Mapping provisional.** Sonic 1 no tiene modo de 2 jugadores, así que estos
+> bindings solo existen para alimentar `v_jpadhold2` / `v_jpadpress2`. Está
+> previsto remapearlos: trata esta tabla como temporal.
+
+| Acción | Tecla |
+|---|---|
+| Mover | `I` `J` `K` `L` |
+| Saltar | `U` (botón A) |
+| Saltar (alt) | `Y` (botón B) |
+| Rodar / spin | `O` (botón C) |
+| Start | `P` |
+
+⚠️ `O` y `P` son también los toggles de los visores de Object RAM y VRAM, así
+que con el jugador 2 activo cada pulsación de `O` o `P` abre o cierra además
+una ventana de visor. Esa colisión es una de las razones por las que este
+mapping tiene que cambiar.
+
+El juego *lee* el jugador 2 en un solo sitio: los túneles de agua de LZ dejan
+que el segundo pad mueva a Sonic arriba/abajo mientras el viento lo empuja
+(`src/level.c:926-927`).
 
 ### Teclas de debug PC
+
+Todas funcionan en cualquier momento, en cualquier game mode, desde la ventana
+principal:
 
 | Tecla | Efecto |
 |---|---|
 | `P` | Alterna el visor VRAM (hoja de tiles con etiquetas de direcciones VRAM, OSD de bases de plano/scrolls, tiras de palette_main + CRAM) |
 | `O` | Alterna el visor Object RAM (slots de objetos en vivo) |
 | `G` | Alterna el visor Plano A/B (nametables completas, se adapta al tamaño de ventana sin estirar: lado a lado o apilado, scroll con rueda/arrastre) |
-| `ESC` (barra de título) | Salir |
+| `V` | Visor de planos: alterna el modo de wrap de 128 filas (estilo BlastEm) |
+| `R` | Alterna el visor RAM (hex + decimal en vivo, agrupado en secciones etiquetadas) |
+| `F` | Alterna la free camera |
+| `T` | Alterna la ventana del TAS editor |
+| `F1`–`F8` | Acciones de TAS (ver abajo) |
+| `ESC` | Salir (barra de título de la ventana) |
+
+Cada visor es una ventana SDL aparte que se refresca a 60 Hz desde el final de
+`VDP_RenderFrame`, y cerrarla con el gestor de ventanas la vuelve a alternar
+(`src/input.c:42-53`).
+
+**Navegación de los visores** — el visor de planos hace scroll con la rueda del
+ratón y panea con arrastre del botón izquierdo, pero solo mientras el puntero
+está dentro de esa ventana (`src/input.c:55-75`). El visor RAM es de solo
+lectura; sus secciones son GAME STATE, BOUNDS & CAMERA, SONIC,
+LOOP/ROLL/TRACK, FLAGS, SYNC/OSCILLATE y MISC (`src/ramview.c:219-227`).
+
+### Free camera
+
+`F` la alterna. La cámara entonces se mueve 8 px por frame, clampada a los
+límites del nivel (`v_limitleft2` / `v_limitright2` / `v_limittop2` /
+`v_limitbtm2`):
+
+| Tecla | Dirección |
+|---|---|
+| `Home` | Arriba |
+| `End` | Abajo |
+| `PageUp` | Derecha |
+| `Delete` | Izquierda |
+
+Mueve la cámara real del mundo en 16.16 y fuerza un redraw completo del FG
+para que el plano se refresque mientras haces panning
+(`src/freecamera.c:31-51`).
+
+### Teclas de TAS
+
+| Tecla | Acción |
+|---|---|
+| `F1` | Alterna grabación (LIVE → RECORD → LIVE, o cancela reproducción) |
+| `F2` | Reproduce desde el primer frame |
+| `F3` | Guardar `tas.bin` |
+| `F4` | Cargar `tas.bin` |
+| `F5` | Guardar estado en el siguiente slot (8 slots, round-robin) |
+| `F6` | Cargar el slot anterior |
+| `F7` | Pausar / reanudar |
+| `F8` | Avanzar un frame (solo mientras está pausado) |
+
+La reproducción mete los valores de pad grabados directamente en
+`v_jpadhold1` / `v_jpadpress1`, pisando al teclado (`src/input.c:147-148`).
+
+### Teclas del TAS editor
+
+| Tecla | Acción |
+|---|---|
+| `Esc` | Cerrar el editor |
+| `Space` | Pausar / reanudar |
+| `R` | Pausa y reproduce desde el frame 0 |
+| `←` / `→` | Mover el cursor de frames |
+| `Home` / `End` | Ir al primer / último frame |
+| `PageUp` / `PageDown` | Scrollear una página de frames |
+| `.` | Frame step |
+| `Delete` / `Backspace` | Borrar el/los frame(s) seleccionados |
+| `Insert` | Insertar un frame en el cursor |
+| `A` | Seleccionar todo |
+| `Ctrl+S` / `Ctrl+O` | Guardar / cargar `tas.bin` |
+| `F5` / `F6` | Guardar estado / cargar estado |
+
+Mientras la ventana del editor tiene el foco, el input del juego se pone a
+cero para que el teclado no perturbe la run (`src/input.c:149-152`).
+
+## Menú de opciones del juego
+
+Se alcanza desde la pantalla de título: mantén **A** y pulsa **Start** (level
+select), luego pulsa **B** (`src/main.c:635`). `↑`/`↓` eligen fila, `←`/`→`
+cambian el valor, `A`/`C`/`Start` confirman.
+
+| Fila | Valores | Efecto |
+|---|---|---|
+| WIDESCREEN | OFF / 398 / 424 / 480 | Ancho de render (`VDP_ApplyWidescreen`, `src/config.c:40-44`) |
+| FPS INTERP. | ON / OFF | **No implementado** — el flag se guarda y se alterna, pero el renderer nunca lo lee. Está en la lista por paridad con la interpolación 60→120 Hz planeada |
+| SCANLINES | ON / OFF | Overlay de scanlines (`src/postprocess.c:14`) |
+| FULLSCREEN | ON / OFF | `SDL_WINDOW_FULLSCREEN_DESKTOP` |
+| SS ALT ANIM | ON / OFF | Animación de salida alternativa del Special Stage (`SonicSS_ExitStage`) |
+| SS SMOOTH | ON / OFF | Scroll suave en el laberinto del Special Stage |
+| CRT | ON / OFF | Curvatura barrel + viñeteado sutil, muestreo nearest (`src/postprocess.c:48`) |
+| BLUR | ON / OFF | Blur separable H+V (`src/postprocess.c:138`, `:160`) |
+| APPLY & SAVE | — | Escribe la config a disco |
+| BACK | — | Vuelve al level select |
+
+El post-proceso se aplica en orden fijo — scanlines, blur H, blur V, CRT —
+sobre dos buffers internos, con un ancho de render máximo de 640
+(`src/postprocess.h:8-9`, `src/postprocess.c:205-221`).
+
+Los ajustes se guardan en **`sonic1.cfg`**, un archivo **binario** en el
+directorio de trabajo actual: el magic de 4 bytes `S1CF`, un `uint32_t` de
+versión (actualmente `4`) y luego el `struct Settings` en crudo
+(`src/config.c:17-38`). Se carga una vez al arrancar (`src/main.c:1196`) y se
+escribe en APPLY & SAVE, en BACK y al salir. Borra el fichero para volver a los
+valores por defecto.
 
 ## Códigos de trucos
 
-Todos los trucos están habilitados por defecto (`f_*cheat = 1` en `main.c`).
+Los cuatro trucos se habilitan al arrancar (`f_*cheat = 1`,
+`src/main.c:1225-1229`, reflejando `CheatsEnabled=1` en `sonic.asm:420-425`):
 
-- **Level select**: en la pantalla de título, introduce `Arriba, Abajo, Izquierda, Derecha`
-  en el D-Pad, luego mantén **A** (`Z`) y pulsa **Start** (`Enter`). Navega con
+| Flag | RAM | Efecto | Por defecto |
+|---|---|---|---|
+| `f_levselcheat` | `$FFE0` | Pantalla de level select | on |
+| `f_slomocheat` | `$FFE1` | Slow motion desde la pausa | on |
+| `f_debugcheat` | `$FFE2` | Modo debug en nivel | on |
+| `f_creditscheat` | `$FFE3` | Créditos/ending japoneses ocultos | on |
+
+- **Level select**: en la pantalla de título, mantén **A** (`Z`) y pulsa
+  **Start** (`Enter`) — el ASM comprueba `f_levselcheat` y que A estuviera
+  mantenida al pulsar Start (`disasm/sonic.asm:2166-2170`). Navega con
   `Arriba/Abajo`, confirma con cualquier botón de acción.
-  - La última fila del level select es **Sound Select** (`Izquierda/Derecha` para navegar).
-  - Al llegar al sonido `$9E` (con cheat de créditos) se abren los Créditos; `$9F` abre el
-    Ending.
-  - La fila Special Stage salta al estado de Special Stage (actualmente stub).
-- **Debug mode**: `Start` durante el juego con debug activado invoca la paleta
-  de objetos debug (portada desde `_incObj/DebugMode.asm`).
+  - La última fila del level select es **Sound Select** (`Izquierda/Derecha`
+    para navegar).
+  - Al llegar al sonido `$9E` (con cheat de créditos) se abren los Créditos;
+    `$9F` abre el Ending.
+  - La fila **Special Stage** arranca un special stage de verdad (3 vidas,
+    0 anillos, `v_emldlist` a cero) — no es un stub.
+  - Pulsar **B** en cualquier fila abre el menú de opciones.
+- **Slow motion**: en la pausa, mantén **B** (`X`) o pulsa **C** para entrar
+  en slow motion; pulsa **A** (`Z`) para salir de vuelta a la pantalla de
+  título (`src/level.c:1278-1281`).
+- **Modo debug**: `Start` durante el juego con debug habilitado invoca la
+  paleta de objetos debug (portada desde `_incObj/DebugMode.asm`).
+- **Re-armar los trucos** (`Tit_ActivateCheat`, `disasm/sonic.asm:2113-2128`,
+  portado en `src/main.c:702-723`): introducir `Arriba, Abajo, Izquierda,
+  Derecha` en el D-Pad de la pantalla de título rehabilita un truco, elegido
+  según cuántas veces se pulsó **C** (0-1 level select, 2-3 slow motion, 4-5
+  debug, 6-7 créditos). En regiones no japonesas (`v_megadrive >= 0`) dos o más
+  pulsaciones de C fuerzan siempre slow motion + debug, y el cheat de créditos
+  queda inalcanzable — igual que en el original. Como el port arranca con los
+  cuatro ya activados, este código solo se observa si algo los limpia.
 
 ## Flujo de juego (game modes portados)
 
@@ -163,6 +311,7 @@ La `game_mode_table` en `src/main.c` refleja `GameModeArray` de `sonic.asm`:
 | Continue | `$14` | ⛔ Stub (`TODO`) |
 | Ending | `$18` | ⛔ Stub (`TODO`) |
 | Credits | `$1C` | ⛔ Stub (`TODO`) |
+| End Demo | `$20` | ✅ Pantalla SDL propia del port ("END DEMO" / "DEVELOPED BY" + logos), no la rutina del ASM — solo para builds de demo |
 
 ## Gameplay actualmente portado (Green Hill Zone)
 
@@ -184,33 +333,95 @@ La `game_mode_table` en `src/main.c` refleja `GameModeArray` de `sonic.asm`:
 - Gráficos animados por zona (GHZ) y ciclo de paletas de zona.
 - **Special Stage**: flujo 1:1 completo (fades blancos, física del laberinto,
   pantalla de resultados con elementos de card, conteo de bonus de anillos,
-  Chaos Emeralds, salida al siguiente nivel).
+  Chaos Emeralds, salida al siguiente nivel), incluido `PalCycle_SS` /
+  `PalCycle_SS_2` de `SpecCode.asm`.
+
+## Sistema de agua de Labyrinth Zone
+
+Portado 1:1 desde `disasm/_inc/LZWaterFeatures.asm` (los marcadores `NUEVO` en
+`src/level.c` significan "recién portado", no "inventado"):
+
+- **Altura de agua por acto** — `WaterHeight[4]` para LZ1/LZ2/LZ3/SBZ3
+  (`level.c:597`) aplicada a `v_waterpos1..3` por `LZ_LevelWaterSetup`
+  (`level.c:630`).
+- **`LZWindTunnels`** (`level.c:878`) — túneles de viento de cascada,
+  localizados desde `LZWind_Data` en el offset `8+(act<<3)` (dos entradas en
+  el acto 1). Dentro del túnel suena `sfx_Waterfall` cada `$40` frames,
+  Sonic es empujado con `obVelX = $400` en la animación `id_Float2`, una zona
+  de succión cerca de la pared izquierda lo levanta o lo baja, y el `Arriba`/
+  `Abajo` del **jugador 2** lo ajusta verticalmente. Pone `f_wtunnelmode` y
+  respeta `f_wtunneldisallow`.
+- **`LZWaterSlides`** (`level.c:939`) — slides de agua emparejados por chunk id
+  contra `Slide_Chunks[7]`.
+- **`LZDynamicWater`** (`level.c:1130`) — la máquina de estados que mueve
+  `v_waterpos2` hacia `v_waterpos3`, incluidos los targets fijos del acto 3
+  (`$0508`, `$0608`, `$07C0`, `$0128`).
+- **Paleta por scanline** — el renderer elige `palette_water_main` para la
+  región sumergida a partir de `f_wtr_state` (pantalla entera bajo el agua) y
+  `v_hblank_line` (línea del agua), refrescados desde `v_palette_water` una
+  vez por frame (`vdp.c:677`, `vdp.c:714-729`).
+- **Spawn de la superficie del agua** en `Level_ChkWater` (`level.c:756`) y
+  carga de la paleta submarina activa antes del fade-in (`level.c:745`).
+- **Assets** — `palette/Labyrinth Zone Underwater.bin`,
+  `palette/Sonic - LZ Underwater.bin`, `artnem/LZ Water Surface.nem`,
+  `artnem/LZ Water & Splashes.nem`, `artunc/GHZ Waterfall.unc`
+  (`data.c:62-63`, `data.c:673-674`, `data.c:764`).
+
+## Adiciones solo del port
+
+Nada de esto existe en el juego de Mega Drive — es la capa PC.
+
+| Sistema | Fichero(s) | Qué hace |
+|---|---|---|
+| Menú de opciones + config | `config.c/.h`, `options.h`, `main.c` | Menú de 10 filas persistido en el `sonic1.cfg` binario |
+| Post-proceso | `postprocess.c/.h` | Scanlines, blur separable, curvatura CRT + viñeteado; anchos widescreen 398/424/480 |
+| Visor VRAM (`P`) | `vdp.c` | Hoja de 2048 tiles, etiquetas de dirección VRAM, OSD de bases de plano + hscroll, tiras de palette_main y CRAM |
+| Visor Object RAM (`O`) | `objview.c` | Slots de objetos en vivo |
+| Visor Plano A/B (`G`, `V`) | `planeview.c` | Nametables completas con un rectángulo sobre la región de 320x224 muestreada, toggle de wrap de 128 filas |
+| Visor RAM (`R`) | `ramview.c` | Hex + decimal de `ram[]` en vivo, en 7 secciones etiquetadas |
+| Free camera (`F`) | `freecamera.c` | Mueve la cámara real del mundo en 16.16, clampada a los límites del nivel |
+| Overlay de colisión | `vdp.c` | `SONIC_DEBUG_COLLISION` pinta cada celda de colisión 16x16, coloreada por los flags de superficie que devuelve `FindNearestTile` |
+| TAS | `tas.c`, `tas.h`, `tas_editor.c/.h` | Graba/reproduce hasta 1 h @ 60 Hz, `tas.bin` (`TASFILE` v1), 8 savestates de estado completo (64 KB RAM + VRAM + CRAM + VSRAM + registros VDP), más un editor frame a frame |
+| Pantalla End Demo | `enddemo.c` | Pantalla SDL con una fuente de pixel-art vectorial hecha a mano en vez de la rutina del ASM |
+| Fuente 8x8 compartida | `font8x8.h` | Fuente bitmap reutilizada por los tres visores, sin dependencia de fuente externa |
 
 ## Estructura del proyecto
 
 ```
 src/
-├── main.c        — bucle principal, dispatch de game mode, title screen, level select
-├── ram.h/.c      — grilla RAM global (ram[]) + accessors tipados + macros de objeto
-├── constants.h   — IDs, tipos de colisión, direcciones bank/port, PLC ids
-├── vdp.c/.h      — modelo VDP Mega Drive + renderizado SDL (capa de sistema PC)
-├── input.c/.h    — teclado → joypad RAM (capa de sistema PC)
-├── sound.c/.h    — SDL_mixer música/SFX por id bgm/sfx (capa de sistema PC)
-├── level.c/.h    — Level_Enter/Process, ObjPosLoad, scrolling, helpers de dibujo
-├── objects.c/.h  — dispatch de objetos, Sonic, anillos, ReactToItem, title cards
-├── sprites.c/.h  — BuildSprites / renderizado de sprites desde sprite_queue
-├── data.c/.h     — todas las tablas/punteros/carga de assets desde build/assets/
-├── assets.c/.h   — cargador de archivos binarios (con padding slack de descompresores)
-├── decomp.c/.h   — descompresores Nemesis / Enigma / Kosinski
-├── plc.c/.h      — cola Pattern Load Cue (NewPLC / RunPLC)
-├── hud.c/.h      — patrones de dígitos HUD + refresco por frame
-├── palette.c/.h  — paletas, PalLoad, fade in/out, PaletteCycle
-├── deform.c/.h   — deformación de fondo + scroll de cámara
-├── collision.c/.h— índice de colisión 16x16 para el charset del nivel
-├── objview.c/.h  — visor de Object RAM para debug
-└── debugmode.c/.h— colocación de objeto debug (desde _incObj/DebugMode.asm)
+├── main.c         — bucle principal, dispatch de game mode, title screen, level select, menú de opciones
+├── ram.h/.c       — grilla RAM global (ram[]) + accessors tipados + macros de objeto
+├── constants.h    — IDs, tipos de colisión, direcciones bank/port, PLC ids
+├── types.h        — typedefs de ancho fijo compartidos
+├── vdp.c/.h       — modelo VDP Mega Drive + renderizado SDL (capa de sistema PC)
+├── input.c/.h     — teclado → joypad RAM (capa de sistema PC)
+├── sound.c/.h     — SDL_mixer música/SFX por id bgm/sfx (capa de sistema PC)
+├── postprocess.c/.h — pipeline scanlines / blur / CRT / widescreen
+├── config.c/.h    — carga/guardado de sonic1.cfg (binario, magic "S1CF")
+├── options.h      — índices de filas del menú de opciones + layout de VRAM
+├── level.c/.h     — Level_Enter/Process, ObjPosLoad, scrolling, sistema de agua LZ
+├── objects.c/.h   — dispatch de objetos, Sonic, anillos, ReactToItem, title cards
+├── special.c/.h   — máquina de estados del Special Stage + PalCycle_SS
+├── sprites.c/.h   — BuildSprites / renderizado de sprites desde sprite_queue
+├── data.c/.h      — todas las tablas/punteros/carga de assets desde build/assets/
+├── assets.c/.h    — cargador de archivos binarios (con padding slack de descompresores)
+├── decomp.c/.h    — descompresores Nemesis / Enigma / Kosinski
+├── plc.c/.h       — cola Pattern Load Cue (NewPLC / RunPLC)
+├── hud.c/.h       — patrones de dígitos HUD + refresco por frame
+├── palette.c/.h   — paletas, PalLoad, fade in/out, PaletteCycle
+├── deform.c/.h    — deformación de fondo + scroll de cámara
+├── collision.c/.h — índice de colisión 16x16 para el charset del nivel
+├── enddemo.c/.h   — pantalla "END DEMO" propia del port
+├── tas.c/.h       — grabación / reproducción / savestates del TAS
+├── tas_editor.c/.h— editor de frames del TAS
+├── font8x8.h      — fuente bitmap 8x8 compartida por los visores
+├── freecamera.c/.h— free camera de debug
+├── objview.c/.h   — visor de Object RAM para debug
+├── planeview.c/.h — visor de Planos A/B para debug
+├── ramview.c/.h   — visor de RAM para debug
+└── debugmode.c/.h — colocación de objeto debug (desde _incObj/DebugMode.asm)
 
-disasm/           — desensamblado original Sega + assets sin comprimir (fuente de verdad)
+disasm/            — desensamblado original Sega + assets sin comprimir (fuente de verdad)
 ```
 
 ## Notas de arquitectura
@@ -371,9 +582,29 @@ convención de sufijo `_a` arriba en vez de mezclar estilos ad hoc.
 
 ## Debugging
 
-- **Sondas por variable de entorno** se usan para que la salida de debug nunca
-  vaya en runs normales, p. ej. `SONIC_DEBUG_REACT` (diagnósticos de
-  anillos/colisión en `ReactToItem`).
+### Sondas por variable de entorno
+
+La salida de debug nunca va en un run normal — cada sonda está detrás de una
+variable de entorno leída una vez al arrancar:
+
+| Variable | Efecto |
+|---|---|
+| `SONIC_DEBUG_COLLISION` | Pinta cada celda de colisión 16x16 visible. Coloreada por los flags de superficie que devuelve `FindNearestTile`: gris = 3 caras, verde = top, azul = izquierda/derecha, amarillo = bottom, rojo oscuro = sin superficie. `=fill` rellena la celda en vez de solo el borde |
+| `SONIC_DEBUG_REACT` | Diagnósticos de anillos/colisión en `ReactToItem` (rango de objetos + punteros) |
+| `SONIC_LOG_SPEED` | Inercia / ángulo / velocidad del jugador, cada 4 frames |
+| `SONIC_DUMP_VRAM` | Vuelca VRAM, CRAM, VSRAM y los planos a disco una vez, cuando `v_generictimer <= SONIC_DUMP_TDINT` (por defecto 286) |
+| `SONIC_DUMP_FRAMES` | Vuelca frames mientras `SONIC_DUMP_TMIN <= v_generictimer <= SONIC_DUMP_TMAX` (por defecto 300..376) |
+| `SONIC_DUMP_TDINT` | Límite de `v_generictimer` para el dump de VRAM |
+| `SONIC_DUMP_TMIN` / `SONIC_DUMP_TMAX` | Primer / último valor de timer del dump de frames |
+| `SONIC_GARBAGE` | Carpeta de salida de los dumps |
+
+⚠️ Si `SONIC_GARBAGE` no está definida, las rutas de los dumps caen a una
+**ruta absoluta hardcodeada** de la máquina original (`src/main.c:552`,
+`src/main.c:579`) y los dumps se pierden silenciosamente en el portátil de
+cualquier otro. Defínela siempre.
+
+### Otras notas de debug
+
 - **gdb sin `-g`** (build default): `ram` no tiene tipo — castear direcciones
   crudas (`p/x *(char*)ADDR`). Con ASLR desactivado la base de imagen es
   `0x555555554000`; `nm build/sonic1` da direcciones absolutas globales.
@@ -382,15 +613,37 @@ convención de sufijo `_a` arriba en vez de mezclar estilos ad hoc.
   completo de nivel (colocación de objetos, paletas, estado PLC).
 - Build con sanitizer (`-DSONIC_SANITIZE=ON`) es la primera parada para
   accesos a memoria salvaje.
+- El overlay de colisión + la free camera + el visor RAM cubren casi todo lo
+  que responde a "por qué este objeto está en el sitio equivocado" sin
+  necesidad de inspeccionar imágenes.
 
 ## Roadmap / stubs conocidos
 
-- Demo mode.
-- Pantallas Continue, Ending y Credits (solo máquinas de estado).
-- Zonas distintas a Green Hill — estructuras de datos/tablas portadas donde el
-  ASM las requiere; punteros de assets pueden ser `NULL`.
+**No implementado**
+
+- **Interpolación de FPS** — la fila del menú de opciones y el ajuste
+  `fps_interp` existen, pero nada en el renderer los lee.
+- Demo mode (el handler `$08` es `NULL`, `GotoDemo()` solo vuelve a la
+  pantalla Sega).
+- Pantallas Continue, Ending y Credits (solo máquinas de estado `TODO`, se
+  alcanzan por los cheats del level select).
 - Features VBlank estilo "Delay" por software y el driver de sonido Z80 (el
-  sistema de sonido PC reemplaza al Z80).
+  sistema de sonido PC reemplaza al Z80). `DACDriverLoad()` es un stub vacío.
+- **Cobertura de objetos**: hay 72 IDs registrados en `obj_dispatch[]` de los
+  136 fuentes de objeto en `disasm/_incObj/`. Los IDs no registrados caen en
+  `NullObject` → `DeleteObject` (`objects.c:105`), así que la mayoría de
+  badniks, muelles, plataformas y triggers todavía no aparecen.
+- `Render the VDP sprite table to an SDL texture` (`sprites.c:187`) — los
+  sprites se componen por software en su lugar.
+- `Object 4C` se referencia pero no está portado (`objects.c:12196`).
+
+**Parcialmente portado**
+
+- Zonas distintas a Green Hill — estructuras de datos/tablas portadas donde el
+  ASM las requiere; los punteros de assets pueden ser `NULL`, así que el level
+  select llega a esas zonas pero no son jugables de principio a fin.
+- La entrada a nivel está verificada de extremo a extremo solo en GHZ.
+
 
 ## Licencia / descargo
 
