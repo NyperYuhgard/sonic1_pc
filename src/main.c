@@ -174,8 +174,7 @@ static void ProcessSDLEvents(void) {
 }
 
 void WaitForVBlank(void) {
-    /* Read input */
-    Input_Read();
+
 
     /* Process SDL events */
     ProcessSDLEvents();
@@ -232,11 +231,14 @@ void WaitForVBlank(void) {
        es lo que aplica el Vsync y da el timing de 60 Hz) */
     VDP_RenderFrame(renderer);
 
+    /* Read input */
+    Input_Read();
+
     TAS_EndFrame();
     TASEditor_Render();
 
     /* Increment frame counters */
-    v_framecount = v_framecount + 1;
+    
     v_vblank_count = v_vblank_count + 1;
     v_vblank_byte = (uint8_t)(v_vblank_byte + 1);
 }
@@ -1122,7 +1124,7 @@ static void MainGameLoop(void) {
 
         if (!running) break;
 
-        SDL_Delay(16);
+        
     }
 }
 

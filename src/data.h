@@ -654,6 +654,9 @@ extern size_t Ani_LWall_len;
 extern const uint8_t *Ani_Yad;             
 extern size_t Ani_Yad_len;
 
+extern const uint8_t *Ani_Roll;           
+extern size_t Ani_Roll_len;
+
 /* GHZ bridge (id_Bridge) mappings */
 extern const uint8_t *Map_Bri;
 extern size_t   Map_Bri_len;
@@ -709,12 +712,12 @@ extern const uint8_t *Map_Fan;
 extern const uint8_t *Map_Seesaw;
 extern const uint8_t *Map_Scen;
 extern const uint8_t *Map_Bomb;
-extern const uint8_t *Map_Roll;
+extern const uint8_t *Map_Roll;              extern size_t Map_Roll_len;
 extern const uint8_t *Map_Light;             extern size_t Map_Light_len;
 extern const uint8_t *Map_Bump;
 extern const uint8_t *Map_Plat_SYZ;          extern size_t Map_Plat_SYZ_len;
 extern const uint8_t *Map_FBlock;            extern size_t Map_FBlock_len;
-extern const uint8_t *Map_BBall;
+extern const uint8_t *Map_BBall;             extern size_t Map_BBall_len;
 extern const uint8_t *Map_Disc;
 extern const uint8_t *Map_Trap;
 extern const uint8_t *Map_Spin;
@@ -741,7 +744,12 @@ extern const uint8_t *Map_LGrass;
 extern size_t Map_LGrass_len;
 extern const uint8_t *Map_Fire;
 extern size_t Map_Fire_len;
-
+extern const uint8_t *Map_SBall;
+extern size_t Map_SBall_len;
+extern const uint8_t *Map_SBall2;
+extern size_t Map_SBall2_len;
+extern const uint8_t *Map_BossBlock;
+extern size_t Map_BossBlock_len;
 
 /* Points object mappings (28, 29 Animals and Points.asm: Map_Points) */
 extern const uint8_t *Map_Points;

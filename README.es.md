@@ -50,7 +50,54 @@ cmake --build build -j$(nproc)
 |---|---|---|
 | Default | — | `-O2`, sin `-g` (símbolos via `nm`, gdb necesita casts raw) |
 | Debug | `-DCMAKE_BUILD_TYPE=Debug` | `-O0 -g -DDEBUG` |
+| RelWithDebInfo | `-DCMAKE_BUILD_TYPE=RelWithDebInfo` | `-O2 -g -DNDEBUG` |
 | Sanitizers | `-DSONIC_SANITIZE=ON` | ASan + UBSan (detector de accesos a memoria salvaje) |
+
+### Scripts de compilación
+
+`scripts/` envuelve los comandos manuales de arriba en variantes listas para
+usar que además dejan los assets junto al ejecutable.
+
+**Linux / WSL2 (build nativo):**
+
+```
+scripts/build-linux.sh                 # release  -> build/release/sonic1
+scripts/build-linux.sh debug           # debug    -> build/debug/sonic1
+scripts/build-linux.sh relwithdebinfo  # optimizado con símbolos
+scripts/build-linux.sh asan            # ASan + UBSan
+scripts/build-linux.sh all --clean     # las cuatro variantes, desde cero
+scripts/build-linux.sh debug --run     # compila y arranca
+```
+
+Ejecuta el juego desde la raíz del repo (`./build/release/sonic1`):
+`src/sound.c` carga el audio desde `./assets` (relativo al directorio de
+trabajo) mientras que `src/data.c` resuelve el resto contra la ruta del
+ejecutable.
+
+**Windows (cross-compile con mingw-w64 desde Linux/WSL2):**
+
+```
+scripts/build-windows.sh                       # release -> dist/win/release/sonic1.exe
+scripts/build-windows.sh debug --clean
+scripts/build-windows.sh all
+scripts/build-windows.bat                      # lo mismo, desde cmd.exe en Windows (necesita WSL2)
+```
+
+`dist/win/<variant>/` es autocontenido: `sonic1.exe`, las DLLs de SDL2 y
+`assets/`. Hace falta SDL2 cross-compilado, y como mingw-w64 no incluye
+AddressSanitizer la variante `asan` es solo para Linux/WSL2:
+
+```
+sudo apt install gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
+scripts/build-windows.sh release --prefix ~/mingw64   # SDL2 cross-compilado para mingw-w64
+```
+
+Bloqueo conocido: `src/data.c` mapea los datos de niveles con `mmap` de POSIX
+(`sys/mman.h`), que mingw-w64 no provee, así que el `.exe` no enlaza hasta que
+eso se sustituya por su equivalente en Windows (`VirtualAlloc`).
+
+Ejecuta `scripts/build-linux.sh --help` / `scripts/build-windows.sh --help` para
+ver todas las opciones.
 
 ### Assets
 

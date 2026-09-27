@@ -94,6 +94,11 @@ static void SpinningLight_Main(void *obj);
 static void FloatingBlock_Main(void *obj);
 static void Yadrin_Main(void *obj);
 static void Bumper_Main(void *obj);
+static void BigSpikeBall_Main(void *obj);
+static void SpikeBall_Main(void *obj);
+static void Roller_Main(void *obj);
+static void BossSpringYard_Main(void *obj);
+static void BossBlock_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -170,6 +175,11 @@ void Objects_Init(void) {
     obj_dispatch[id_FloatingBlock] = FloatingBlock_Main;
     obj_dispatch[id_Yadrin] = Yadrin_Main;
     obj_dispatch[id_Bumper] = Bumper_Main;
+    obj_dispatch[id_BigSpikeBall] = BigSpikeBall_Main;
+    obj_dispatch[id_SpikeBall] = SpikeBall_Main;
+    obj_dispatch[id_Roller] = Roller_Main;
+    obj_dispatch[id_BossSpringYard] = BossSpringYard_Main;
+    obj_dispatch[id_BossBlock]      = BossBlock_Main;
     /* Register Special Stage results screen objects */
     obj_dispatch[id_SSResult]  = SSResult_Main;
     obj_dispatch[id_SSRChaos]  = SSRChaos_Main;
@@ -1076,7 +1086,7 @@ static void Sonic_Water(void *obj) {
     if (v_zone != id_LZ) return;
 
     int16_t water_y = v_waterpos1;
-    if (obY(o) <= water_y) {
+    if (obY(o) > water_y) {
         /* below water surface - entering water */
         uint8_t was_underwater = obStatus(o) & (1 << 6);
         obStatus(o) |= (1 << 6);   /* set underwater flag */
@@ -2725,8 +2735,6 @@ static void Sonic_ChkRoll(void *obj) {
     obAnim(o) = id_Roll;
     obY(o) = (int16_t)(obY(o) + (sonic_height - sonic_roll_height));
     Sound_Queue(sfx_Roll, false);
-    printf("Roll: hold2=%02X btnLR=%02X btnDn=%02X\n",
-           v_jpadhold2, btnL|btnR, btnDn);
     if (obInertia(o) == 0) {
         obInertia(o) = 0x200;
     }
@@ -3358,7 +3366,20 @@ static void Sonic_AngleSpeed(void *obj) {
     CalcSine(obAngle(o), &s0, &s1);
     obVelX(o) = (int16_t)(((int32_t)s1 * obInertia(o)) >> 8);
     obVelY(o) = (int16_t)(((int32_t)s0 * obInertia(o)) >> 8);
-    Sonic_WallSpeedAdjust(o);   /* ASM cae aquí */
+    Sonic_WallSpeedAdjust(o);
+
+    /* Debug: log de velocidad, una línea cada 4 frames */
+    static int dbg = -1;
+    static uint16_t last_frame = 0xFFFF;
+    if (dbg < 0) dbg = getenv("SONIC_LOG_SPEED") ? 1 : 0;
+    if (dbg && v_framecount != last_frame) {
+        last_frame = v_framecount;
+        if ((v_framecount & 3) == 0) {
+            fprintf(stderr, "f=%u inertia=%d angle=%d velX=%d velY=%d\n",
+                    (unsigned)v_framecount,
+                    obInertia(o), obAngle(o), obVelX(o), obVelY(o));
+        }
+    }
 }
 
 static void Sonic_ResetScr(void *obj) {
@@ -16087,5 +16108,1233 @@ static void Bumper_Main(void *obj) {
     switch (obRoutine(o)) {                                  /* Bump_Index */
         case 0: Bump_Main(o); break;
         case 2: Bump_Hit(o);  break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 58 — Big Spiked Metal Ball (SYZ)
+ *  Ported verbatim from _incObj/58 SYZ Big Spiked Ball.asm (REV01, FixBugs=0).
+ *
+ *  Campos (offsets ASM):
+ *    bball_origY  = objoff_38 (word)
+ *    bball_origX  = objoff_3A (word)
+ *    bball_radius = objoff_3C (byte): radio del círculo (subtype $x3 only)
+ *    bball_speed  = objoff_3E (word): velocidad de rotación (subtype $x3 only)
+ *
+ *  Dispatcher por (obSubtype & 7): 0=estático, 1=izq/der, 2=arriba/abajo,
+ *  3=círculo. El círculo guarda el ángulo en obAngle (byte en 0x26) y lo
+ *  actualiza con suma de word (obAngle es un word de 2 bytes en el ASM
+ *  original; el byte bajo es el ángulo real y el alto va aparte).
+ * =========================================================================== */
+
+#define bball_origY(o)  (*(int16_t *)((uint8_t *)(o) + 0x38))
+#define bball_origX(o)  (*(int16_t *)((uint8_t *)(o) + 0x3A))
+#define bball_radius(o) (*(uint8_t *)((uint8_t *)(o) + 0x3C))
+#define bball_speed(o)  (*(int16_t *)((uint8_t *)(o) + 0x3E))
+
+
+
+static void BBall_Move(uint8_t *o);
+static void BBall_Type0_Stationary(uint8_t *o);
+static void BBall_Type1_LeftRight(uint8_t *o);
+static void BBall_Type2_UpDown(uint8_t *o);
+static void BBall_Type3_Circling(uint8_t *o);
+
+/* --- BBall_Main — Routine 0 ------------------------------------------ */
+static void BBall_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                       /* → BBall_Move */
+    obMap(o)      = (uint32_t)(uintptr_t)Map_BBall;
+    obGfx(o)      = (uint16_t)ArtTile_SYZ_Big_Spikeball;
+    obRender(o)   = sprite_cam_field;
+    obPriority(o) = 4;
+    obActWid(o)   = 48 / 2;
+    bball_origX(o) = obX(o);
+    bball_origY(o) = obY(o);
+    obColType(o)  = (uint8_t)(col_32x32 | col_hurt);         /* dañino al tocar */
+
+    /* Velocidad de rotación: subtype & $F0 << 3 */
+    uint8_t sub = obSubtype(o);
+    int16_t d1 = (int16_t)((sub & 0xF0) >> 4);               /* parte alta: 0..$F */
+    d1 = (int16_t)((d1 << 4) << 3);                          /* asl.w #3 sobre el valor original:
+                                                                el ASM extiende un byte ($Fx) y
+                                                                luego <<3, así que el resultado es
+                                                                $F0 << 3 = $780 máx. Para replicar
+                                                                esto uso el byte completo: */
+    /* Recalculo exacto según el ASM: */
+    d1 = (int16_t)(sub & 0xF0);                              /* move.b obSubtype / andi.b #$F0 */
+    d1 = (int16_t)(int8_t)d1;                                /* ext.w d1 (sign-extend) */
+    d1 = (int16_t)(d1 << 3);                                 /* asl.w #3 */
+    bball_speed(o) = d1;
+
+    /* Ángulo inicial desde obStatus: ror.b #2, andi.b #$C0 → (status & 3) << 6 */
+    uint8_t d0 = obStatus(o);
+    d0 = (uint8_t)((d0 >> 2) | (d0 << 6));                   /* ror.b #2 */
+    d0 &= 0xC0;                                              /* andi.b #%11000000 */
+    obAngle(o) = d0;
+
+    bball_radius(o) = 0x50;                                  /* move.b #$50,bball_radius */
+
+    /* ASM falls through into BBall_Move */
+    BBall_Move(o);
+}
+
+/* --- BBall_Move — Routine 2 ----------------------------------------- */
+static void BBall_Move(uint8_t *o) {
+    switch (obSubtype(o) & 7) {                              /* BBall_Types */
+        case 0: BBall_Type0_Stationary(o); break;
+        case 1: BBall_Type1_LeftRight(o);  break;
+        case 2: BBall_Type2_UpDown(o);     break;
+        case 3: BBall_Type3_Circling(o);   break;
+    }
+
+    if (OutOfRange(o, bball_origX(o))) {                     /* out_of_range.w DeleteObject,bball_origX */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);
+}
+
+/* --- Subtype $x0: estacionario --------------------------------------- */
+static void BBall_Type0_Stationary(uint8_t *o) { (void)o; }
+
+/* --- Subtype $x1: izquierda/derecha --------------------------------- */
+static void BBall_Type1_LeftRight(uint8_t *o) {
+    int16_t d1 = 0x60;                                       /* move.w #$60,d1 */
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x0E);      /* moveq #0,d0 / move.b (v_oscillate+$E),d0 */
+
+    if (obStatus(o) & 1) {                                   /* btst #0,obStatus */
+        d0 = (int16_t)(-d0);                                 /* neg.w d0 */
+        d0 = (int16_t)(d0 + d1);                             /* add.w d1,d0 */
+    }
+    /* .setX */
+    d1 = bball_origX(o);                                     /* move.w bball_origX(a0),d1 */
+    d1 = (int16_t)(d1 - d0);                                 /* sub.w d0,d1 */
+    obX(o) = d1;
+}
+
+/* --- Subtype $x2: arriba/abajo --------------------------------------- */
+static void BBall_Type2_UpDown(uint8_t *o) {
+    int16_t d1 = 0x60;                                       /* move.w #$60,d1 */
+    int16_t d0 = (int16_t)RAM_BYTE(v_oscillate + 0x0E);
+
+    if (obStatus(o) & 1) {                                   /* btst #0,obStatus */
+        d0 = (int16_t)(-d0);                                 /* neg.w d0 */
+        d0 = (int16_t)(d0 + 0x60 + 0x20);                    /* addi.w #$60+$20,d0 */
+    }
+    /* .setY */
+    d1 = bball_origY(o);                                     /* move.w bball_origY(a0),d1 */
+    d1 = (int16_t)(d1 - d0);                                 /* sub.w d0,d1 */
+    obY(o) = d1;
+}
+
+/* --- Subtype $x3: círculo -------------------------------------------- */
+static void BBall_Type3_Circling(uint8_t *o) {
+    /* El ASM hace add.w al par 0x26-0x27 e interpreta el byte 0x26 como
+       el byte ALTO del word (68k big-endian). Como el port es little-endian,
+       hay que hacer la aritmética BE manualmente. Si sumamos con nativo LE,
+       el ángulo alterna 0x00/0x80 en vez de incrementar de 1 en 1. */
+    uint8_t *p = (uint8_t *)o;
+    uint16_t w = ((uint16_t)p[0x26] << 8) | p[0x27];
+    w = (uint16_t)(w + (uint16_t)bball_speed(o));
+    p[0x26] = (uint8_t)(w >> 8);
+    p[0x27] = (uint8_t)(w & 0xFF);
+
+    uint8_t angle = obAngle(o);                              /* byte 0x26 */
+    int16_t s0, s1;
+    CalcSine(angle, &s0, &s1);                               /* s0=sin, s1=cos */
+
+    int16_t d2 = bball_origY(o);
+    int16_t d3 = bball_origX(o);
+
+    int16_t d4 = (int16_t)bball_radius(o);
+    int16_t d5 = d4;
+
+    d4 = (int16_t)(((int32_t)d4 * s0) >> 8);
+    d5 = (int16_t)(((int32_t)d5 * s1) >> 8);
+
+    d4 = (int16_t)(d4 + d2);
+    d5 = (int16_t)(d5 + d3);
+
+    obY(o) = d4;
+    obX(o) = d5;
+}
+
+/* --- Dispatcher Object 58 — BBall_Index: 0 = Main, 2 = Move ---------- */
+static void BigSpikeBall_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                                  /* BBall_Index */
+        case 0: BBall_Main(o); break;
+        case 2: BBall_Move(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 57 — Spiked Ball and Chain (SYZ, LZ)
+ *  Ported verbatim from _incObj/57 SYZ, LZ Spiked Ball and Chain.asm
+ *  (REV01, FixBugs=0).
+ *
+ *  Campos (offsets ASM):
+ *    sball_children   = objoff_29 (byte): número de hijos spawneados
+ *    sball_children_ram = objoff_2A..: índices de los hijos (1 byte c/u),
+ *                                       seguidos del índice del propio padre
+ *    sball_origY      = objoff_38 (word)
+ *    sball_origX      = objoff_3A (word)
+ *    sball_radius     = objoff_3C (byte): radio de este eslabón
+ *    sball_speed      = objoff_3E (word): velocidad de giro (nibble alto << 3)
+ *
+ *  FixBugs=0: usa FindFreeObj (FixBugs usa FindNextFreeObj).
+ * =========================================================================== */
+
+#define sball_children(o) (*(uint8_t *)((uint8_t *)(o) + 0x29))
+#define sball_origY(o)    (*(int16_t *)((uint8_t *)(o) + 0x38))
+#define sball_origX(o)    (*(int16_t *)((uint8_t *)(o) + 0x3A))
+#define sball_radius(o)   (*(uint8_t *)((uint8_t *)(o) + 0x3C))
+#define sball_speed(o)    (*(int16_t *)((uint8_t *)(o) + 0x3E))
+
+static void SBall_Move(uint8_t *o);
+static void SBall_Child(uint8_t *o);
+static void Sball_Twirl(uint8_t *o);
+static void SBall_ChkDel(uint8_t *o);
+
+/* --- SBall_Main — Routine 0 ------------------------------------------ */
+static void SBall_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                       /* → SBall_Move */
+    obMap(o)      = (uint32_t)(uintptr_t)Map_SBall;
+    obGfx(o)      = (uint16_t)ArtTile_SYZ_Spikeball_Chain;
+    obRender(o)   = sprite_cam_field;
+    obPriority(o) = 4;
+    obActWid(o)   = 16 / 2;
+    sball_origX(o) = obX(o);
+    sball_origY(o) = obY(o);
+
+    /* SYZ: la cadena daña (col_8x8|col_hurt). LZ: no daña y usa otro art/map. */
+    obColType(o) = (uint8_t)(col_8x8 | col_hurt);
+    if ((uint8_t)v_zone == id_LZ) {
+        obColType(o) = col_none;
+        obGfx(o)     = (uint16_t)ArtTile_LZ_Spikeball_Chain;
+        obMap(o)     = (uint32_t)(uintptr_t)Map_SBall2;
+    }
+
+    uint8_t sub = obSubtype(o);
+
+    /* Velocidad de giro: nibble alto << 3 con sign-extend (igual que 58). */
+    {
+        int16_t d1 = (int16_t)(sub & 0xF0);
+        d1 = (int16_t)(int8_t)d1;                            /* ext.w d1 */
+        d1 = (int16_t)(d1 << 3);                             /* asl.w #3 */
+        sball_speed(o) = d1;
+    }
+
+    /* Ángulo inicial desde obStatus: ror.b #2 + andi.b #$C0. */
+    {
+        uint8_t d0 = obStatus(o);
+        d0 = (uint8_t)((d0 >> 2) | (d0 << 6));               /* ror.b #2 */
+        d0 &= 0xC0;                                          /* andi.b #%11000000 */
+        obAngle(o) = d0;
+    }
+
+    /* ---- Spawn de la cadena ---- */
+    {
+        uint8_t *a2 = (uint8_t *)o + 0x29;                   /* sball_children */
+        int16_t child_count = (int16_t)(sub & 7);
+        int16_t d3 = (int16_t)(child_count << 4);            /* radius = count * $10 */
+        *a2++ = 0;                                           /* sball_children = 0, a2 → 0x2A */
+        sball_radius(o) = (uint8_t)d3;
+
+        int16_t d1 = (int16_t)(child_count - 1);             /* subq.w #1,d1 */
+        if (d1 < 0) goto finalize_tip;                       /* bcs.s .finalizeTip */
+        if (sub & (1 << 3)) {                                /* btst #3,obSubtype */
+            d1--;                                            /* subq.w #1,d1 */
+            if (d1 < 0) goto finalize_tip;                   /* bcs.s .finalizeTip */
+        }
+
+        for (;;) {
+            uint8_t *a1 = (uint8_t *)FindFreeObj();          /* bsr.w FindFreeObj */
+            if (!a1) goto finalize_tip;                      /* bne.s .finalizeTip */
+
+            sball_children(o)++;                             /* addq.b #1,sball_children */
+            *a2++ = (uint8_t)Object_GetIndex(a1);            /* guardar índice del hijo */
+
+            obRoutine(a1)  = 4;                              /* SBall_Child */
+            obID(a1)       = obID(o);
+            obMap(a1)      = obMap(o);
+            obGfx(a1)      = obGfx(o);
+            obRender(a1)   = obRender(o);
+            obPriority(a1) = obPriority(o);
+            obActWid(a1)   = obActWid(o);
+            obColType(a1)  = obColType(o);
+
+            d3 = (int16_t)(d3 - 0x10);                       /* subi.b #$10,d3 */
+            sball_radius(a1) = (uint8_t)d3;
+
+            if ((uint8_t)v_zone == id_LZ && d3 == 0) {
+                obFrame(a1) = 2;                             /* LZ stem (el último eslabón pegado al piso) */
+            }
+
+            if (--d1 == -1) break;                           /* dbf d1 */
+        }
+
+finalize_tip:
+        *a2++ = (uint8_t)Object_GetIndex(o);                 /* índice del padre al final */
+    }
+
+    if ((uint8_t)v_zone == id_LZ) {
+        obColType(o) = (uint8_t)(col_16x16 | col_hurt);      /* solo la punta daña en LZ */
+        obFrame(o)   = 1;
+    }
+}
+
+/* --- SBall_Move — Routine 2 ----------------------------------------- */
+static void SBall_Move(uint8_t *o) {
+    Sball_Twirl(o);                                          /* bsr.w Sball_Twirl */
+    SBall_ChkDel(o);                                         /* bra.w SBall_ChkDel */
+}
+
+/* --- Sball_Twirl — gira el padre y toda la cadena ------------------- */
+static void Sball_Twirl(uint8_t *o) {
+    /* Endianness: el ASM hace `add.w speed,obAngle` (word BE en 0x26-0x27)
+       y luego lee SOLO el byte 0x26, que en 68k es el byte ALTO del word.
+       En nuestro port little-endian hay que hacer la aritmética BE
+       manualmente para no alternar 0x00/0x80 cada frame. */
+    {
+        uint8_t *p = (uint8_t *)o;
+        uint16_t w = ((uint16_t)p[0x26] << 8) | p[0x27];
+        w = (uint16_t)(w + (uint16_t)sball_speed(o));
+        p[0x26] = (uint8_t)(w >> 8);
+        p[0x27] = (uint8_t)(w & 0xFF);
+    }
+
+    uint8_t angle = obAngle(o);                              /* byte 0x26 */
+    int16_t s0, s1;
+    CalcSine(angle, &s0, &s1);                               /* s0=sin, s1=cos */
+
+    int16_t d2 = sball_origY(o);
+    int16_t d3 = sball_origX(o);
+
+    uint8_t *a2 = (uint8_t *)o + 0x29;                       /* sball_children */
+    uint8_t d6 = *a2++;                                      /* count */
+
+    do {
+        uint8_t idx = *a2++;
+        uint8_t *a1 = (uint8_t *)Object_GetSlot((int)idx);
+
+        int16_t d4 = (int16_t)sball_radius(a1);
+        int16_t d5 = d4;
+
+        d4 = (int16_t)(((int32_t)d4 * s0) >> 8);             /* muls.w d0,d4 / asr.l #8 */
+        d5 = (int16_t)(((int32_t)d5 * s1) >> 8);             /* muls.w d1,d5 / asr.l #8 */
+
+        d4 = (int16_t)(d4 + d2);                             /* add.w d2,d4 */
+        d5 = (int16_t)(d5 + d3);                             /* add.w d3,d5 */
+
+        obY(a1) = d4;
+        obX(a1) = d5;
+    } while (--d6 != 0xFF);                                  /* dbf d6 */
+}
+
+/* --- SBall_ChkDel — display o borra toda la cadena ------------------ */
+static void SBall_ChkDel(uint8_t *o) {
+    if (!OutOfRange(o, sball_origX(o))) {                    /* out_of_range.w .delete */
+        DisplaySprite(o);                                    /* bra.w DisplaySprite */
+        return;
+    }
+
+    /* .delete: borra todos los hijos Y el padre (el padre está al final) */
+    uint8_t *a2 = (uint8_t *)o + 0x29;
+    uint8_t d2 = *a2++;                                      /* count */
+
+    do {
+        uint8_t idx = *a2++;
+        uint8_t *a1 = (uint8_t *)Object_GetSlot((int)idx);
+        DeleteObject(a1);                                    /* bsr.w DeleteChild */
+    } while (--d2 != 0xFF);                                  /* dbf d2 */
+}
+
+/* --- SBall_Child — Routine 4: solo se dibuja ------------------------ */
+static void SBall_Child(uint8_t *o) {
+    DisplaySprite(o);                                        /* bra.w DisplaySprite */
+}
+
+/* --- Dispatcher Object 57 ------------------------------------------- */
+static void SpikeBall_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {                                  /* SBall_Index */
+        case 0: SBall_Main(o);   break;
+        case 2: SBall_Move(o);   break;
+        case 4: SBall_Child(o);  break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 43 — Roller enemy (SYZ)
+ *  Ported verbatim from _incObj/43 Badnik - Roller.asm (REV01, FixBugs=0).
+ * =========================================================================== */
+
+/* Bandera usada por Roll_Action_FromLeft para replicar el `addq.l #4,sp`
+   que en el ASM salta el return a Roll_Action. Reset cada frame desde
+   Roll_Action. */
+static int _roll_skip_action = 0;
+
+#define roll_waitunfolded(o) (*(int16_t *)((uint8_t *)(o) + 0x30))
+#define roll_stateflags(o)   (*(uint8_t *)((uint8_t *)(o) + 0x32))
+
+static void Roll_Action(uint8_t *o);
+static void Roll_Action_FromLeft(uint8_t *o);
+static void Roll_Action_Unfolded(uint8_t *o);
+static void Roll_Action_Rolling(uint8_t *o);
+static void Roll_Action_Jumping(uint8_t *o);
+static void Roll_Action_StopAndUnfold(uint8_t *o);
+
+/* --- Roll_Main — Routine 0 ------------------------------------------- */
+static void Roll_Main(uint8_t *o) {
+    obHeight(o) = 28 / 2;
+    obWidth(o)  = 16 / 2;
+
+    ObjectFall(o);
+    int16_t d1, d3;
+    ObjFloorDist(o, &d1, &d3);
+    if (d1 >= 0) return;
+
+    obY(o) = (int16_t)(obY(o) + d1);
+    obVelY(o) = 0;
+    obRoutine(o) += 2;
+    obMap(o)      = (uint32_t)(uintptr_t)Map_Roll;
+    obGfx(o)      = (uint16_t)ArtTile_Roller;
+    obRender(o)   = sprite_cam_field;
+    obPriority(o) = 4;
+    obActWid(o)   = 32 / 2;
+}
+
+/* --- Roll_Action — Routine 2 ---------------------------------------- */
+static void Roll_Action(uint8_t *o) {
+    _roll_skip_action = 0;                                   /* reset por frame */
+
+    switch (ob2ndRout(o)) {                                  /* Roll_ActIndex */
+        case 0: Roll_Action_FromLeft(o); break;
+        case 2: Roll_Action_Unfolded(o); break;
+        case 4: Roll_Action_Rolling(o);  break;
+        case 6: Roll_Action_Jumping(o);  break;
+    }
+
+    /* Roll_Action_FromLeft pudo pedir "skip" (replica del addq.l #4,sp). */
+    if (_roll_skip_action) return;
+
+    if (Ani_Roll) AnimateSprite(o, Ani_Roll);
+
+    /* Chequeo offscreen FixBugs=0 (bgt signed en lugar de bhi unsigned). */
+    {
+        uint16_t d0 = (uint16_t)obX(o);
+        d0 &= 0xFF80;
+        uint16_t d1 = (uint16_t)RAM_WORD(0xF700);            /* v_screenposx low word */
+        d1 = (uint16_t)(d1 - 0x80);
+        d1 &= 0xFF80;
+        d0 = (uint16_t)(d0 - d1);
+        if ((int16_t)d0 > 0x280) {                           /* bgt signed */
+            uint8_t *a2 = RAM_ADDR(v_objstate);
+            uint8_t idx = obRespawnNo(o);
+            if (idx != 0) {
+                a2[2 + idx] &= (uint8_t)~0x80;
+            }
+            DeleteObject(o);
+            return;
+        }
+        DisplaySprite(o);
+    }
+}
+
+/* --- Roll_Action_FromLeft — sub-rutina 0 ---------------------------- */
+static void Roll_Action_FromLeft(uint8_t *o) {
+    uint8_t *player = RAM_ADDR(v_player);
+    uint16_t sonicX = (uint16_t)obX(player);
+
+    /* subi.w #256,d0 ; blo.s .returnAndSkip  (borrow real, no bit 15) */
+    if (sonicX < 256u) { _roll_skip_action = 1; return; }
+    uint16_t d0 = (uint16_t)(sonicX - 256u);
+
+    /* sub.w obX(a0),d0 ; blo.s .returnAndSkip */
+    if (d0 < (uint16_t)obX(o)) { _roll_skip_action = 1; return; }
+
+    ob2ndRout(o) += 4;
+    obAnim(o) = 2;
+    obVelX(o) = 0x700;
+    obColType(o) = (uint8_t)(col_28x28 | col_hurt);
+
+    _roll_skip_action = 1;   /* camino de activación también salta */
+}
+
+/* --- Roll_Action_Unfolded — sub-rutina 2 ---------------------------- */
+static void Roll_Action_Unfolded(uint8_t *o) {
+    if (obAnim(o) == 2) {
+        ob2ndRout(o) += 2;
+        return;
+    }
+    roll_waitunfolded(o)--;
+    if (roll_waitunfolded(o) >= 0) return;
+
+    obAnim(o) = 1;
+    obVelX(o) = 0x700;
+    obColType(o) = (uint8_t)(col_28x28 | col_hurt);
+}
+
+/* --- Roll_Action_Rolling — sub-rutina 4 ----------------------------- */
+static void Roll_Action_Rolling(uint8_t *o) {
+    Roll_Action_StopAndUnfold(o);
+    SpeedToPos(o);
+
+    int16_t d1, d3;
+    ObjFloorDist(o, &d1, &d3);
+    if (d1 < -8) goto ledge_hit;
+    if (d1 >= 0x0C) goto ledge_hit;
+    obY(o) = (int16_t)(obY(o) + d1);
+    return;
+
+ledge_hit:
+    ob2ndRout(o) += 2;
+    {
+        uint8_t was = roll_stateflags(o) & 1;
+        roll_stateflags(o) |= 1;
+        if (!was) return;
+    }
+    obVelY(o) = (int16_t)-0x600;
+}
+
+/* --- Roll_Action_Jumping — sub-rutina 6 ----------------------------- */
+static void Roll_Action_Jumping(uint8_t *o) {
+    ObjectFall(o);
+
+    if ((int16_t)obVelY(o) < 0) return;
+
+    int16_t d1, d3;
+    ObjFloorDist(o, &d1, &d3);
+    if (d1 >= 0) return;
+
+    obY(o) = (int16_t)(obY(o) + d1);
+    ob2ndRout(o) -= 2;
+    obVelY(o) = 0;
+}
+
+/* --- Roll_Action_StopAndUnfold -------------------------------------- */
+static void Roll_Action_StopAndUnfold(uint8_t *o) {
+    if ((int8_t)roll_stateflags(o) < 0) return;
+
+    uint8_t *player = RAM_ADDR(v_player);
+    uint16_t sonicX = (uint16_t)obX(player);
+
+    /* subi.w #48,d0 ; blo si Sonic_X < 48 (borrow) */
+    uint16_t a = (uint16_t)(sonicX - 48u);
+    if (sonicX < 48u) return;                /* underflow → no trigger */
+
+    /* sub.w obX(a0),d0 ; bhs.s .return  ⇔  si a >= obX, salir */
+    if (a >= (uint16_t)obX(o)) return;
+
+    obAnim(o) = 0;
+    obColType(o) = (uint8_t)(col_28x28 | col_badnik);
+    obVelX(o) = 0;
+    roll_waitunfolded(o) = 2 * 60;
+    ob2ndRout(o) = 2;
+    roll_stateflags(o) |= 0x80;
+}
+
+/* --- Dispatcher Object 43 ------------------------------------------- */
+static void Roller_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: Roll_Main(o);   break;
+        case 2: Roll_Action(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 75 — Eggman (SYZ)
+ *  Object 76 — Blocks that Eggman picks up (SYZ)
+ *  Ported from _incObj/75, 76 Boss - SYZ Main and Blocks.asm (REV01, FixBugs=0).
+ *
+ *  BossSpringYard object fields:
+ *    bsyz_childcmd  = objoff_29 (byte): child command (0=normal, -1=grabbed,
+ *                                       $A=break)
+ *    bsyz_parentobj = objoff_34 (byte): parent SLOT INDEX (port-specific)
+ *    bsyz_blockidx  = objoff_34 (byte): alias; current block index
+ *    bsyz_objptr    = objoff_36 (word): SLOT INDEX of block/spike object
+ *    bsyz_timer     = objoff_3C (word): generic action timer
+ *    bsyz_phase     = low byte of bsyz_timer (ASM alias at objoff_3D)
+ *    bsyz_sinecnt   = objoff_3F (byte): sine phase
+ *
+ *  The ASM aliases GenericTimer (0x3C, word) with PhaseTimer (0x3D, byte):
+ *  in big-endian, byte 0x3D is the LOW byte of the word. In this little-
+ *  endian port, the equivalent byte is the low byte of bsyz_timer, so all
+ *  `btst`/`tst`/`clr`/`move.b` operations on PhaseTimer are done via the
+ *  timer value itself:
+ *      tst.b  PhaseTimer    ⇔  (bsyz_timer(o) & 0xFF) != 0
+ *      btst #0, PhaseTimer  ⇔  bsyZ_timer(o) & 0x0001
+ *      btst #1, PhaseTimer  ⇔  bsyZ_timer(o) & 0x0002
+ *      clr.b  PhaseTimer    ⇔  bsyZ_timer(o) &= 0xFF00
+ *      move.b #-1,PhaseTimer⇔  bsyZ_timer(o) |= 0x00FF
+ * =========================================================================== */
+
+#define bsyz_childcmd(o)  (*(uint8_t  *)((uint8_t *)(o) + 0x29))
+#define bsyz_parentobj(o) (*(uint8_t  *)((uint8_t *)(o) + 0x34))
+#define bsyz_blockidx(o)  (*(uint8_t  *)((uint8_t *)(o) + 0x34))
+#define bsyz_objptr(o)    (*(uint16_t *)((uint8_t *)(o) + 0x36))
+#define bsyz_timer(o)     (*(int16_t  *)((uint8_t *)(o) + 0x3C))
+#define bsyz_sinecnt(o)   (*(uint8_t  *)((uint8_t *)(o) + 0x3F))
+
+/* --- BossSpringYard_ObjData: {routine, animation, priority} × 4 --------- */
+static const uint8_t BSYZ_ObjData[4][3] = {
+    { 2, 0, 5 },   /* ship  */
+    { 4, 1, 5 },   /* face  */
+    { 6, 7, 5 },   /* flame */
+    { 8, 0, 5 },   /* spike */
+};
+
+/* --- BossBlock fragment tables ------------------------------------------ */
+static const int16_t BBlock_FragSpeed[8] = {
+    -0x180, -0x200,   /* top left     */
+     0x180, -0x200,   /* top right    */
+    -0x100, -0x100,   /* bottom left  */
+     0x100, -0x100,   /* bottom right */
+};
+static const int16_t BBlock_FragPos[8] = {
+    -8,   -8,     /* top left     */
+     0x10, 0,     /* top right    */
+     0,    0x10,  /* bottom left  */
+     0x10, 0x10,  /* bottom right */
+};
+
+/* --- Forward declarations ----------------------------------------------- */
+static void BSYZ_Main(uint8_t *o);
+static void BSYZ_ShipMain(uint8_t *o);
+static void BSYZ_FaceMain(uint8_t *o);
+static void BSYZ_FlameMain(uint8_t *o);
+static void BSYZ_SpikeMain(uint8_t *o);
+static void BSYZ_MoveUpdate(uint8_t *o);
+static void BSYZ_StatusUpdate(uint8_t *o);
+static void BSYZ_CalcSine(uint8_t *o);
+static void BSYZ_ShipStart(uint8_t *o);
+static void BSYZ_ShipMove(uint8_t *o);
+static void BSYZ_Attack(uint8_t *o);
+static void BSYZ_Explode(uint8_t *o);
+static void BSYZ_Recover(uint8_t *o);
+static void BSYZ_Escape(uint8_t *o);
+static void BSYZ_Defeated(uint8_t *o);
+static void BSYZ_FindBlocks(uint8_t *o);
+static void BSYZ_Descend(uint8_t *o);
+static void BSYZ_Lift(uint8_t *o);
+static void BSYZ_LiftStop(uint8_t *o);
+static void BSYZ_BreakBlock(uint8_t *o);
+static void BSYZ_SetupAnim(uint8_t *o);
+static void BSYZ_Display(uint8_t *o);
+static int16_t BSYZ_Face_ChkHit(uint8_t *parent, int16_t d1);
+
+static void BBlock_Main(uint8_t *o);
+static void BBlock_Action(uint8_t *o);
+static void BBlock_Frag(uint8_t *o);
+static void BBlock_Solid(uint8_t *o);
+static void BBlock_Break(uint8_t *o);
+
+/* ===========================================================================
+ *  Object 75 — Eggman (SYZ)
+ * =========================================================================== */
+
+/* --- BSYZ_Main — Routine 0: setup ship + face + flame + spike ----------- */
+static void BSYZ_Main(uint8_t *o) {
+    obX(o) = (int16_t)(boss_syz_x + 0x1B0);
+    obY(o) = (int16_t)(boss_syz_y + 0x0E);
+    /* ASM: move.w obX,obBossX — writes the high word of the 32-bit field.
+       Equivalent in C: integer part = obX, fraction = 0. */
+    obBossX(o) = ((int32_t)obX(o)) << 16;
+    obBossY(o) = ((int32_t)obY(o)) << 16;
+    obColType(o) = (uint8_t)(col_48x48 | col_boss);
+    obBossHits(o) = 8;
+
+    const uint8_t *a2 = (const uint8_t *)BSYZ_ObjData;
+    uint8_t *a1 = o;
+
+    for (int i = 0; i < 4; i++) {
+        if (i > 0) {
+            a1 = (uint8_t *)FindNextFreeObj(a1);
+            if (!a1) { BSYZ_ShipMain(o); return; }
+            obID(a1) = id_BossSpringYard;
+            obX(a1)  = obX(o);
+            obY(a1)  = obY(o);
+        }
+        /* BossSpringYard_LoadBoss */
+        obStatus(o) &= (uint8_t)~(1 << 0);
+        ob2ndRout(a1) = 0;
+        obRoutine(a1) = a2[0];
+        obAnim(a1)    = a2[1];
+        obPriority(a1)= a2[2];
+        a2 += 3;
+        obMap(a1)     = (uint32_t)(uintptr_t)Map_Eggman;
+        obGfx(a1)     = (uint16_t)ArtTile_Eggman;
+        obRender(a1)  = sprite_cam_field;
+        obActWid(a1)  = 64 / 2;
+        bsyz_parentobj(a1) = (uint8_t)Object_GetIndex(o);
+    }
+
+    BSYZ_ShipMain(o);
+}
+
+/* --- BSYZ_ShipMain — Routine 2 ------------------------------------------ */
+static void BSYZ_ShipMain(uint8_t *o) {
+    switch (ob2ndRout(o)) {
+        case 0x00: BSYZ_ShipStart(o); break;
+        case 0x02: BSYZ_ShipMove(o);  break;
+        case 0x04: BSYZ_Attack(o);    break;
+        case 0x06: BSYZ_Explode(o);   break;
+        case 0x08: BSYZ_Recover(o);   break;
+        case 0x0A: BSYZ_Escape(o);    break;
+    }
+    if (obID(o) == 0) return;              /* sub-routine may have deleted us */
+
+    if (Ani_Eggman) AnimateSprite(o, Ani_Eggman);
+    uint8_t d0 = obStatus(o) & (sprite_xflip | sprite_yflip);
+    obRender(o) = (uint8_t)((obRender(o) & ~(sprite_xflip | sprite_yflip)) | d0);
+    DisplaySprite(o);
+}
+
+/* --- BSYZ_ShipStart — sub-rutina 0 -------------------------------------- */
+static void BSYZ_ShipStart(uint8_t *o) {
+    obVelX(o) = (int16_t)-0x100;
+    if ((int16_t)(obBossX(o) >> 16) < (int16_t)(boss_syz_x + 0x138)) {
+        ob2ndRout(o) += 2;
+    }
+    BSYZ_CalcSine(o);
+}
+
+/* --- BSYZ_CalcSine ------------------------------------------------------ */
+static void BSYZ_CalcSine(uint8_t *o) {
+    uint8_t d0 = bsyz_sinecnt(o);
+    bsyz_sinecnt(o) = (uint8_t)(bsyz_sinecnt(o) + 2);
+    int16_t s0, s1;
+    CalcSine(d0, &s0, &s1);
+    obVelY(o) = (int16_t)(s0 >> 2);
+    BSYZ_MoveUpdate(o);
+}
+
+/* --- BSYZ_MoveUpdate ---------------------------------------------------- */
+static void BSYZ_MoveUpdate(uint8_t *o) {
+    BossMove(o);
+    obY(o) = (int16_t)(obBossY(o) >> 16);
+    obX(o) = (int16_t)(obBossX(o) >> 16);
+    BSYZ_StatusUpdate(o);
+}
+
+/* --- BSYZ_StatusUpdate -------------------------------------------------- */
+static void BSYZ_StatusUpdate(uint8_t *o) {
+    int16_t d0 = (int16_t)(obX(o) - boss_syz_x);
+    d0 = (int16_t)((uint16_t)d0 >> 5);
+    bsyz_blockidx(o) = (uint8_t)d0;
+
+    if (ob2ndRout(o) >= 6) return;         /* exploding/escaping */
+
+    if ((int8_t)obStatus(o) < 0) {
+        BSYZ_Defeated(o);
+        return;
+    }
+    if (obColType(o) != 0) return;
+    if (obBossFlash(o) == 0) {
+        obBossFlash(o) = 0x20;
+        Sound_Queue(sfx_HitBoss, false);
+    }
+    {
+        uint16_t *pal = (uint16_t *)RAM_ADDR(v_palette + 0x22);
+        uint16_t col = (*pal != 0) ? 0 : cWhite;
+        *pal = col;
+    }
+    obBossFlash(o)--;
+    if (obBossFlash(o) == 0) {
+        obColType(o) = (uint8_t)(col_48x48 | col_boss);
+    }
+}
+
+/* --- BSYZ_Defeated ------------------------------------------------------ */
+static void BSYZ_Defeated(uint8_t *o) {
+    AddPoints(100);
+    ob2ndRout(o) = 6;
+    bsyz_timer(o) = 180;
+    obVelX(o) = 0;
+}
+
+/* --- BSYZ_ShipMove — sub-rutina 2 --------------------------------------- */
+static void BSYZ_ShipMove(uint8_t *o) {
+    int16_t d0 = (int16_t)(obBossX(o) >> 16);
+    obVelX(o) = 0x140;
+    if (!(obStatus(o) & 1)) {
+        obVelX(o) = (int16_t)-obVelX(o);
+        if (d0 > (int16_t)(boss_syz_x + 8)) goto drop_setup;
+        /* .flip */
+        obStatus(o) ^= 1;
+        bsyz_timer(o) &= (int16_t)0xFF00;      /* clr.b PhaseTimer */
+    } else {
+        if (d0 < (int16_t)(boss_syz_x + 0x138)) goto drop_setup;
+        obStatus(o) ^= 1;
+        bsyz_timer(o) &= (int16_t)0xFF00;
+    }
+
+drop_setup:
+    d0 = (int16_t)(d0 - (boss_syz_x + 0x10));
+    d0 = (int16_t)((uint16_t)d0 & 0x1F);
+    d0 = (int16_t)(d0 - 0x1F);
+    if (d0 < 0) d0 = (int16_t)-d0;
+    d0 = (int16_t)(d0 - 1);
+    if (d0 > 0) { BSYZ_CalcSine(o); return; }
+    if ((bsyz_timer(o) & 0xFF) != 0) { BSYZ_CalcSine(o); return; }
+
+    {
+        int16_t d1 = (int16_t)(obX(RAM_ADDR(v_player)) - boss_syz_x);
+        d1 = (int16_t)((uint16_t)d1 >> 5);
+        if ((uint8_t)d1 != bsyz_blockidx(o)) { BSYZ_CalcSine(o); return; }
+    }
+    {
+        int16_t block_idx = (int16_t)bsyz_blockidx(o);
+        int16_t new_x = (int16_t)((block_idx << 5) + (boss_syz_x + 0x10));
+        obBossX(o) = ((int32_t)new_x) << 16;
+    }
+    BSYZ_FindBlocks(o);
+    ob2ndRout(o) += 2;
+    obSubtype(o)   = 0;
+    bsyz_childcmd(o) = 0;
+    obVelX(o) = 0;
+    BSYZ_CalcSine(o);
+}
+
+/* --- BSYZ_Attack — sub-rutina 4 (dispatch por obSubtype) ---------------- */
+static void BSYZ_Attack(uint8_t *o) {
+    switch (obSubtype(o)) {
+        case 0: BSYZ_Descend(o);    break;
+        case 2: BSYZ_Lift(o);       break;
+        case 4: BSYZ_LiftStop(o);   break;
+        case 6: BSYZ_BreakBlock(o); break;
+    }
+}
+
+/* --- BSYZ_Descend — sub-rutina 0 ---------------------------------------- */
+static void BSYZ_Descend(uint8_t *o) {
+    obVelY(o) = 0x180;
+    if ((uint16_t)(obBossY(o) >> 16) < (uint16_t)(boss_syz_y + 0x8A)) {
+        BSYZ_MoveUpdate(o);
+        return;
+    }
+    obBossY(o) = ((int32_t)(boss_syz_y + 0x8A)) << 16;
+    bsyz_timer(o) = 0;                     /* clr.w: clears timer AND PhaseTimer */
+
+    if (bsyz_objptr(o) != 0) {
+        uint8_t *block = (uint8_t *)Object_GetSlot((int)bsyz_objptr(o));
+        bsyz_childcmd(block)  = (uint8_t)-1;
+        bsyz_childcmd(o)      = (uint8_t)-1;
+        bsyz_parentobj(block) = (uint8_t)Object_GetIndex(o);
+        bsyz_timer(o)         = 50;
+    }
+    obVelY(o) = 0;
+    obSubtype(o) += 2;
+    BSYZ_MoveUpdate(o);
+}
+
+/* --- BSYZ_Lift — sub-rutina 2 ------------------------------------------- */
+static void BSYZ_Lift(uint8_t *o) {
+    bsyz_timer(o)--;
+    int16_t d0 = 0;
+
+    if ((int16_t)bsyz_timer(o) < 0) {
+        obSubtype(o) += 2;
+        obVelY(o) = (int16_t)-0x800;
+        if (bsyz_objptr(o) == 0) {
+            obVelY(o) = (int16_t)(obVelY(o) >> 1);
+        }
+    } else {
+        if ((int16_t)bsyz_timer(o) <= 30) {
+            d0 = 2;
+            if (!(bsyz_timer(o) & 0x0002)) d0 = 0;
+            else                            d0 = -2;
+        }
+    }
+    obY(o) = (int16_t)((int16_t)(obBossY(o) >> 16) + d0);
+    obX(o) = (int16_t)(obBossX(o) >> 16);
+    BSYZ_StatusUpdate(o);
+}
+
+/* --- BSYZ_LiftStop — sub-rutina 4 --------------------------------------- */
+static void BSYZ_LiftStop(uint8_t *o) {
+    int16_t d0 = (int16_t)(boss_syz_y + 0x0E);
+    if (bsyz_objptr(o) != 0) d0 = (int16_t)(d0 - 0x18);
+
+    if ((int16_t)d0 < (int16_t)(obBossY(o) >> 16)) {
+        /* .checkSpeed */
+        if ((int16_t)obVelY(o) >= (int16_t)-0x40) { BSYZ_MoveUpdate(o); return; }
+        obVelY(o) = (int16_t)(obVelY(o) + 0x0C);
+        BSYZ_MoveUpdate(o);
+        return;
+    }
+    bsyz_timer(o) = 8;
+    if (bsyz_objptr(o) != 0) bsyz_timer(o) = 45;
+    obSubtype(o) += 2;
+    obVelY(o) = 0;
+    BSYZ_MoveUpdate(o);
+}
+
+/* --- BSYZ_BreakBlock — sub-rutina 6 ------------------------------------- */
+static void BSYZ_BreakBlock(uint8_t *o) {
+    bsyz_timer(o)--;
+
+    if ((int16_t)bsyz_timer(o) > 0) goto update_position;
+    if ((int16_t)bsyz_timer(o) < 0) {
+        /* .endAttack */
+        if (bsyz_timer(o) == -30) {
+            bsyz_childcmd(o) = 0;
+            ob2ndRout(o) -= 2;
+            bsyz_timer(o) |= (int16_t)0x00FF;  /* move.b #-1,PhaseTimer */
+        }
+        BSYZ_StatusUpdate(o);
+        return;
+    }
+    /* timer == 0 */
+    if (bsyz_objptr(o) != 0) {
+        uint8_t *block = (uint8_t *)Object_GetSlot((int)bsyz_objptr(o));
+        bsyz_childcmd(block) = 0x0A;
+    }
+    bsyz_objptr(o) = 0;
+
+update_position:
+    {
+        int16_t d0 = 1;
+        if (bsyz_objptr(o) != 0) d0 = 2;
+
+        int16_t boss_y = (int16_t)(obBossY(o) >> 16);
+        int16_t rest_y = (int16_t)(boss_syz_y + 0x0E);
+
+        if (boss_y == rest_y) {
+            /* skip */
+        } else if (boss_y < rest_y) {
+            obBossY(o) += ((int32_t)d0) << 16;
+        } else {
+            d0 = (int16_t)-d0;
+            obBossY(o) += ((int32_t)d0) << 16;
+        }
+    }
+    /* .shakeOffset */
+    {
+        int16_t d0 = 0;
+        if (bsyz_objptr(o) != 0) {
+            d0 = 2;
+            if (bsyz_timer(o) & 0x0001) d0 = (int16_t)-d0;
+        }
+        obY(o) = (int16_t)((int16_t)(obBossY(o) >> 16) + d0);
+        obX(o) = (int16_t)(obBossX(o) >> 16);
+    }
+    BSYZ_StatusUpdate(o);
+}
+
+/* --- BSYZ_Explode — sub-rutina 6 ---------------------------------------- */
+static void BSYZ_Explode(uint8_t *o) {
+    bsyz_timer(o)--;
+    if ((int16_t)bsyz_timer(o) < 0) {
+        /* .transition */
+        ob2ndRout(o) += 2;
+        obVelY(o) = 0;
+        obStatus(o) |= (1 << 0);
+        obStatus(o) &= (uint8_t)~(1 << 7);
+        obVelX(o) = 0;
+        bsyz_timer(o) = -1;
+        if (v_bossstatus == 0) v_bossstatus = 1;
+        BSYZ_StatusUpdate(o);
+        return;
+    }
+    BossDefeated(o);
+}
+
+/* --- BSYZ_Recover — sub-rutina 8 ---------------------------------------- */
+static void BSYZ_Recover(uint8_t *o) {
+    bsyz_timer(o)++;
+    int16_t t = bsyz_timer(o);
+
+    if (t == 0) {
+        obVelY(o) = 0;
+    } else if (t < 0) {
+        obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+    } else if (t < 32) {
+        obVelY(o) = (int16_t)(obVelY(o) - 8);
+    } else if (t == 32) {
+        obVelY(o) = 0;
+        Sound_Queue(bgm_SYZ, false);
+    } else if (t >= 42) {
+        ob2ndRout(o) += 2;
+    }
+    /* else 33..41: nothing */
+    BSYZ_MoveUpdate(o);
+}
+
+/* --- BSYZ_Escape — sub-rutina $A ---------------------------------------- */
+static void BSYZ_Escape(uint8_t *o) {
+    obVelX(o) = 0x400;
+    obVelY(o) = (int16_t)-0x40;
+
+    if ((uint16_t)v_limitright2 >= (uint16_t)boss_syz_end) {
+        /* .checkOffScreen */
+        if ((int8_t)obRender(o) >= 0) {
+            DeleteObject(o);
+            return;
+        }
+    } else {
+        v_limitright2 += 2;
+    }
+    BossMove(o);
+    BSYZ_CalcSine(o);
+}
+
+/* --- BSYZ_FindBlocks ---------------------------------------------------- */
+static void BSYZ_FindBlocks(uint8_t *o) {
+    bsyz_objptr(o) = 0;
+    /* FixBugs=0: covers only the first half of object RAM. */
+    uint8_t *a1 = RAM_ADDR(v_objspace + object_size * 1);
+    int count = (int)((v_objspace_end - (v_objspace + object_size * 1))
+                      / object_size) / 2 - 1;
+    uint8_t d1 = id_BossBlock;
+    uint8_t d2 = bsyz_blockidx(o);
+
+    for (int i = 0; i <= count; i++) {
+        if (obID(a1) == d1 && obSubtype(a1) == d2) {
+            bsyz_objptr(o) = (uint16_t)Object_GetIndex(a1);
+            return;
+        }
+        a1 += object_size;
+    }
+}
+
+/* --- BSYZ_FaceMain — Routine 4 ------------------------------------------ */
+static void BSYZ_FaceMain(uint8_t *o) {
+    uint8_t *parent = (uint8_t *)Object_GetSlot((int)bsyz_parentobj(o));
+    int16_t d1 = 1;                         /* facenormal1 */
+
+    switch (ob2ndRout(parent)) {
+        case 0: case 2:
+            d1 = BSYZ_Face_ChkHit(parent, d1);
+            break;
+        case 4:
+            if (obSubtype(parent) == 2) d1 = 6;
+            d1 = BSYZ_Face_ChkHit(parent, d1);
+            break;
+        case 6: case 8:
+            d1 = 0x0A;                      /* defeated */
+            break;
+        case 10:
+            d1 = 6;                         /* panic/escape */
+            break;
+    }
+    obAnim(o) = (uint8_t)d1;
+
+    if (obID(o) != obID(parent)) {
+        DeleteObject(o);
+        return;
+    }
+    BSYZ_SetupAnim(o);
+}
+
+/* --- BSYZ_Face_ChkHit: helper ------------------------------------------- */
+static int16_t BSYZ_Face_ChkHit(uint8_t *parent, int16_t d1) {
+    if (obColType(parent) != 0) {
+        if ((uint8_t)obRoutine(RAM_ADDR(v_player)) >= 4) d1 = 4;
+    } else {
+        d1 = 5;                             /* facehit */
+    }
+    return d1;
+}
+
+/* --- BSYZ_FlameMain — Routine 6 ----------------------------------------- */
+static void BSYZ_FlameMain(uint8_t *o) {
+    uint8_t *parent = (uint8_t *)Object_GetSlot((int)bsyz_parentobj(o));
+    obAnim(o) = 7;
+
+    if (ob2ndRout(parent) == 0x0A) {
+        obAnim(o) = 0x0B;
+        if ((int8_t)obRender(o) >= 0) { DeleteObject(o); return; }
+    } else if (obVelX(parent) != 0) {
+        obAnim(o) = 8;
+    }
+    BSYZ_SetupAnim(o);
+}
+
+/* --- BSYZ_SpikeMain — Routine 8 ----------------------------------------- */
+static void BSYZ_SpikeMain(uint8_t *o) {
+    obMap(o)  = (uint32_t)(uintptr_t)Map_BossItems;
+    obGfx(o)  = (uint16_t)(ArtTile_Eggman_Weapons | Tile_Pal2);
+    obFrame(o)= 5;
+
+    uint8_t *parent = (uint8_t *)Object_GetSlot((int)bsyz_parentobj(o));
+    if (ob2ndRout(parent) == 0x0A) {
+        if ((int8_t)obRender(o) >= 0) { DeleteObject(o); return; }
+    }
+    obX(o) = obX(parent);
+    obY(o) = obY(parent);
+
+    int16_t d0 = bsyz_timer(o);
+    if (ob2ndRout(parent) == 4) {
+        if (obSubtype(parent) == 6) {
+            if ((int16_t)bsyz_timer(parent) < 0) goto retract;
+            /* apply as-is */
+        } else if (obSubtype(parent) != 0) {
+            /* apply as-is */
+        } else {
+            if (d0 < 0x94) d0 = (int16_t)(d0 + 7);
+        }
+    } else {
+    retract:
+        if (d0 > 0) d0 = (int16_t)(d0 - 5);
+    }
+    bsyz_timer(o) = d0;
+    d0 = (int16_t)(d0 >> 2);
+    obY(o) = (int16_t)(obY(o) + d0);
+
+    obActWid(o)  = 16 / 2;
+    obHeight(o)  = 24 / 2;
+    obColType(o) = 0;
+
+    if (obColType(parent) != 0 && bsyz_childcmd(parent) == 0) {
+        obColType(o) = (uint8_t)(col_8x32 | col_hurt);
+    }
+    BSYZ_Display(o);
+}
+
+/* --- BSYZ_SetupAnim ----------------------------------------------------- */
+static void BSYZ_SetupAnim(uint8_t *o) {
+    uint8_t *parent = (uint8_t *)Object_GetSlot((int)bsyz_parentobj(o));
+    if (Ani_Eggman) AnimateSprite(o, Ani_Eggman);
+    obX(o) = obX(parent);
+    obY(o) = obY(parent);
+    BSYZ_Display(o);
+}
+
+/* --- BSYZ_Display ------------------------------------------------------- */
+static void BSYZ_Display(uint8_t *o) {
+    uint8_t *parent = (uint8_t *)Object_GetSlot((int)bsyz_parentobj(o));
+    obStatus(o) = obStatus(parent);
+    uint8_t d0 = obStatus(o) & (sprite_xflip | sprite_yflip);
+    obRender(o) = (uint8_t)((obRender(o) & ~(sprite_xflip | sprite_yflip)) | d0);
+    DisplaySprite(o);
+}
+
+/* --- Dispatcher Object 75 ---------------------------------------------- */
+static void BossSpringYard_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: BSYZ_Main(o);      break;
+        case 2: BSYZ_ShipMain(o);  break;
+        case 4: BSYZ_FaceMain(o);  break;
+        case 6: BSYZ_FlameMain(o); break;
+        case 8: BSYZ_SpikeMain(o); break;
+    }
+}
+
+/* ===========================================================================
+ *  Object 76 — Blocks picked up by Eggman (SYZ)
+ * =========================================================================== */
+
+/* --- BBlock_Main — Routine 0: spawn 10 blocks in a row ------------------ */
+static void BBlock_Main(uint8_t *o) {
+    int16_t d4 = 0;                         /* index: 0, 0x101, 0x202, ... */
+    int16_t d5 = (int16_t)(boss_syz_x + 0x10);
+    uint8_t *a1 = o;
+
+    for (int i = 0; i < 10; i++) {
+        if (i > 0) {
+            a1 = (uint8_t *)FindFreeObj();
+            if (!a1) return;                /* exit loop */
+        }
+        obID(a1)       = id_BossBlock;
+        obMap(a1)      = (uint32_t)(uintptr_t)Map_BossBlock;
+        obGfx(a1)      = (uint16_t)(ArtTile_Level | Tile_Pal3);
+        obRender(a1)   = sprite_cam_field;
+        obActWid(a1)   = 32 / 2;
+        obHeight(a1)   = 32 / 2;
+        obPriority(a1) = 3;
+        obX(a1)        = d5;
+        obY(a1)        = 0x582;
+        /* ASM: move.w d4,obSubtype — writes both obSubtype and childcmd
+           with the same value (0, 1, 2, ..., 9). */
+        obSubtype(a1)    = (uint8_t)d4;
+        bsyz_childcmd(a1) = (uint8_t)d4;
+        d4 = (int16_t)(d4 + 0x101);
+        d5 = (int16_t)(d5 + 0x20);
+        obRoutine(a1) += 2;
+    }
+}
+
+/* --- BBlock_Action — Routine 2 ------------------------------------------ */
+static void BBlock_Action(uint8_t *o) {
+    uint8_t cmd = bsyz_childcmd(o);
+    if (cmd == obSubtype(o)) { BBlock_Solid(o); return; }
+    if ((int8_t)cmd < 0) {
+        /* .blockGrabbed */
+        uint8_t *parent = (uint8_t *)Object_GetSlot((int)bsyz_parentobj(o));
+        if (obBossHits(parent) == 0) { BBlock_Break(o); return; }
+        obX(o) = obX(parent);
+        obY(o) = obY(parent);
+        obY(o) = (int16_t)(obY(o) + 44);
+        if ((uintptr_t)parent < (uintptr_t)o) {
+            /* parent already updated, just display */
+        } else {
+            int32_t v = (int32_t)obVelY(parent);
+            v >>= 8;
+            obY(o) = (int16_t)(obY(o) + (int16_t)v);
+        }
+        DisplaySprite(o);
+        return;
+    }
+    /* .break */
+    BBlock_Break(o);
+    DisplaySprite(o);
+}
+
+/* --- BBlock_Frag — Routine 4 -------------------------------------------- */
+static void BBlock_Frag(uint8_t *o) {
+    if (!(obRender(o) & 0x80)) { DeleteObject(o); return; }
+    ObjectFall(o);
+    DisplaySprite(o);
+}
+
+/* --- BBlock_Solid ------------------------------------------------------- */
+static void BBlock_Solid(uint8_t *o) {
+    int16_t d1 = (int16_t)(16 + sonic_solid_width);
+    int16_t d2 = 16;
+    int16_t d3 = 17;
+    int16_t d4 = obX(o);
+    int16_t out_d3 = 0, out_d5 = 0;
+    SolidObject(o, d1, d2, d3, d4, &out_d3, &out_d5);
+    DisplaySprite(o);
+}
+
+/* --- BBlock_Break ------------------------------------------------------- */
+static void BBlock_Break(uint8_t *o) {
+    const int16_t *a4 = BBlock_FragSpeed;
+    const int16_t *a5 = BBlock_FragPos;
+    int16_t d4 = 1;
+
+    obRoutine(o) += 2;
+    obActWid(o)   = 16 / 2;
+    obHeight(o)   = 16 / 2;
+
+    uint8_t *a1 = o;
+    for (int i = 0; i < 4; i++) {
+        if (i > 0) {
+            a1 = (uint8_t *)FindNextFreeObj(a1);
+            if (!a1) break;
+            memcpy(a1, o, OBJECT_SIZE);
+        }
+        obVelX(a1) = *a4++;
+        obVelY(a1) = *a4++;
+        obX(a1)    = (int16_t)(obX(a1) + *a5++);
+        obY(a1)    = (int16_t)(obY(a1) + *a5++);
+        obFrame(a1)= (uint8_t)d4;
+        d4++;
+    }
+    Sound_Queue(sfx_WallSmash, false);
+}
+
+/* --- Dispatcher Object 76 ---------------------------------------------- */
+static void BossBlock_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: BBlock_Main(o);   break;
+        case 2: BBlock_Action(o); break;
+        case 4: BBlock_Frag(o);   break;
     }
 }

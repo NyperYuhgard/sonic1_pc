@@ -334,6 +334,9 @@ const uint8_t *Map_Glass;           size_t Map_Glass_len;
 const uint8_t *Map_CStom;           size_t Map_CStom_len;
 const uint8_t *Map_LGrass;          size_t Map_LGrass_len;
 const uint8_t *Map_Fire;            size_t Map_Fire_len;
+const uint8_t *Map_SBall;           size_t Map_SBall_len;
+const uint8_t *Map_SBall2;          size_t Map_SBall2_len;
+const uint8_t *Map_BossBlock;       size_t Map_BossBlock_len;
 
 /* Mappings referenciados por DebugMode (aún sin portar en su mayoría) */
 const uint8_t *Map_Newt;            size_t Map_Newt_len;
@@ -371,12 +374,12 @@ const uint8_t *Map_Stair;
 const uint8_t *Map_Fan;
 const uint8_t *Map_Seesaw;
 const uint8_t *Map_Bomb;
-const uint8_t *Map_Roll;
+const uint8_t *Map_Roll;            size_t Map_Roll_len;
 const uint8_t *Map_Light;           size_t Map_Light_len;
 const uint8_t *Map_Bump;
 const uint8_t *Map_Plat_SYZ;        size_t Map_Plat_SYZ_len;
 const uint8_t *Map_FBlock;          size_t Map_FBlock_len;
-const uint8_t *Map_BBall;
+const uint8_t *Map_BBall;           size_t Map_BBall_len;
 const uint8_t *Map_Disc;
 const uint8_t *Map_Trap;
 const uint8_t *Map_Spin;
@@ -414,6 +417,7 @@ const uint8_t *Ani_Geyser;          size_t Ani_Geyser_len;
 const uint8_t *Ani_LWall;           size_t Ani_LWall_len;
 const uint8_t *Ani_Yad;             size_t Ani_Yad_len;
 const uint8_t *Ani_Bump;            size_t Ani_Bump_len;
+const uint8_t *Ani_Roll;            size_t Ani_Roll_len;
 const uint8_t *SonicDynPLC;         size_t SonicDynPLC_len;
 
 /* ---------------- Layouts de nivel (Level_*) ---------------- */
@@ -860,6 +864,11 @@ int Data_Init(void) {
     LOAD_MAP("_maps/Platforms (SYZ).asm", Map_Plat_SYZ);
     LOAD_MAP("_maps/Platforms (SLZ).asm", Map_Plat_SLZ);
     LOAD_MAP("_maps/Yadrin.asm", Map_Yad);
+    LOAD_MAP("_maps/Big Spiked Ball.asm", Map_BBall);
+    LOAD_MAP("_maps/Spiked Ball and Chain (SYZ).asm", Map_SBall);
+    LOAD_MAP("_maps/Spiked Ball and Chain (LZ).asm", Map_SBall2);
+    LOAD_MAP("_maps/Roller.asm", Map_Roll);
+    LOAD_MAP("_maps/SYZ Boss Blocks.asm", Map_BossBlock);
 
     /* ---------------- Animaciones ---------------- */
     LOAD_ANIM("_anim/Sonic.asm",                     Ani_Sonic);
@@ -885,6 +894,7 @@ int Data_Init(void) {
     LOAD_ANIM("_anim/Wall of Lava.asm",              Ani_LWall);
     LOAD_ANIM("_anim/Yadrin.asm",                    Ani_Yad);
     LOAD_ANIM("_anim/Bumper.asm",                    Ani_Bump);
+    LOAD_ANIM("_anim/Roller.asm",                    Ani_Roll);
     /* El DPLC de Sonic no es un anim script, pero comparte el parser:  */
     LOAD_ANIM("_maps/Sonic - Dynamic Gfx Script.asm", SonicDynPLC);
 

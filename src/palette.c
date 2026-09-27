@@ -558,3 +558,44 @@ void PalCycle_Title(void) {
 
     #undef TITLE_CYC_COLOR
 }
+
+/* ---------------------------------------------------------------------------
+   Paletas submarinas (PalLoad_Water / PalLoad_Fade_Water)
+   ---------------------------------------------------------------------------
+   La paleta "agua" (v_palette_water) es un buffer paralelo a v_palette que
+   contiene la versión azulada de la paleta del nivel. El VBlank handler la
+   escribe en CRAM cuando Sonic está sumergido, y el HBlank la escribe en la
+   línea del agua cuando Sonic está parcialmente sumergido.
+   --------------------------------------------------------------------------- */
+
+uint16_t palette_water_main[PALETTE_TOTAL];
+
+/* Redirige el destino de una entrada de pal_index a la región agua. */
+static void pal_load_water_common(int index, uint16_t water_base) {
+    if (index < 0 || index >= (int)(sizeof(pal_index) / sizeof(pal_index[0])))
+        return;
+    const PalEntry *e = &pal_index[index];
+    if (!e->data) return;
+
+    /* El offset dentro de v_palette (línea 1/2/3/4) se mapea al mismo offset
+       dentro de la paleta agua. */
+    int off = (int)(e->target_ram_offset - v_palette);
+    uint16_t *dest = (uint16_t *)RAM_ADDR(water_base + off);
+    int words = e->count + 1;
+    for (int i = 0; i < words; i++) {
+        dest[i] = ((uint16_t)e->data[i * 2] << 8) | e->data[i * 2 + 1];
+    }
+}
+
+void PalLoad_Water(int index) {
+    pal_load_water_common(index, v_palette_water);
+}
+
+void PalLoad_Fade_Water(int index) {
+    pal_load_water_common(index, v_palette_water_fading);
+}
+
+void Palette_Water_Update(void) {
+    memcpy(palette_water_main, RAM_ADDR(v_palette_water),
+           sizeof(palette_water_main));
+}

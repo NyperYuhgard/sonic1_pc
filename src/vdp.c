@@ -669,27 +669,22 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
         tex_w = g_render_w;
     }
 
-    /* Buffer interno persistente donde renderizamos todo (mismo esquema
-       que antes, pero sin SDL_LockTexture en el camino caliente).
-       pitch es "ficticio": los planos se dibujan con stride = pitch/4,
-       por eso vale g_render_w * 4 para que stride == g_render_w. */
     static uint32_t frame_buf[PP_MAX_W * PP_MAX_H];
     uint32_t *pix = frame_buf;
-    int pitch = g_render_w * 4;   /* dummy, para render_plane_scanline */
+    int pitch = g_render_w * 4;
     int stride = g_render_w;
 
-    /* Clear to black (color de fondo real de la Mega Drive) */
+    /* NUEVO: refrescar palette_water_main desde v_palette_water. Se hace una
+       vez por frame (equivalente al writeCRAM v_palette_water del VBlank). */
+    Palette_Water_Update();
+
+    /* Clear to black (background color de la Mega Drive) */
     uint16_t bg_cram_index = vdp.registers[7] & 0x3F;
     uint32_t bg_color = MD_ColorToRGBA(vdp.cram[bg_cram_index]);
 
     int total_px = g_render_w * SCREEN_HEIGHT;
-    for (int i = 0; i < total_px; i++) {
-        pix[i] = bg_color;
-    }
+    for (int i = 0; i < total_px; i++) pix[i] = bg_color;
 
-    /* ---------------------------------------------------------------------
-       Dynamic plane addresses (registros $02 y $04).
-       --------------------------------------------------------------------- */
     uint32_t plane_a_addr = ((uint32_t)(vdp.registers[2] & 0x38)) << 10;
     uint32_t plane_b_addr = ((uint32_t)(vdp.registers[4] & 0x07)) << 13;
     if (plane_a_addr >= VRAM_SIZE) plane_a_addr &= (VRAM_SIZE - 1);
@@ -698,7 +693,6 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
     int16_t fg_scroll_y = (int16_t)v_scrposy_vdp;
     int16_t bg_scroll_y = (int16_t)v_bgscrposy_vdp;
 
-    /* Sprite list metadata. */
     uint8_t *table = &ram[v_spritetablebuffer];
     int n = v_spritecount;
     if (n > 80) n = 80;
@@ -707,9 +701,6 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
     int sy[80], sh[80], sw[80];
     for (int i = 0; i < n; i++) {
         uint8_t *entry = &table[i * 8];
-        /* Decodifica Y como int16 con signo: evita el wrap-around de
-         *      9 bits para objetos que están por encima o por debajo de la
-         *      pantalla. Mismo valor que el original dentro de [-128, 383]. */
         sy[i] = (int)(int16_t)(entry[0] | (entry[1] << 8)) - 0x80;
         sh[i] = ((entry[2] & 0x0F) + 1) * 8;
         sw[i] = ((entry[2] >> 4) + 1) * 8;
@@ -720,9 +711,25 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
         int16_t fg_scroll_x = (int16_t)((uint16_t)h[0] | ((uint16_t)h[1] << 8));
         int16_t bg_scroll_x = (int16_t)((uint16_t)h[2] | ((uint16_t)h[3] << 8));
 
-        /* Sprites que cruzan este scanline, en orden de tabla. El límite de
-           20 sprites/línea y 320px se mantiene IGUAL al hardware (no lo
-           ensanchamos con widescreen, igual que en una Genesis real). */
+        /* ===== NUEVO: elección de paleta por scanline =====
+           Si f_water está activo y (a) toda la pantalla está sumergida
+           (f_wtr_state=1) o (b) el scanline está por debajo de la línea del
+           agua (row >= v_hblank_line), usamos la paleta submarina.
+           Esto replica el swap por HBlank del hardware real. */
+        const uint16_t *pal_row = palette_main;
+/* En hardware real, el swap por HBlank solo existe en LZ porque GM_Level
+   solo habilita el HBlank interrupt allí. En el port lo emulamos por-scanline,
+   así que gateamos en v_zone == id_LZ (SBZ3/LZ4 también son id_LZ).
+   f_wtr_state cubre el caso "toda la pantalla sumergida"; v_hblank_line cubre
+   el caso "parcialmente sumergida". */
+        if (v_zone == id_LZ) {
+             if (f_wtr_state) {
+                pal_row = palette_water_main;
+            } else if (row >= (int)v_hblank_line) {
+                pal_row = palette_water_main;
+            }
+        }
+
         int list[20], list_len = 0;
         int px_budget = 0;
         for (int i = 0; i < n && list_len < 20; i++) {
@@ -733,21 +740,13 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             }
         }
 
-        /* Stack de prioridad MD (bajo → alto):
-             1. Plane B pri 0
-             2. Plane A pri 0
-             3. Sprites pri 0
-             4. Plane B pri 1
-             5. Plane A pri 1
-             6. Sprites pri 1
-           Nota: en el ASM "FG"/"BG" están invertidos respecto a plane A/B. */
-        render_plane_scanline(&vdp.vram[plane_b_addr], palette_main,
+        /* Planos inferiores (pri 0) — usan pal_row en vez de palette_main. */
+        render_plane_scanline(&vdp.vram[plane_b_addr], (uint16_t *)pal_row,
                               bg_scroll_x, bg_scroll_y, row, pix, pitch, 0, 1);
-        render_plane_scanline(&vdp.vram[plane_a_addr], palette_main,
+        render_plane_scanline(&vdp.vram[plane_a_addr], (uint16_t *)pal_row,
                               fg_scroll_x, fg_scroll_y, row, pix, pitch, 0, 0);
 
-        /* Pass 0: sprites no-priority, blit tail-to-head para que la primera
-           entrada de la tabla quede encima de las siguientes. */
+        /* Sprites pri 0 */
         for (int k = list_len - 1; k >= 0; k--) {
             int i = list[k];
             uint8_t *entry = &table[i * 8];
@@ -759,20 +758,13 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             int tile         = pattern & 0x7FF;
             int pal_line     = (pattern >> 13) & 3;
             int x            = (int)(int16_t)(entry[6] | (entry[7] << 8)) - 0x80;
-
             int xflip = (pattern >> 11) & 1;
             int yflip = (pattern >> 12) & 1;
 
             int dy = row - y;
             int ty, prow;
-            if (yflip) {
-                dy = height_tiles * 8 - 1 - dy;
-                ty = dy >> 3;
-                prow = dy & 7;
-            } else {
-                ty = dy >> 3;
-                prow = dy & 7;
-            }
+            if (yflip) { dy = height_tiles * 8 - 1 - dy; ty = dy >> 3; prow = dy & 7; }
+            else       { ty = dy >> 3; prow = dy & 7; }
             if (ty < 0 || ty >= height_tiles) continue;
 
             for (int tx = 0; tx < width_tiles; tx++) {
@@ -780,11 +772,7 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                 int tile_idx = tile + txx * height_tiles + ty;
                 if (tile_idx >= 0x800) continue;
                 const uint8_t *r = &vdp.vram[tile_idx * 32 + prow * 4];
-
-                /* Desplazamos el sprite al área widescreen. El "centro" (los
-                   320 px originales) empieza en x = g_render_left. */
                 int sx0 = x + tx * 8 + g_render_left;
-
                 for (int col = 0; col < 8; col++) {
                     int color_idx = (col & 1) ? (r[col >> 1] & 0xF)
                                               : ((r[col >> 1] >> 4) & 0xF);
@@ -792,17 +780,18 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                     int sx = xflip ? (sx0 + 7 - col) : (sx0 + col);
                     if (sx < 0 || sx >= g_render_w) continue;
                     pix[row * stride + sx] =
-                        MD_ColorToRGBA(palette_main[pal_line * 16 + color_idx]);
+                        MD_ColorToRGBA(pal_row[pal_line * 16 + color_idx]);
                 }
             }
         }
 
-        render_plane_scanline(&vdp.vram[plane_b_addr], palette_main,
+        /* Planos superiores (pri 1) */
+        render_plane_scanline(&vdp.vram[plane_b_addr], (uint16_t *)pal_row,
                               bg_scroll_x, bg_scroll_y, row, pix, pitch, 1, 1);
-        render_plane_scanline(&vdp.vram[plane_a_addr], palette_main,
+        render_plane_scanline(&vdp.vram[plane_a_addr], (uint16_t *)pal_row,
                               fg_scroll_x, fg_scroll_y, row, pix, pitch, 1, 0);
 
-        /* Pass 1: sprites priority, encima de todo. */
+        /* Sprites pri 1 */
         for (int k = list_len - 1; k >= 0; k--) {
             int i = list[k];
             uint8_t *entry = &table[i * 8];
@@ -814,20 +803,13 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             int tile         = pattern & 0x7FF;
             int pal_line     = (pattern >> 13) & 3;
             int x            = (int)(int16_t)(entry[6] | (entry[7] << 8)) - 0x80;
-
             int xflip = (pattern >> 11) & 1;
             int yflip = (pattern >> 12) & 1;
 
             int dy = row - y;
             int ty, prow;
-            if (yflip) {
-                dy = height_tiles * 8 - 1 - dy;
-                ty = dy >> 3;
-                prow = dy & 7;
-            } else {
-                ty = dy >> 3;
-                prow = dy & 7;
-            }
+            if (yflip) { dy = height_tiles * 8 - 1 - dy; ty = dy >> 3; prow = dy & 7; }
+            else       { ty = dy >> 3; prow = dy & 7; }
             if (ty < 0 || ty >= height_tiles) continue;
 
             for (int tx = 0; tx < width_tiles; tx++) {
@@ -836,7 +818,6 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                 if (tile_idx >= 0x800) continue;
                 const uint8_t *r = &vdp.vram[tile_idx * 32 + prow * 4];
                 int sx0 = x + tx * 8 + g_render_left;
-
                 for (int col = 0; col < 8; col++) {
                     int color_idx = (col & 1) ? (r[col >> 1] & 0xF)
                                               : ((r[col >> 1] >> 4) & 0xF);
@@ -844,13 +825,13 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                     int sx = xflip ? (sx0 + 7 - col) : (sx0 + col);
                     if (sx < 0 || sx >= g_render_w) continue;
                     pix[row * stride + sx] =
-                        MD_ColorToRGBA(palette_main[pal_line * 16 + color_idx]);
+                        MD_ColorToRGBA(pal_row[pal_line * 16 + color_idx]);
                 }
             }
         }
     }
 
-    /* Optional test overlay (barras verdes de debug) */
+    /* Optional test overlay */
     if (vdp_test_counter >= 0) {
         int w = g_render_w - 20;
         int bar_w = (vdp_test_counter * w) / 600;
@@ -860,28 +841,19 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                 pix[y * stride + x] = 0xFF00FF00;
             }
         }
-        if (vdp_test_counter % 60 < 30) {
-            pix[0] = 0xFFFFFFFF;
-        }
+        if (vdp_test_counter % 60 < 30) pix[0] = 0xFFFFFFFF;
     }
 
-    /* Copia persistente para VDP_SaveScreenshot (row-by-row por stride). */
     for (int y = 0; y < SCREEN_HEIGHT; y++) {
         memcpy(&last_frame[y * g_render_w],
                &pix[y * stride],
                (size_t)g_render_w * 4);
     }
 
-    /* Overlay de depuración de colisión (usa SCREEN_WIDTH internamente;
-       con widescreen pinta solo los 320 px centrales, lo cual es correcto
-       porque las coords de Sonic son relativas al viewport original). */
     debug_collision_overlay(pix);
 
-        /* Post-proceso: aplicar filtros. */
     const uint32_t *final = PP_Apply(pix, g_render_w, SCREEN_HEIGHT, &g_settings);
 
-    /* Upload al texture SDL row-by-row (por si pitch de SDL no coincide
-       con g_render_w * 4). */
     void *pixels;
     int sdl_pitch;
     SDL_LockTexture(vdp.framebuffer, NULL, &pixels, &sdl_pitch);
@@ -895,13 +867,11 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
     }
     SDL_UnlockTexture(vdp.framebuffer);
 
-    /* Present */
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, vdp.framebuffer, NULL, NULL);
     SDL_RenderPresent(renderer);
 
-    /* Visores de depuración (no-op si están cerrados) */
     render_vram_viewer();
     PlaneView_Render();
     extern void ObjView_Render(void);

@@ -50,7 +50,53 @@ cmake --build build -j$(nproc)
 |---|---|---|
 | Default | — | `-O2`, no `-g` (symbols via `nm`, gdb needs raw casts) |
 | Debug | `-DCMAKE_BUILD_TYPE=Debug` | `-O0 -g -DDEBUG` |
+| RelWithDebInfo | `-DCMAKE_BUILD_TYPE=RelWithDebInfo` | `-O2 -g -DNDEBUG` |
 | Sanitizers | `-DSONIC_SANITIZE=ON` | ASan + UBSan (wild-memory-access finder) |
+
+### Build scripts
+
+`scripts/` wraps the manual commands above into ready-to-use variants that also
+stage the assets next to the executable.
+
+**Linux / WSL2 (native build):**
+
+```
+scripts/build-linux.sh                 # release  -> build/release/sonic1
+scripts/build-linux.sh debug           # debug    -> build/debug/sonic1
+scripts/build-linux.sh relwithdebinfo  # optimized + symbols
+scripts/build-linux.sh asan            # ASan + UBSan
+scripts/build-linux.sh all --clean     # all four variants, from scratch
+scripts/build-linux.sh debug --run     # build and launch
+```
+
+Run the game from the repository root (`./build/release/sonic1`): `src/sound.c`
+loads audio from `./assets` (working-directory relative) while `src/data.c`
+resolves the rest against the executable path.
+
+**Windows (cross-compiled with mingw-w64 from Linux/WSL2):**
+
+```
+scripts/build-windows.sh                       # release -> dist/win/release/sonic1.exe
+scripts/build-windows.sh debug --clean
+scripts/build-windows.sh all
+scripts/build-windows.bat                      # same, from cmd.exe on Windows (needs WSL2)
+```
+
+`dist/win/<variant>/` is self-contained: `sonic1.exe`, the SDL2 DLLs and
+`assets/`. Cross-built SDL2 is required, and since mingw-w64 ships no
+AddressSanitizer the `asan` variant is Linux/WSL2 only:
+
+```
+sudo apt install gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
+scripts/build-windows.sh release --prefix ~/mingw64   # SDL2 cross-built for mingw-w64
+```
+
+Known blocker: `src/data.c` maps level data with POSIX `mmap` (`sys/mman.h`),
+which mingw-w64 does not provide, so the `.exe` does not link until that is
+replaced by a Windows equivalent (`VirtualAlloc`).
+
+Run `scripts/build-linux.sh --help` / `scripts/build-windows.sh --help` for the
+full option list.
 
 ### Assets
 

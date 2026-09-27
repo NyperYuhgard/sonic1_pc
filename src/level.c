@@ -30,63 +30,46 @@ static int level_init_done = 0;
 
 /* ===================================================================
    Level Headers (from _inc/LevelHeaders.asm)
-   16 bytes per entry, one per zone, selected by v_zone (ASM indexes
-   by v_zone*$10). Byte offsets match the ASM lhead layout:
-     dc.l (plc1<<24)+lvlgfx ; dc.l (plc2<<24)+sixteen ; dc.l twofivesix
-     dc.b 0, music, pal, pal
-   The 24-bit pointers are mapped onto C pointers; they are filled at
-   runtime by LevelHeaders_Init() once data.c has loaded the assets
-   (NULL = asset not staged yet, skipped safely by the loaders).
    =================================================================== */
 typedef struct {
-    uint8_t          plc1;     /* +0:   first level PLC id */
-    const uint8_t   *gfx;      /* +1..3: level gfx pointer */
-    uint8_t          plc2;     /* +4:   second level PLC id */
-    const uint8_t   *map16;    /* +5..7: 16x16 block data pointer */
-    const uint8_t   *map256;   /* +8..B: 256x256 chunk data pointer */
-    uint8_t          reserved; /* +C:   0 */
-    uint8_t          music;    /* +D:   music (unused; MusicList used instead) */
-    uint8_t          pal;      /* +E:   palette id */
-    uint8_t          pal2;     /* +F:   palette id (duplicate) */
+    uint8_t          plc1;
+    const uint8_t   *gfx;
+    uint8_t          plc2;
+    const uint8_t   *map16;
+    const uint8_t   *map256;
+    uint8_t          reserved;
+    uint8_t          music;
+    uint8_t          pal;
+    uint8_t          pal2;
 } level_header;
 
 #define LHEAD(plc1, gfx, plc2, map16, map256, music, pal) \
     { plc1, gfx, plc2, map16, map256, 0, music, pal, pal }
 
 static level_header level_headers[] = {
-    /*                     gfx         plc2    map16     map256   music     palette     */
-    LHEAD(plcid_GHZ, NULL, plcid_GHZ2,  NULL,    NULL,    bgm_GHZ, palid_GHZ),  /* 0: Green Hill */
-    LHEAD(plcid_LZ,  NULL, plcid_LZ2,   NULL,    NULL,    bgm_LZ,  palid_LZ),   /* 1: Labyrinth */
-    LHEAD(plcid_MZ,  NULL, plcid_MZ2,   NULL,    NULL,    bgm_MZ,  palid_MZ),   /* 2: Marble */
-    LHEAD(plcid_SLZ, NULL, plcid_SLZ2,  NULL,    NULL,    bgm_SLZ, palid_SLZ),  /* 3: Star Light */
-    LHEAD(plcid_SYZ, NULL, plcid_SYZ2,  NULL,    NULL,    bgm_SYZ, palid_SYZ),  /* 4: Spring Yard */
-    LHEAD(plcid_SBZ, NULL, plcid_SBZ2,  NULL,    NULL,    bgm_SBZ, palid_SBZ1), /* 5: Scrap Brain */
-    LHEAD(0,         NULL, 0,           NULL,    NULL,    bgm_SBZ, palid_Ending),/* 6: Ending */
+    LHEAD(plcid_GHZ, NULL, plcid_GHZ2,  NULL,    NULL,    bgm_GHZ, palid_GHZ),
+    LHEAD(plcid_LZ,  NULL, plcid_LZ2,   NULL,    NULL,    bgm_LZ,  palid_LZ),
+    LHEAD(plcid_MZ,  NULL, plcid_MZ2,   NULL,    NULL,    bgm_MZ,  palid_MZ),
+    LHEAD(plcid_SLZ, NULL, plcid_SLZ2,  NULL,    NULL,    bgm_SLZ, palid_SLZ),
+    LHEAD(plcid_SYZ, NULL, plcid_SYZ2,  NULL,    NULL,    bgm_SYZ, palid_SYZ),
+    LHEAD(plcid_SBZ, NULL, plcid_SBZ2,  NULL,    NULL,    bgm_SBZ, palid_SBZ1),
+    LHEAD(0,         NULL, 0,           NULL,    NULL,    bgm_SBZ, palid_Ending),
 };
 
-/* Level_Index entry (sonic.asm:4906): "foreground, background, leftover".
-   FG = d1 offset 0, BG = d1 offset 2, third slot never read. */
 typedef struct {
-    const uint8_t *fg;    /* d1 = 0 */
-    const uint8_t *bg;    /* d1 = 2 */
-    const uint8_t *left;  /* leftover/unused */
+    const uint8_t *fg;
+    const uint8_t *bg;
+    const uint8_t *left;
 } level_index_entry;
 
-/* ObjPos_Index (sonic.asm:5052-5088): one pair of words per (zone*4 + act).
-   .main is the objpos list for the zone/act; .null is always ObjPos_Null
-   (the 6-byte $FF,$FF,0,0,0,0 terminator), so the port stores it as NULL. */
 typedef struct {
     const uint8_t *main;
     const uint8_t *null;
 } objpos_index_entry;
 
 static objpos_index_entry objpos_index[28];
-
-/* Level_Index rows (defined below LevelLayoutLoad); filled at runtime. */
 static level_index_entry level_index[28];
 
-/* Point the zones at their staged assets (called at the end of Data_Init).
-   The Ending reuses the GHZ data, matching the LevelHeaders.asm entry. */
 void LevelHeaders_Init(void) {
     level_headers[0].gfx    = Nem_GHZ_2nd;
     level_headers[0].map16  = Blk16_GHZ;
@@ -116,12 +99,10 @@ void LevelHeaders_Init(void) {
     level_headers[6].map16  = Blk16_GHZ;
     level_headers[6].map256 = Blk256_GHZ;
 
-    /* Layout pointers (level_index); rows for other zones stay NULL. */
     /* GHZ */
     level_index[0].fg = Level_GHZ1;   level_index[0].bg = Level_GHZbg;
     level_index[1].fg = Level_GHZ2;   level_index[1].bg = Level_GHZbg;
     level_index[2].fg = Level_GHZ3;   level_index[2].bg = Level_GHZbg;
-    /* GHZ act4: all NULL (level_index[3] stays zeroed) */
     /* LZ */
     level_index[4].fg = Level_LZ1;    level_index[4].bg = Level_LZbg;
     level_index[5].fg = Level_LZ2;    level_index[5].bg = Level_LZbg;
@@ -131,28 +112,23 @@ void LevelHeaders_Init(void) {
     level_index[8].fg = Level_MZ1;    level_index[8].bg = Level_MZ1bg;
     level_index[9].fg = Level_MZ2;    level_index[9].bg = Level_MZ2bg;
     level_index[10].fg = Level_MZ3;   level_index[10].bg = Level_MZ3bg;
-    /* MZ act4: NULL */
     /* SLZ */
     level_index[12].fg = Level_SLZ1;  level_index[12].bg = Level_SLZbg;
     level_index[13].fg = Level_SLZ2;  level_index[13].bg = Level_SLZbg;
     level_index[14].fg = Level_SLZ3;  level_index[14].bg = Level_SLZbg;
-    /* SLZ act4: NULL */
     /* SYZ */
     level_index[16].fg = Level_SYZ1;  level_index[16].bg = Level_SYZbg;
     level_index[17].fg = Level_SYZ2;  level_index[17].bg = Level_SYZbg;
     level_index[18].fg = Level_SYZ3;  level_index[18].bg = Level_SYZbg;
-    /* SYZ act4: NULL */
     /* SBZ */
     level_index[20].fg = Level_SBZ1;  level_index[20].bg = Level_SBZ1bg;
     level_index[21].fg = Level_SBZ2;  level_index[21].bg = Level_SBZ2bg;
     level_index[22].fg = Level_SBZ2;  level_index[22].bg = Level_SBZ2bg;
-    /* SBZ act4: NULL */
     /* Ending */
     level_index[24].fg = Level_End;   level_index[24].bg = Level_GHZbg;
     level_index[25].fg = Level_End;   level_index[25].bg = Level_GHZbg;
 
-    /* ObjPos_Index (sonic.asm:5052-5088); rows beyond stay NULL. The
-       "null" slot is ObjPos_Null in the ASM, ported as NULL. */
+    /* ObjPos_Index */
     objpos_index[0].main  = ObjPos_GHZ1;
     objpos_index[1].main  = ObjPos_GHZ2;
     objpos_index[2].main  = ObjPos_GHZ3;
@@ -186,9 +162,6 @@ void LevelHeaders_Init(void) {
 /* ===================================================================
    Level size loading (from _inc/LevelSizeLoad & BgScrollSpeed.asm)
    =================================================================== */
-
-/* LevelSizeArray (from _inc/LevelSizeArray.asm): one 6-word entry per act,
-   indexed by zone*4 + act. */
 static const uint16_t level_size_array[][6] = {
     {0x0004, 0x0000, 0x24BF, 0x0000, 0x0300, 0x0060},
     {0x0004, 0x0000, 0x1EBF, 0x0000, 0x0300, 0x0060},
@@ -220,7 +193,6 @@ static const uint16_t level_size_array[][6] = {
     {0x0004, 0x0000, 0x2FFF, 0x0000, 0x0320, 0x0060},
 };
 
-/* LoopChunkNums (from _inc/LevelSizeLoad & BgScrollSpeed.asm): 4 bytes per zone. */
 static const uint8_t loop_chunk_nums[] = {
     0xB5, 0x7F, 0x1F, 0x20,
     0x7F, 0x7F, 0x7F, 0x7F,
@@ -231,7 +203,6 @@ static const uint8_t loop_chunk_nums[] = {
     0x7F, 0x7F, 0x7F, 0x7F,
 };
 
-/* BGScrollBlockSizes (REV00 only, kept for 1:1 structure). */
 static const uint16_t bg_scroll_block_sizes[] = {
     0x0070, 0x0100, 0x0100, 0x0100,
     0x0800, 0x0100, 0x0100, 0x0000,
@@ -243,10 +214,7 @@ static const uint16_t bg_scroll_block_sizes[] = {
     0x0070, 0x0100, 0x0100, 0x0100,
 };
 
-/* Forward declaration */
 static void BgScrollSpeed(int16_t y, int16_t x);
-
-/* Stub for Lamp_LoadInfo (Object 79) until ported. */
 static void Lamp_LoadInfo(void) {}
 
 void LevelSizeLoad(void) {
@@ -261,12 +229,9 @@ void LevelSizeLoad(void) {
     v_unused9 = 0;
     v_unused10 = 0;
     v_dle_routine = 0;
-    /* f_nobgscroll is NOT cleared in REV01 (FixBugs=0) */
 
     uint16_t idx = (uint16_t)zone * 4 + (uint16_t)act;
-    if (idx >= sizeof(level_size_array) / sizeof(level_size_array[0])) {
-        idx = 0;
-    }
+    if (idx >= sizeof(level_size_array) / sizeof(level_size_array[0])) idx = 0;
     a0 = level_size_array[idx];
 
     v_unused11      = a0[0];
@@ -287,20 +252,16 @@ void LevelSizeLoad(void) {
         d0 = obY(&ram[v_player]);
     } else {
         uint16_t si = (uint16_t)((uint16_t)zone * 4 + (uint16_t)act);
-        if (StartLocArray && si < 28) {
-            a1 = StartLocArray + si * 4;
-        }
+        if (StartLocArray && si < 28) a1 = StartLocArray + si * 4;
         if ((int16_t)f_demo >= 0) {
             if (StartLocArray && si < 28) {
-                d1 = (uint16_t)((a1[0] << 8) | a1[1]);  /* move.w (a1)+,d1 big-endian */
+                d1 = (uint16_t)((a1[0] << 8) | a1[1]);
                 obX(&ram[v_player]) = (int16_t)d1;
-                d0 = (uint16_t)((a1[2] << 8) | a1[3]);  /* move.w (a1)+,d0 big-endian */
+                d0 = (uint16_t)((a1[2] << 8) | a1[3]);
                 obY(&ram[v_player]) = (int16_t)d0;
             } else {
-                d1 = 0x0050;
-                obX(&ram[v_player]) = 0x0050;
-                d0 = 0x03B0;
-                obY(&ram[v_player]) = 0x03B0;
+                d1 = 0x0050; obX(&ram[v_player]) = 0x0050;
+                d0 = 0x03B0; obY(&ram[v_player]) = 0x03B0;
             }
         } else {
             uint16_t ci = (uint16_t)((uint16_t)v_creditsnum - 1);
@@ -311,10 +272,8 @@ void LevelSizeLoad(void) {
                 d0 = (uint16_t)((a1[2] << 8) | a1[3]);
                 obY(&ram[v_player]) = (int16_t)d0;
             } else {
-                d1 = 0x0050;
-                obX(&ram[v_player]) = 0x0050;
-                d0 = 0x03B0;
-                obY(&ram[v_player]) = 0x03B0;
+                d1 = 0x0050; obX(&ram[v_player]) = 0x0050;
+                d0 = 0x03B0; obY(&ram[v_player]) = 0x03B0;
             }
         }
     }
@@ -323,26 +282,24 @@ void LevelSizeLoad(void) {
         int16_t camX = (int16_t)d1 - (320 / 2);
         if (camX < 0) camX = 0;
         if (camX >= (int16_t)v_limitright2) camX = (int16_t)v_limitright2;
-        RAM_WORD(0xF700) = (uint16_t)camX;        /* v_screenposx integer word */
+        RAM_WORD(0xF700) = (uint16_t)camX;
 
         int16_t camY = (int16_t)d0 - ((224 / 2) - 16);
         if (camY < 0) camY = 0;
         if (camY >= (int16_t)v_limitbtm2) camY = (int16_t)v_limitbtm2;
-        RAM_WORD(0xF704) = (uint16_t)camY;        /* v_screenposy integer word */
+        RAM_WORD(0xF704) = (uint16_t)camY;
     }
 
     BgScrollSpeed(d0, d1);
 
     if (zone < sizeof(loop_chunk_nums) / 4) {
-        uint8_t *p = RAM_ADDR(0xF7AC);           /* v_256loop1 */
+        uint8_t *p = RAM_ADDR(0xF7AC);
         p[0] = loop_chunk_nums[zone * 4 + 0];
         p[1] = loop_chunk_nums[zone * 4 + 1];
         p[2] = loop_chunk_nums[zone * 4 + 2];
         p[3] = loop_chunk_nums[zone * 4 + 3];
     }
 
-    /* LevSz_LoadScrollBlockSize (REV00): load scroll block sizes for BG
-       deformation from the table (LevelSizeLoad & BgScrollSpeed.asm:246-254). */
     if (zone < 7) {
         const uint16_t *src = &bg_scroll_block_sizes[zone * 4];
         v_scroll_block_1_size = src[0];
@@ -352,34 +309,31 @@ void LevelSizeLoad(void) {
     }
 }
 
-/* ===================================================================
-   Background scroll speed setup (from _inc/LevelSizeLoad & BgScrollSpeed.asm)
-   =================================================================== */
 static void BgScrollSpeed(int16_t y, int16_t x) {
     if (RAM_BYTE(v_lastlamp) == 0) {
-        RAM_WORD(0xF70C) = (uint16_t)y;          /* v_bgscreenposy */
-        RAM_WORD(0xF714) = (uint16_t)y;          /* v_bg2screenposy */
-        RAM_WORD(0xF708) = (uint16_t)x;          /* v_bgscreenposx */
-        RAM_WORD(0xF710) = (uint16_t)x;          /* v_bg2screenposx */
-        RAM_WORD(0xF718) = (uint16_t)x;          /* v_bg3screenposx */
+        RAM_WORD(0xF70C) = (uint16_t)y;
+        RAM_WORD(0xF714) = (uint16_t)y;
+        RAM_WORD(0xF708) = (uint16_t)x;
+        RAM_WORD(0xF710) = (uint16_t)x;
+        RAM_WORD(0xF718) = (uint16_t)x;
     }
 
     switch (v_zone) {
     case 0:
-        RAM_LONG(0xF708) = 0;                    /* clr.l v_bgscreenposx */
-        RAM_LONG(0xF70C) = 0;                    /* clr.l v_bgscreenposy */
-        RAM_LONG(0xF714) = 0;                    /* clr.l v_bg2screenposy */
-        RAM_LONG(0xF71C) = 0;                    /* clr.l v_bg3screenposy */
+        RAM_LONG(0xF708) = 0;
+        RAM_LONG(0xF70C) = 0;
+        RAM_LONG(0xF714) = 0;
+        RAM_LONG(0xF71C) = 0;
         memset(RAM_ADDR(v_bgscroll_buffer), 0, 12);
         break;
     case 1:
-        RAM_WORD(0xF70C) = (int16_t)(y >> 1);    /* v_bgscreenposy */
+        RAM_WORD(0xF70C) = (int16_t)(y >> 1);
         break;
     case 2:
         break;
     case 3:
-        RAM_WORD(0xF70C) = (int16_t)((y >> 1) + 0xC0);  /* v_bgscreenposy */
-        RAM_LONG(0xF708) = 0;                    /* clr.l v_bgscreenposx */
+        RAM_WORD(0xF70C) = (int16_t)((y >> 1) + 0xC0);
+        RAM_LONG(0xF708) = 0;
         break;
     case 4: {
         int32_t d0 = (int32_t)y << 4;
@@ -387,31 +341,31 @@ static void BgScrollSpeed(int16_t y, int16_t x) {
         d0 = (d0 << 1) + d2;
         d0 >>= 8;
         d0 += 1;
-        RAM_WORD(0xF70C) = (int16_t)d0;          /* v_bgscreenposy */
-        RAM_LONG(0xF708) = 0;                    /* clr.l v_bgscreenposx */
+        RAM_WORD(0xF70C) = (int16_t)d0;
+        RAM_LONG(0xF708) = 0;
         break;
     }
     case 5: {
         int16_t d0 = (int16_t)((uint16_t)y & 0x7F8);
         d0 >>= 3;
         d0 += 1;
-        RAM_WORD(0xF70C) = (int16_t)d0;          /* v_bgscreenposy */
+        RAM_WORD(0xF70C) = (int16_t)d0;
         break;
     }
     case 6: {
-        int16_t d0 = (int16_t)RAM_WORD(0xF700);  /* v_screenposx */
+        int16_t d0 = (int16_t)RAM_WORD(0xF700);
         d0 >>= 1;
-        RAM_WORD(0xF708) = (uint16_t)d0;         /* v_bgscreenposx */
-        RAM_WORD(0xF710) = (uint16_t)d0;         /* v_bg2screenposx */
+        RAM_WORD(0xF708) = (uint16_t)d0;
+        RAM_WORD(0xF710) = (uint16_t)d0;
         int16_t d1 = d0;
         d0 >>= 2;
         d1 = d0;
         d0 += d0;
         d0 += d1;
-        RAM_WORD(0xF718) = (uint16_t)d0;         /* v_bg3screenposx */
-        RAM_LONG(0xF70C) = 0;                    /* clr.l v_bgscreenposy */
-        RAM_LONG(0xF714) = 0;                    /* clr.l v_bg2screenposy */
-        RAM_LONG(0xF71C) = 0;                    /* clr.l v_bg3screenposy */
+        RAM_WORD(0xF718) = (uint16_t)d0;
+        RAM_LONG(0xF70C) = 0;
+        RAM_LONG(0xF714) = 0;
+        RAM_LONG(0xF71C) = 0;
         memset(RAM_ADDR(v_bgscroll_buffer), 0, 12);
         break;
     }
@@ -419,12 +373,8 @@ static void BgScrollSpeed(int16_t y, int16_t x) {
 }
 
 /* ===================================================================
-   Level layout loading (from _inc/LevelLayoutLoad.asm)
+   Level layout loading
    =================================================================== */
-
-/* Copy one layout blob to RAM. Header is [width][height], followed by
-   (height+1) rows of (width+1) bytes (dbf semantics), rows stored
-   layout_row ($80) apart in RAM. */
 static void level_layout_load2(const uint8_t *src, uint8_t *dst) {
     size_t width = src[0] + 1;
     size_t rows  = src[1] + 1;
@@ -436,88 +386,50 @@ static void level_layout_load2(const uint8_t *src, uint8_t *dst) {
     }
 }
 
-/* ------------------------------------------------------------------
-   Level_Index (sonic.asm:4906-4945)
-   One row per (zone*4 + act); LevelLayoutLoad2 selects FG (d1 offset 0)
-   or BG (d1 offset 2); the third slot (Unk, dc.l 0 in the ASM) is NULL.
-   Populated at runtime by LevelHeaders_Init().
-   ------------------------------------------------------------------ */
-
 void LevelLayoutLoad(void) {
     uint8_t zone = (uint8_t)v_zone;
     uint8_t act  = (uint8_t)v_act;
 
-    /* Clear the entire layout buffer (FixBugs) */
     memset(RAM_ADDR(v_lvllayout), 0, v_lvllayout_end - v_lvllayout);
 
-    /* LevelLayoutLoad2: d0 = zone*$18 + act*6 bytes == row zone*4+act,
-       then d1 (0 = FG, 2 = BG) selects the layout word. */
     unsigned row = zone * 4 + act;
-    if (row >= sizeof(level_index) / sizeof(level_index[0])) {
-        return;
-    }
+    if (row >= sizeof(level_index) / sizeof(level_index[0])) return;
 
     const level_index_entry *lr = &level_index[row];
-    if (lr->fg) {
-        level_layout_load2(lr->fg, RAM_ADDR(v_lvllayout_fg));
-    }
-    if (lr->bg) {
-        level_layout_load2(lr->bg, RAM_ADDR(v_lvllayout_bg));
-    }
+    if (lr->fg) level_layout_load2(lr->fg, RAM_ADDR(v_lvllayout_fg));
+    if (lr->bg) level_layout_load2(lr->bg, RAM_ADDR(v_lvllayout_bg));
 }
 
 /* ===================================================================
-   Level drawing (from _inc/Level Drawing (REV00).asm)
+   Level drawing
    =================================================================== */
-
 static uint16_t data_be16(const uint8_t *p) {
     return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
 }
 
-/* Draw a 16x16 block into a nametable plane. Mirrors GetBlockData +
-   DrawBlock: resolves the chunk from the layout, the block from the
-   chunk, applies X/Y flips and stores the four tile words big-endian. */
 static void draw_chunks_block(const uint8_t *layout, int cam_x, int cam_y,
                               int sx, int sy, uint32_t vram) {
-    int ly = cam_y + sy;                        /* level Y pixel position */
-    int lx = cam_x + sx;                        /* level X pixel position */
-
-    /* Turn Y coordinate into a layout row offset */
+    int ly = cam_y + sy;
+    int lx = cam_x + sx;
     int row_off = ((ly >> 1) & 0x380);
-    /* Turn X coordinate into a layout chunk column */
     int col_off = ((lx >> 8) & 0x7F);
-
-    /* Get the chunk ID from the level layout */
     uint8_t chunk_id = layout[row_off + col_off];
 
     uint16_t block_id;
     int flip_x, flip_y;
     if (chunk_id == 0) {
-        /* Empty chunk: GetBlockData (REV00:594) early-returns leaving a1 at
-           the v_16x16 base, so DrawBlock still draws 16x16 block $00 — the
-           blank block — overwriting anything previously there. */
-        block_id = 0;
-        flip_x = 0;
-        flip_y = 0;
+        block_id = 0; flip_x = 0; flip_y = 0;
     } else {
-        /* Chunk RAM address: (chunk_id-1) * $200 */
         uint32_t chunk_off = (uint32_t)((chunk_id - 1) & 0x7F) * chunk_size;
-
-        /* Block cell within the chunk: 2 bytes per 16x16 block */
         int cell_y = (ly * 2) & 0x1E0;
         int cell_x = ((lx >> 3) & 0x1E);
         const uint8_t *cell = RAM_ADDR(v_256x256) + chunk_off + cell_y + cell_x;
-
-        /* Cell word: block ID (low byte + low 2 bits of flag byte) */
         uint16_t cell_word = data_be16(cell);
         block_id = cell_word & 0x3FF;
-
-        /* Flipping */
         flip_x = (cell[0] >> 3) & 1;
         flip_y = (cell[0] >> 4) & 1;
     }
 
-    /* Block data: 4 words (TL, TR, BL, BR) in RAM, native order from EniDec */
     const uint16_t *blk = (const uint16_t *)RAM_ADDR(v_16x16) + block_id * 4;
     uint16_t t[4];
     for (int i = 0; i < 4; i++) t[i] = blk[i];
@@ -530,7 +442,6 @@ static void draw_chunks_block(const uint8_t *layout, int cam_x, int cam_y,
     if (flip_x) { r0a ^= 0x0800; r0b ^= 0x0800; r1a ^= 0x0800; r1b ^= 0x0800; }
     if (flip_y) { r0a ^= 0x1000; r0b ^= 0x1000; r1a ^= 0x1000; r1b ^= 0x1000; }
 
-    /* Store the four tile words big-endian (top row, then bottom row) */
     vdp.vram[vram]           = (uint8_t)(r0a >> 8);
     vdp.vram[vram + 1]       = (uint8_t)r0a;
     vdp.vram[vram + 2]       = (uint8_t)(r0b >> 8);
@@ -541,16 +452,13 @@ static void draw_chunks_block(const uint8_t *layout, int cam_x, int cam_y,
     vdp.vram[vram + 0x83]    = (uint8_t)r1b;
 }
 
-/* Draw one plane's worth of level graphics (16 strips x 32 blocks), mirroring
-   DrawChunks + DrawBlocks_LR_2 + Calc_VRAM_Pos. A block vertically spans two
-   tile rows, so the stride is $100 bytes ($80 per tile row). */
 static void draw_chunks_plane(uint32_t plane_base, int cam_x, int cam_y,
                               const uint8_t *layout) {
     for (int strip = 0; strip < 16; strip++) {
-        int sy = -16 + strip * 16;               /* d4: start 16px above screen */
-        int block_row = ((cam_y + sy) & 0xF0) >> 4;  /* plane block row (0-15) */
+        int sy = -16 + strip * 16;
+        int block_row = ((cam_y + sy) & 0xF0) >> 4;
         for (int bx = 0; bx < 32; bx++) {
-            int sx = bx * 16;                    /* d5: from far left */
+            int sx = bx * 16;
             int col = ((cam_x + sx) & 0x1F0) >> 4;
             uint32_t vram = plane_base + block_row * 0x100 + col * 4;
             draw_chunks_block(layout, cam_x, cam_y, sx, sy, vram);
@@ -558,24 +466,13 @@ static void draw_chunks_plane(uint32_t plane_base, int cam_x, int cam_y,
     }
 }
 
-/* Draw the initial background layer. The title screen (GM_Title) calls the
-   original with a3=v_bgscreenposx, a4=v_lvllayout_bg, d2=$6000, so only the
-   BG plane is drawn here. */
 void DrawChunks(void) {
     draw_chunks_plane(vram_bg,
-                      (int16_t)RAM_WORD(0xF708),   /* v_bgscreenposx */
-                      (int16_t)RAM_WORD(0xF70C),   /* v_bgscreenposy */
+                      (int16_t)RAM_WORD(0xF708),
+                      (int16_t)RAM_WORD(0xF70C),
                       RAM_ADDR(v_lvllayout_bg));
 }
 
-/* ===================================================================
-   Strip drawing — incremental redraw (Level Drawing (REV00).asm)
-   DrawBlocks_LR_2 / DrawBlocks_TB_2 / DrawBG_Top / DrawBG_Bottom /
-   LoadTilesAsYouMove
-   =================================================================== */
-
-/* Draw a horizontal row of blocks (DrawBlocks_LR_2 equivalent).
-   d6 = number of blocks to draw minus 1 (inclusive count). */
 static void draw_strip_lr(const uint8_t *layout, int cam_x, int cam_y,
                            uint32_t plane_base, int screen_y, int screen_x,
                            int count) {
@@ -589,8 +486,6 @@ static void draw_strip_lr(const uint8_t *layout, int cam_x, int cam_y,
     }
 }
 
-/* Draw a vertical column of blocks (DrawBlocks_TB_2 equivalent).
-   d6 = number of blocks to draw minus 1 (inclusive count). */
 static void draw_strip_tb(const uint8_t *layout, int cam_x, int cam_y,
                            uint32_t plane_base, int screen_y, int screen_x,
                            int count) {
@@ -604,63 +499,43 @@ static void draw_strip_tb(const uint8_t *layout, int cam_x, int cam_y,
     }
 }
 
-/* Draw BG top section strips (DrawBG_Top at REV00:130-221).
-   Reads and clears flag bits from *flags. cam_x/cam_y come from the
-   _dup screen position. */
 static void draw_bg_top(uint16_t *flags, int cam_x, int cam_y,
                          uint32_t plane_base, const uint8_t *layout) {
     if (!(*flags & 0xFF)) return;
 
-    /* bit 0 — draw new tiles at the top (entire plane width) */
     if (*flags & 0x01) {
         *flags &= ~0x01;
-        draw_strip_lr(layout, cam_x, cam_y, plane_base,
-                      -16, -16, (512 / 16) - 1);
+        draw_strip_lr(layout, cam_x, cam_y, plane_base, -16, -16, (512 / 16) - 1);
     }
-
-    /* bit 1 — draw new tiles at the bottom (entire plane width) */
     if (*flags & 0x02) {
         *flags &= ~0x02;
-        draw_strip_lr(layout, cam_x, cam_y, plane_base,
-                      224, -16, (512 / 16) - 1);
+        draw_strip_lr(layout, cam_x, cam_y, plane_base, 224, -16, (512 / 16) - 1);
     }
-
-    /* bit 2 — left column, top scroll section */
     if (*flags & 0x04) {
         *flags &= ~0x04;
         int d6 = (int)(int16_t)v_scroll_block_1_size - (cam_y & 0xFFF0);
         if (d6 >= 0) {
             d6 >>= 4;
-            if (d6 > ((224 + 16 + 16) / 16) - 1)
-                d6 = (224 + 16 + 16) / 16 - 1;
-            draw_strip_tb(layout, cam_x, cam_y, plane_base,
-                          -16, -g_render_left - 16, d6);
+            if (d6 > ((224 + 16 + 16) / 16) - 1) d6 = (224 + 16 + 16) / 16 - 1;
+            draw_strip_tb(layout, cam_x, cam_y, plane_base, -16, -g_render_left - 16, d6);
         }
     }
-
-    /* bit 3 — right column, top scroll section */
     if (*flags & 0x08) {
         *flags &= ~0x08;
         int d6 = (int)(int16_t)v_scroll_block_1_size - (cam_y & 0xFFF0);
         if (d6 >= 0) {
             d6 >>= 4;
-            if (d6 > ((224 + 16 + 16) / 16) - 1)
-                d6 = (224 + 16 + 16) / 16 - 1;
-            draw_strip_tb(layout, cam_x, cam_y, plane_base,
-                          -16, 320 + g_render_left, d6);
+            if (d6 > ((224 + 16 + 16) / 16) - 1) d6 = (224 + 16 + 16) / 16 - 1;
+            draw_strip_tb(layout, cam_x, cam_y, plane_base, -16, 320 + g_render_left, d6);
         }
     }
 }
 
-/* Draw BG bottom section strips (DrawBG_Bottom at REV00:230-293).
-   The bottom section draws below the scroll-block-A boundary. */
 static void draw_bg_bottom(uint16_t *flags, int cam_x, int cam_y,
                             uint32_t plane_base, const uint8_t *layout) {
     if (!(*flags & 0xFF)) return;
-
     int scroll_a = (int)(int16_t)v_scroll_block_1_size;
 
-    /* bit 2 — left column, bottom section */
     if (*flags & 0x04) {
         *flags &= ~0x04;
         if ((uint16_t)cam_x >= 16) {
@@ -669,14 +544,11 @@ static void draw_bg_bottom(uint16_t *flags, int cam_x, int cam_y,
                 int d6 = (d4 >> 4) - ((224 + 16) / 16 - 1);
                 if (d6 < 0) {
                     d6 = -d6;
-                    draw_strip_tb(layout, cam_x, cam_y, plane_base,
-                                  d4, -g_render_left - 16, d6);
+                    draw_strip_tb(layout, cam_x, cam_y, plane_base, d4, -g_render_left - 16, d6);
                 }
             }
         }
     }
-
-    /* bit 3 — right column, bottom section */
     if (*flags & 0x08) {
         *flags &= ~0x08;
         int d4 = scroll_a - (cam_y & 0xFFF0);
@@ -684,30 +556,21 @@ static void draw_bg_bottom(uint16_t *flags, int cam_x, int cam_y,
             int d6 = (d4 >> 4) - ((224 + 16) / 16 - 1);
             if (d6 < 0) {
                 d6 = -d6;
-                draw_strip_tb(layout, cam_x, cam_y, plane_base,
-                              d4, 320 + g_render_left, d6);
+                draw_strip_tb(layout, cam_x, cam_y, plane_base, d4, 320 + g_render_left, d6);
             }
         }
     }
 }
 
-/* Strip drawing: incremental redraw of FG + BG while screen is moving
-   (LoadTilesAsYouMove at REV00:31-121).
-   Called from VBlank after the _dup position/flag copies. */
 void LoadTilesAsYouMove(void) {
-    /* --- BG top section (scroll block A) --- */
     int bg1x = (int16_t)(uint16_t)v_bgscreenposx_dup;
     int bg1y = (int16_t)(uint16_t)v_bgscreenposy_dup;
-    draw_bg_top(&v_bg1_scroll_flags_dup, bg1x, bg1y,
-                vram_bg, RAM_ADDR(v_lvllayout_bg));
+    draw_bg_top(&v_bg1_scroll_flags_dup, bg1x, bg1y, vram_bg, RAM_ADDR(v_lvllayout_bg));
 
-    /* --- BG bottom section (scroll blocks B/C) --- */
     int bg2x = (int16_t)(uint16_t)v_bg2screenposx_dup;
     int bg2y = (int16_t)(uint16_t)v_bg2screenposy_dup;
-    draw_bg_bottom(&v_bg2_scroll_flags_dup, bg2x, bg2y,
-                   vram_bg, RAM_ADDR(v_lvllayout_bg));
+    draw_bg_bottom(&v_bg2_scroll_flags_dup, bg2x, bg2y, vram_bg, RAM_ADDR(v_lvllayout_bg));
 
-        /* --- Foreground --- */
     uint16_t fgf = v_fg_scroll_flags_dup;
     if (!(fgf & 0xFF)) return;
 
@@ -715,56 +578,92 @@ void LoadTilesAsYouMove(void) {
     int fgy = (int16_t)(uint16_t)v_screenposy_dup;
     const uint8_t *fg_layout = RAM_ADDR(v_lvllayout_fg);
 
-    /* Posiciones y ancho ajustados a widescreen. Cuando g_render_left == 0
-       estos valores coinciden exactamente con el original (352/16-1 = 21,
-       -16, 320). */
-    const int strip_start = -g_render_left - 16;      /* un bloque a la izq. del nuevo borde */
-    const int strip_end   = 320 + g_render_left;      /* un bloque a la der. del nuevo borde */
-    const int strip_count = (g_render_w + 32) / 16 - 1;  /* ancho visible + 2 bloques de margen */
+    const int strip_start = -g_render_left - 16;
+    const int strip_end   = 320 + g_render_left;
+    const int strip_count = (g_render_w + 32) / 16 - 1;
 
-    /* bit 0 — top row */
-    if (fgf & 0x01) {
-        fgf &= ~0x01;
-        draw_strip_lr(fg_layout, fgx, fgy, vram_fg,
-                      -16, strip_start, strip_count);
-    }
-
-    /* bit 1 — bottom row */
-    if (fgf & 0x02) {
-        fgf &= ~0x02;
-        draw_strip_lr(fg_layout, fgx, fgy, vram_fg,
-                      224, strip_start, strip_count);
-    }
-
-    /* bit 2 — left column */
-    if (fgf & 0x04) {
-        fgf &= ~0x04;
-        draw_strip_tb(fg_layout, fgx, fgy, vram_fg,
-                      -16, strip_start, ((224 + 16 + 16) / 16) - 1);
-    }
-
-    /* bit 3 — right column */
-    if (fgf & 0x08) {
-        fgf &= ~0x08;
-        draw_strip_tb(fg_layout, fgx, fgy, vram_fg,
-                      -16, strip_end, ((224 + 16 + 16) / 16) - 1);
-    }
+    if (fgf & 0x01) { fgf &= ~0x01; draw_strip_lr(fg_layout, fgx, fgy, vram_fg, -16, strip_start, strip_count); }
+    if (fgf & 0x02) { fgf &= ~0x02; draw_strip_lr(fg_layout, fgx, fgy, vram_fg, 224, strip_start, strip_count); }
+    if (fgf & 0x04) { fgf &= ~0x04; draw_strip_tb(fg_layout, fgx, fgy, vram_fg, -16, strip_start, ((224 + 16 + 16) / 16) - 1); }
+    if (fgf & 0x08) { fgf &= ~0x08; draw_strip_tb(fg_layout, fgx, fgy, vram_fg, -16, strip_end, ((224 + 16 + 16) / 16) - 1); }
 
     v_fg_scroll_flags_dup = fgf;
 }
 
 /* ===================================================================
-   Level entry (once per level, before first frame)
-   Ported from sonic.asm GM_Level lines 2702-2957
+   NUEVO: Tablas del sistema de agua LZ
+   =================================================================== */
+
+/* WaterHeight: altura inicial del agua por acto (LZ1, LZ2, LZ3, SBZ3) */
+static const uint16_t WaterHeight[4] = {
+    0x00B8,  /* LZ act 1 */
+    0x0328,  /* LZ act 2 */
+    0x0900,  /* LZ act 3 */
+    0x0228,  /* SBZ3 (LZ act 4) */
+};
+
+/* LZWind_Data: {left, top, right, bottom} para cada túnel de viento.
+   Se leen en pares de words; el offset en bytes es base*2 + i*2. */
+static const int16_t LZWind_Data[20] = {
+    0x0A80, 0x0300, 0x0C10, 0x0380,   /* LZ act 1 - set 1 */
+    0x0F80, 0x0100, 0x1410, 0x0180,   /* LZ act 1 - set 2 */
+    0x0460, 0x0400, 0x0710, 0x0480,   /* LZ act 2 */
+    0x0A20, 0x0600, 0x1610, 0x06E0,   /* LZ act 3 */
+    0x0C80, 0x0600, 0x13D0, 0x0680,   /* SBZ3 */
+};
+
+/* Velocidades de tobogán de agua (en 8.8 fixed; el byte es la parte entera) */
+static const int8_t Slide_Speeds[7] = {
+    0x0A, -0x0B, 0x0A, -0x0A, -0x0B, -0x0C, 0x0B
+};
+
+/* Chunks que son toboganes de agua */
+static const uint8_t Slide_Chunks[7] = {
+    2, 7, 3, 0x4C, 0x4B, 8, 4
+};
+
+/* ===================================================================
+   NUEVO: Setup inicial de agua (Level_LoadPal / Level_WaterPal /
+   Level_ChkWaterPal del ASM)
+   =================================================================== */
+
+static void LZ_LevelWaterSetup(void) {
+    if (v_zone != id_LZ) return;
+
+    uint8_t act = (uint8_t)v_act;
+    if (act > 3) act = 0;
+    uint16_t wh = WaterHeight[act];
+    v_waterpos1 = wh;
+    v_waterpos2 = wh;
+    v_waterpos3 = wh;
+    v_wtr_routine = 0;
+    f_wtr_state   = 0;
+    f_water       = 1;
+
+    /* Paleta submarina de Sonic: LZ1-3 usan palid_LZSonWater, SBZ3 usa
+       palid_SBZ3SonWat. */
+    int sonpal = (act == act4) ? palid_SBZ3SonWat : palid_LZSonWater;
+    PalLoad_Fade_Water(sonpal);
+
+    if (RAM_BYTE(v_lastlamp) != 0) {
+        f_wtr_state = RAM_BYTE(v_lamp_wtrstat);
+    }
+}
+
+static void LZ_LevelWaterPalLoad(void) {
+    if (v_zone != id_LZ) return;
+    int pal = ((uint8_t)v_act == act4) ? palid_SBZ3Water : palid_LZWater;
+    PalLoad_Water(pal);
+}
+
+/* ===================================================================
+   Level_Enter (con las llamadas de agua integradas)
    =================================================================== */
 static void Level_Enter(void) {
-    /* ------------------------------------------------------------------
-       Phase A: Fade out + clear PLC (sonic.asm:2702-2712)
-       ------------------------------------------------------------------ */
-    /* bset #7, v_gamemode — mark as "in pre-level sequence" */
-    v_gamemode = 0x8C;  /* GM_Level | 0x80 */
+    v_hblank_line = 223;
+    f_wtr_state   = 0;
+    v_gamemode = 0x8C;
 
-    /* Fade out music (skipped for ending-sequence demos) */
     if ((int16_t)f_demo >= 0) {
         Sound_Queue(bgm_Fade, false);
     }
@@ -772,155 +671,109 @@ static void Level_Enter(void) {
     ClearPLC();
     Palette_FadeOut();
 
-/* ------------------------------------------------------------------
-       Phase B: Title card art + level PLC (sonic.asm:2716-2737)
-       ------------------------------------------------------------------ */
-    /* Decompress the zone title card art to VRAM */
     if (Nem_TitleCard) {
         NemDecToVRAM(Nem_TitleCard, ArtTile_Title_Card * tile_size);
     }
-    /* Queue the level art PLCs (sonic.asm:2725-2737): read the 1st PLC id
-       from the current zone's LevelHeaders entry, then plcid_Main2.
-       Unstaged entries (NULL) are skipped by AddPLC. Nem_GHZ_1st is
-       queued here per the ASM and decompressed by RunPLC during the
-       title-card reveal (Phase G). */
     {
         uint8_t zone = (uint8_t)v_zone;
         if (zone < (uint8_t)(sizeof(level_headers) / sizeof(level_headers[0]))) {
             uint8_t plc = level_headers[zone].plc1;
-            if (plc != 0) {
-                AddPLC(plc);
-            }
+            if (plc != 0) AddPLC(plc);
         }
     }
     AddPLC(plcid_Main2);
 
-    /* ------------------------------------------------------------------
-       Phase C: Clear RAM regions (sonic.asm:2739-2743)
-       ------------------------------------------------------------------ */
-    memset(RAM_ADDR(v_objspace), 0, 0x2000);          /* clear object RAM */
-    memset(RAM_ADDR(0xF628), 0, 0x58);                /* v_misc_variables */
-    memset(RAM_ADDR(0xF700), 0, 0x100);               /* v_levelvariables */
-    memset(RAM_ADDR(0xFE60), 0, 0xB0);                /* v_timingandscreenvariables */
+    memset(RAM_ADDR(v_objspace), 0, 0x2000);
+    memset(RAM_ADDR(0xF628), 0, 0x58);
+    memset(RAM_ADDR(0xF700), 0, 0x100);
+    memset(RAM_ADDR(0xFE60), 0, 0xB0);
 
-    /* ------------------------------------------------------------------
-       Phase D: VDP setup for levels (sonic.asm:2745-2756)
-       ------------------------------------------------------------------ */
-    v_vdp_buffer1 &= ~0x0040;   /* disable display */
+    v_vdp_buffer1 &= ~0x0040;
     ClearScreen();
 
-    /* VDP register configuration for level mode */
-    VDP_SetRegister(0x0B, 0x03);  /* mode3: per-row hscroll, full-screen vscroll */
-    VDP_SetRegister(0x02, (vram_fg >> 10) & 0x38);  /* FG nametable at $C000 */
-    VDP_SetRegister(0x04, (vram_bg >> 13) & 0x07);  /* BG nametable at $E000 */
-    VDP_SetRegister(0x05, (vram_sprites >> 9) & 0x7F); /* sprite table */
-    VDP_SetRegister(0x10, 0x01);  /* 64-cell hscroll size */
-    VDP_SetRegister(0x00, 0x04);  /* 8-colour mode */
-    VDP_SetRegister(0x07, 0x20);  /* background colour (line 2, colour 0) */
-    VDP_SetRegister(0x0A, 223);   /* HBlank rate: scanline 223 (for water) */
+    VDP_SetRegister(0x0B, 0x03);
+    VDP_SetRegister(0x02, (vram_fg >> 10) & 0x38);
+    VDP_SetRegister(0x04, (vram_bg >> 13) & 0x07);
+    VDP_SetRegister(0x05, (vram_sprites >> 9) & 0x7F);
+    VDP_SetRegister(0x10, 0x01);
+    VDP_SetRegister(0x00, 0x04);
+    VDP_SetRegister(0x07, 0x20);
+    VDP_SetRegister(0x0A, 223);
 
-    /* ------------------------------------------------------------------
-       Phase E: Level palette (sonic.asm:2773-2778)
-       ------------------------------------------------------------------ */
-    v_air = 30;                    /* Sonic's air timer */
-    v_vdp_buffer1 |= 0x0040;      /* re-enable display */
+    v_air = 30;
+    v_vdp_buffer1 |= 0x0040;
 
-    PalLoad(palid_Sonic);          /* load Sonic palette to active palette */
+    PalLoad(palid_Sonic);
 
-    /* LZ water palette — skip for now (GHZ only) */
+    /* NUEVO: setup inicial de agua LZ (height + fade-water palette). */
+    LZ_LevelWaterSetup();
 
-    /* ------------------------------------------------------------------
-       Phase F: Music + title card object (sonic.asm:2792-2811)
-       ------------------------------------------------------------------ */
-    /* Level_GetBgm: play the zone's music from MusicList. Skipped in
-       credits demos (f_demo negative). SBZ3 (LZ act 4) and Final Zone
-       pick their dedicated entries. */
     if ((int16_t)f_demo >= 0) {
         static const uint8_t music_list[] = {
-            bgm_GHZ,   /* 0: Green Hill */
-            bgm_LZ,    /* 1: Labyrinth */
-            bgm_MZ,    /* 2: Marble */
-            bgm_SLZ,   /* 3: Star Light */
-            bgm_SYZ,   /* 4: Spring Yard */
-            bgm_SBZ,   /* 5: Scrap Brain */
-            bgm_FZ,    /* 6: Final */
+            bgm_GHZ, bgm_LZ, bgm_MZ, bgm_SLZ, bgm_SYZ, bgm_SBZ, bgm_FZ,
         };
         int d0 = v_zone;
-        if (RAM_U16(0xFE10) == id_LZ_act4) d0 = 5;  /* SBZ3 uses Scrap Brain */
-        else if (RAM_U16(0xFE10) == id_FZ) d0 = 6;  /* Final Zone */
+        if (RAM_U16(0xFE10) == id_LZ_act4) d0 = 5;
+        else if (RAM_U16(0xFE10) == id_FZ) d0 = 6;
         Sound_Queue(music_list[d0], true);
     }
 
-    /* Load zone title cards (move.b #id_TitleCard,(v_titlecard).w) */
     memset(RAM_ADDR(v_titlecard), 0, 4 * OBJECT_SIZE);
     obID(&ram[v_titlecard]) = id_TitleCard;
 
-    /* ------------------------------------------------------------------
-       Phase G: Title card move-in loop (sonic.asm:2814-2842)
-       Execute objects each frame until every element has reached its
-       resting X-position. PLCs are synchronous in this port, so the
-       only remaining loop condition is the cards settling.
-       ------------------------------------------------------------------ */
     v_vblank_routine = id_VBlank_Levels;
     do {
         WaitForVBlank();
-        ExecuteObjects();        /* first call spawns the four card elements */
+        ExecuteObjects();
         BuildSprites();
-        RunPLC();                /* ASM processes the level PLCs each VBlank */
+        RunPLC();
     } while (!TitleCardsSettled() || RAM_LONG(v_plc_buffer) != 0);
 
-    /* ------------------------------------------------------------------
-       Phase H: HUD base graphics (sonic.asm:2857)
-       Decompress HUD art to VRAM and draw the static "E______0", "0:00",
-       "__0" digits plus the lives counter.
-       ------------------------------------------------------------------ */
     Hud_Base();
 
-    /* ------------------------------------------------------------------
-       Phase I: Post-title-card init (sonic.asm:2860-2919)
-       ------------------------------------------------------------------ */
-    PalLoad_Fade(palid_Sonic);     /* load Sonic palette to fade-in buffer */
-    LevelSizeLoad();               /* set level boundaries */
-    DeformLayers();                /* initialize background deformation */
-    v_fg_scroll_flags |= 0x0C;     /* bset #2: draw extra column at left side during start */
+    PalLoad_Fade(palid_Sonic);
+    LevelSizeLoad();
+    DeformLayers();
+    v_fg_scroll_flags |= 0x0C;
 
-    LevelDataLoad();               /* load block mappings, layout and palette */
-    LoadTilesFromStart();          /* draw FG + BG once before fade-in */
+    LevelDataLoad();
+    LoadTilesFromStart();
 
-    ConvertCollisionArray();       /* no-op stub */
-    ColIndexLoad();                /* sets v_collindex */
-    LZWaterFeatures();             /* stub — no-op for GHZ */
+    ConvertCollisionArray();
+    ColIndexLoad();
 
-    /* Spawn player and HUD */
+    /* NUEVO: cargar la paleta submarina activa antes del fade-in. */
+    LZ_LevelWaterPalLoad();
+
+    LZWaterFeatures();
+
     LevelSpawnPlayer();
 
-    /* HUD: skipped in credits demos (sonic.asm:2873-2875) */
     if ((int16_t)f_demo >= 0) {
         LevelSpawnHUD();
     }
 
-    /* Debug cheat (sonic.asm:2878-2882) */
+    /* NUEVO: spawn de las superficies de agua (Level_ChkWater, LZ only). */
+    if (v_zone == id_LZ) {
+        RAM_BYTE(v_watersurface1) = id_WaterSurface;
+        obX(RAM_ADDR(v_watersurface1)) = 0x60;
+        RAM_BYTE(v_watersurface2) = id_WaterSurface;
+        obX(RAM_ADDR(v_watersurface2)) = 0x120;
+    }
+
     if (f_debugcheat && (v_jpadhold1 & btnA)) {
         f_debugmode = 1;
     }
 
-    /* Clear button input states (sonic.asm:2885-2886: move.w #0 clears both hold+press bytes) */
     v_jpadhold2 = 0;
     v_jpadpress2 = 0;
     v_jpadhold1 = 0;
     v_jpadpress1 = 0;
 
-    /* Initialize object position manager */
     ObjPosLoad();
-
-    /* Execute objects once to initialize everything */
     ExecuteObjects();
     BuildSprites();
 
-    /* ------------------------------------------------------------------
-       Phase J: Clear gameplay counters (sonic.asm:2900-2919)
-       ------------------------------------------------------------------ */
-    /* d0 = 0; if starting from checkpoint, skip rings/time/lifecount clear */
     if (RAM_BYTE(v_lastlamp) == 0) {
         v_rings = 0;
         v_time = 0;
@@ -941,132 +794,392 @@ static void Level_Enter(void) {
     f_ringcount  = 1;
     f_timecount  = 1;
 
-    /* ------------------------------------------------------------------
-       Phase K: Fade in (sonic.asm:2935-2966)
-       ------------------------------------------------------------------ */
-    /* Demo data setup (sonic.asm:2921-2944) — v_generictimer for demo end */
     v_btnpushtime1 = 0;
-    v_generictimer = 1800;           /* 30 seconds for regular play */
+    v_generictimer = 1800;
     if ((int16_t)f_demo < 0) {
-        v_generictimer = 540;        /* 9 seconds for credits demos */
-        if (v_creditsnum == 4) {
-            v_generictimer = 510;    /* 0.5s less for demo 4 */
-        }
+        v_generictimer = 540;
+        if (v_creditsnum == 4) v_generictimer = 510;
     }
 
-    /* 4-frame VBlank delay for palette transfers (sonic.asm:2957-2963) */
     for (int i = 0; i < 4; i++) {
         v_vblank_routine = id_VBlank_Levels;
         WaitForVBlank();
     }
     Palette_FadeIn();
 
-    /* Level has faded in (sonic.asm:2970-2988) */
     if ((int16_t)f_demo >= 0) {
-        /* Normal: make title cards start moving */
         obRoutine(&ram[v_titlecard])                     += 2;
         obRoutine(&ram[v_titlecard + OBJECT_SIZE * 1])   += 4;
         obRoutine(&ram[v_titlecard + OBJECT_SIZE * 2])   += 4;
         obRoutine(&ram[v_titlecard + OBJECT_SIZE * 3])   += 4;
     } else {
-        /* Credits demo: load explosion + animal graphics (Level_ClrCardArt) */
         AddPLC(plcid_Explode);
         int d0 = (uint8_t)v_zone + plcid_GHZAnimals;
         AddPLC(d0);
     }
 
-    /* bclr #7, v_gamemode — end pre-level sequence (sonic.asm:2991) */
-    v_gamemode = 0x0C;  /* GM_Level: clear bit 7 */
+    v_gamemode = 0x0C;
 }
 
 /* ===================================================================
-   Draw the current level graphics to the whole screen (once, at level
-   entry). Ported from _inc/Level Drawing (REV00).asm LoadTilesFromStart:
-   draws the FG plane from v_screenposx/y + v_lvllayout_fg, then the BG
-   plane from v_bgscreenposx/y + v_lvllayout_bg.
+   LoadTilesFromStart
    =================================================================== */
 void LoadTilesFromStart(void) {
     draw_chunks_plane(vram_fg,
-                      (int16_t)RAM_WORD(0xF700),   /* v_screenposx */
-                      (int16_t)RAM_WORD(0xF704),   /* v_screenposy */
+                      (int16_t)RAM_WORD(0xF700),
+                      (int16_t)RAM_WORD(0xF704),
                       RAM_ADDR(v_lvllayout_fg));
     draw_chunks_plane(vram_bg,
-                      (int16_t)RAM_WORD(0xF708),   /* v_bgscreenposx */
-                      (int16_t)RAM_WORD(0xF70C),   /* v_bgscreenposy */
+                      (int16_t)RAM_WORD(0xF708),
+                      (int16_t)RAM_WORD(0xF70C),
                       RAM_ADDR(v_lvllayout_bg));
 }
 
 /* ===================================================================
-   LevelDataLoad (from _inc/LevelLayoutLoad.asm)
-   Loads the level header data: 16x16 block mappings, 256x256 chunk
-   mappings, FG/BG layout, and the zone palette into the fade buffer.
+   LevelDataLoad
    =================================================================== */
 void LevelDataLoad(void) {
     uint8_t zone = (uint8_t)v_zone;
 
-    /* --- Level Header ---
-       ASM: lea LevelHeaders.l, a2; lea (a2,d0.w), a2 with d0 = v_zone*$10
-       (skip the 1st PLC and level gfx entry — handled in GM_Level). */
-    if (zone >= sizeof(level_headers) / sizeof(level_headers[0])) {
-        return;
-    }
+    if (zone >= sizeof(level_headers) / sizeof(level_headers[0])) return;
     const level_header *lp = &level_headers[zone];
 
-    /* --- 16x16 Block Mappings: +(a2) = second dc.l (plc2<<24)|sixteen --- */
     if (lp->map16) {
         uint16_t *buf = (uint16_t *)RAM_ADDR(v_16x16);
         EniDec(lp->map16, buf, ArtTile_Level);
     }
-
-    /* --- 256x256 Chunk Mappings: +(a2) = third dc.l (twofivesix) --- */
     if (lp->map256) {
         uint8_t *buf = RAM_ADDR(v_256x256);
         KosDec(lp->map256, buf);
     }
 
-    /* --- Level Layout (FG/BG) --- */
     LevelLayoutLoad();
 
-    /* --- Music (unused) --- */
-
-    /* --- Palette: low byte of the header (palid duplicated in headers) --- */
     {
         uint16_t pal = lp->pal & 0xFF;
-
-        if (RAM_U16(0xFE10) == id_LZ_act4) {        /* SBZ3 (LZ4)? */
+        if (RAM_U16(0xFE10) == id_LZ_act4) {
             pal = palid_SBZ3;
         } else if (RAM_U16(0xFE10) == id_SBZ_act2 || RAM_U16(0xFE10) == id_FZ) {
-            pal = palid_SBZ2;                    /* SBZ2 / FZ */
+            pal = palid_SBZ2;
         }
         PalLoad_Fade(pal);
     }
 
-    /* --- 2nd PLC: first byte of the second dc.l (0 = ending, skip) --- */
     if (lp->plc2 != 0) {
         AddPLC(lp->plc2);
     }
 }
 
 /* ===================================================================
-   LZWaterFeatures — stub (GHZ has no water)
+   NUEVO: Sistema de agua LZ (LZWaterFeatures + helpers)
    =================================================================== */
+
+/* --- LZWindTunnels --- */
+static void LZWindTunnels(void) {
+    if (v_debuguse != 0) return;
+
+    uint8_t *player = RAM_ADDR(v_player);
+    uint8_t act = (uint8_t)v_act;
+
+    int base = 8 + (act << 3);   /* byte offset en LZWind_Data */
+    int count = 1;
+    if (act == 0) { base = 0; count = 2; }
+
+    for (int s = 0; s < count; s++) {
+        /* a2 apunta a {left, top, right, bottom} en words */
+        int word_off = (base >> 1) + s * 4;
+        const int16_t *a2 = &LZWind_Data[word_off];
+
+        int16_t son_x = obX(player);
+        if ((uint16_t)son_x < (uint16_t)a2[0]) continue;
+        if ((uint16_t)son_x >= (uint16_t)a2[2]) continue;
+
+        int16_t son_y = obY(player);
+        if ((uint16_t)son_y < (uint16_t)a2[1]) continue;
+        if ((uint16_t)son_y >= (uint16_t)a2[3]) continue;
+
+        /* Dentro del túnel: sonido cada $40 frames */
+        if ((v_vblank_byte & 0x3F) == 0) {
+            Sound_Queue(sfx_Waterfall, false);
+        }
+
+        if (f_wtunneldisallow) return;
+        if (obRoutine(player) >= 4) {
+            f_wtunnelmode = 0;
+            return;
+        }
+        f_wtunnelmode = 1;
+
+        int16_t d0 = (int16_t)(son_x - 128);
+        if ((uint16_t)d0 < (uint16_t)a2[0]) {   /* zona de succión */
+            int16_t dy = 2;
+            if (act == act2) dy = -2;
+            obY(player) = (int16_t)(obY(player) + dy);
+        }
+
+        obX(player)    = (int16_t)(obX(player) + 4);
+        obVelX(player) = 0x400;
+        obVelY(player) = 0;
+        obAnim(player) = 0x0F;                 /* id_Float2 */
+        obStatus(player) |= (1 << 1);
+
+        if (v_jpadhold2 & btnUp) obY(player) -= 1;
+        if (v_jpadhold2 & btnDn) obY(player) += 1;
+        return;
+    }
+
+    /* .notInTunnel */
+    if (f_wtunnelmode) {
+        obAnim(player) = 0x00;                 /* id_Walk */
+        f_wtunnelmode = 0;
+    }
+}
+
+/* --- LZWaterSlides --- */
+static void LZWaterSlides(void) {
+    uint8_t *player = RAM_ADDR(v_player);
+
+    if (obStatus(player) & (1 << 1)) goto exit_slide;
+
+    {
+        uint16_t d0 = (uint16_t)obY(player);
+        d0 = (uint16_t)(d0 >> 1);
+        d0 &= 0x380;
+        uint8_t d1 = (uint8_t)((uint16_t)obX(player) >> 8);
+        d1 &= 0x7F;
+        d0 = (uint16_t)(d0 + d1);
+
+        const uint8_t *layout = RAM_ADDR(v_lvllayout_fg);
+        uint8_t chunk_id = layout[d0];
+
+        int found = -1;
+        for (int i = 6; i >= 0; i--) {
+            if (Slide_Chunks[i] == chunk_id) { found = i; break; }
+        }
+        if (found < 0) goto exit_slide;
+
+        /* LZSlide_Move */
+        obStatus(player) &= (uint8_t)~(1 << 0);
+        int8_t speed = Slide_Speeds[found];
+        obInertia(player) = (int16_t)((uint8_t)speed << 8);
+        if (speed < 0) obStatus(player) |= (1 << 0);
+
+        obAnim(player) = 0x1B;                 /* id_Slide */
+        f_slidemode = 1;
+
+        if ((v_vblank_byte & 0x1F) == 0) {
+            Sound_Queue(sfx_Waterfall, false);
+        }
+        return;
+    }
+
+exit_slide:
+    if (f_slidemode) {
+        locktime(player) = 5;
+        f_slidemode = 0;
+    }
+}
+
+/* --- LZDynamicWater --- */
+
+static void DynWater_LZ1(void) {
+    int16_t d0 = (int16_t)v_screenposx;
+    uint8_t r = v_wtr_routine;
+    uint8_t *player = RAM_ADDR(v_player);
+    int16_t d1;
+
+    if (r != 0) {
+        if (r != 1) return;
+        if ((int16_t)obY(player) >= 0x2E0) return;
+        d1 = 0x03A8;
+        if (d0 >= 0x1300) {
+            d1 = 0x0108;
+            v_wtr_routine = 2;
+        }
+        v_waterpos3 = (uint16_t)d1;
+        return;
+    }
+
+    d1 = 0x00B8;
+    if (d0 < 0x600) goto set_target;
+    d1 = 0x0108;
+    if ((int16_t)obY(player) < 0x200) goto secret_top;
+    if (d0 < 0xC00) goto set_target;
+    d1 = 0x0318;
+    if (d0 < 0x1080) goto set_target;
+    RAM_BYTE(f_switch + 5) = 0x80;
+    d1 = 0x05C8;
+    if (d0 < 0x1380) goto set_target;
+    d1 = 0x03A8;
+    if (v_waterpos2 == (uint16_t)d1) v_wtr_routine = 1;
+
+set_target:
+    v_waterpos3 = (uint16_t)d1;
+    return;
+
+secret_top:
+    if (d0 < 0xC80)  goto set_target;
+    d1 = 0x00E8;
+    if (d0 < 0x1500) goto set_target;
+    d1 = 0x0108;
+    goto set_target;
+}
+
+static void DynWater_LZ2(void) {
+    int16_t d0 = (int16_t)v_screenposx;
+    int16_t d1;
+
+    d1 = 0x0328;
+    if (d0 < 0x500) goto set_target;
+    d1 = 0x03C8;
+    if (d0 < 0xB00) goto set_target;
+    d1 = 0x0428;
+
+set_target:
+    v_waterpos3 = (uint16_t)d1;
+}
+
+static void DynWater_LZ3(void) {
+    int16_t d0 = (int16_t)v_screenposx;
+    uint8_t r = v_wtr_routine;
+    uint8_t *player = RAM_ADDR(v_player);
+    int16_t d1;
+
+    if (r == 0) {
+        d1 = 0x0900;
+        if (d0 < 0x600) goto set_target_instant_r0;
+        if ((int16_t)obY(player) < 0x3C0) goto set_target_instant_r0;
+        if ((int16_t)obY(player) >= 0x600) goto set_target_instant_r0;
+        d1 = 0x04C8;
+        RAM_BYTE(v_lvllayout_fg + (layout_row * 2) + 6) = 0x4B;
+        v_wtr_routine = 1;
+        Sound_Queue(sfx_Rumbling, false);
+
+set_target_instant_r0:
+        v_waterpos3 = (uint16_t)d1;
+        v_waterpos2 = (uint16_t)d1;
+        return;
+    }
+
+    if (r == 1) {
+        d1 = 0x04C8;
+        if (d0 < 0x770) goto set_target;
+        d1 = 0x0308;
+        if (d0 < 0x1400) goto set_target;
+
+        if (v_waterpos3 != 0x0508) {
+            if ((int16_t)obY(player) >= 0x600) goto check_end;
+            if ((int16_t)obY(player) <  0x280) goto set_target;
+        }
+check_end:
+        d1 = 0x0508;
+        v_waterpos2 = (uint16_t)d1;
+        if (d0 < 0x1770) goto set_target;
+        v_wtr_routine = 2;
+        goto set_target;
+    }
+
+    if (r == 2) {
+        d1 = 0x0508;
+        if (d0 < 0x1860) goto set_target;
+        d1 = 0x0188;
+        if (d0 >= 0x1AF0) { v_wtr_routine = 3; goto set_target; }
+        if (v_waterpos2 != (uint16_t)d1) goto set_target;
+        v_wtr_routine = 3;
+        goto set_target;
+    }
+
+    if (r == 3) {
+        d1 = 0x0188;
+        if (d0 < 0x1AF0) goto set_target_instant_r3;
+        d1 = 0x0900;
+        if (d0 < 0x1BC0) goto set_target_instant_r3;
+        v_wtr_routine = 4;
+        v_waterpos3 = 0x0608;
+        v_waterpos2 = 0x07C0;
+        RAM_BYTE(f_switch + 8) = 1;
+        return;
+
+set_target_instant_r3:
+        v_waterpos3 = (uint16_t)d1;
+        v_waterpos2 = (uint16_t)d1;
+        return;
+    }
+
+    /* r >= 4: FixBugs=0 -> check right side of tunnel */
+    if (d0 < 0x1E00) return;
+    v_waterpos3 = 0x0128;
+    return;
+
+set_target:
+    v_waterpos3 = (uint16_t)d1;
+}
+
+static void DynWater_SBZ3(void) {
+    int16_t d0 = (int16_t)v_screenposx;
+    int16_t d1;
+
+    d1 = 0x0228;
+    if (d0 < 0xF00) goto set_target;
+    d1 = 0x04C8;
+
+set_target:
+    v_waterpos3 = (uint16_t)d1;
+}
+
+static void LZDynamicWater(void) {
+    switch ((uint8_t)v_act) {
+        case 0: DynWater_LZ1();  break;
+        case 1: DynWater_LZ2();  break;
+        case 2: DynWater_LZ3();  break;
+        case 3: DynWater_SBZ3(); break;
+    }
+
+    int16_t diff = (int16_t)(v_waterpos3 - v_waterpos2);
+    if (diff == 0) return;
+    int16_t step = f_water ? 1 : 0;
+    if (diff < 0) step = (int16_t)(-step);
+    v_waterpos2 = (uint16_t)(v_waterpos2 + step);
+}
+
+/* --- LZWaterFeatures: dispatcher per-frame --- */
 void LZWaterFeatures(void) {
-    /* TODO: LZ water initialization */
+    if (v_zone != id_LZ) return;
+
+    if (obRoutine(RAM_ADDR(v_player)) >= 6) goto set_water_height;
+
+    LZWindTunnels();
+    LZWaterSlides();
+    LZDynamicWater();
+
+set_water_height:
+    f_wtr_state = 0;
+    {
+        int16_t d0 = (int16_t)(uint8_t)RAM_BYTE(v_oscillate + 2);
+        d0 = (int16_t)(d0 >> 1);
+        d0 = (int16_t)(d0 + (int16_t)v_waterpos2);
+        v_waterpos1 = (uint16_t)d0;
+
+        d0 = (int16_t)(d0 - (int16_t)v_screenposy);
+
+        if (d0 < 0) {
+            v_hblank_line = 223;
+            f_wtr_state   = 1;
+        }
+        if ((uint16_t)d0 >= 223) d0 = 223;
+        v_hblank_line = (uint8_t)d0;
+    }
 }
 
 /* ===================================================================
-   ConvertCollisionArray — no-op stub (disabled in original ASM)
+   ConvertCollisionArray
    =================================================================== */
 void ConvertCollisionArray(void) {
-    /* Intentionally empty — this is a disabled development function */
+    /* no-op */
 }
 
 /* ===================================================================
-   Collision index (ColIndexLoad, sonic.asm:3104-3110 + ColPointers
-   table 3116-3121).  The ASM stores a 32-bit ROM pointer in the RAM
-   long v_collindex (0xF796); host asset pointers are malloc'd and can
-   exceed 32 bits, so the current zone's index lives in this static
-   (same fix the opl_* pointers use).  Empty zones pick a NULL pointer.
+   Collision index
    =================================================================== */
 const uint8_t *col_index_ptr = NULL;
 
@@ -1075,51 +1188,26 @@ const uint8_t *GetColIndex(void) {
 }
 
 void ColIndexLoad(void) {
-    /* ColPointers (sonic.asm:3116-3121); locals so the runtime asset
-       pointers are allowed as initializers. */
     const uint8_t *const col_pointers[] = {
-        Col_GHZ,            /* 0: Green Hill */
-        Col_LZ,             /* 1: Labyrinth */
-        Col_MZ,             /* 2: Marble */
-        Col_SLZ,            /* 3: Star Light */
-        Col_SYZ,            /* 4: Spring Yard */
-        Col_SBZ,            /* 5: Scrap Brain */
+        Col_GHZ, Col_LZ, Col_MZ, Col_SLZ, Col_SYZ, Col_SBZ,
     };
 
-    uint8_t zone = (uint8_t)v_zone;                     /* move.b (v_zone).w,d0 */
-    if (zone >= (uint8_t)(sizeof(col_pointers) / sizeof(col_pointers[0]))) {
-        return;                                         /* no Ending entry */
-    }
-    col_index_ptr = col_pointers[zone];                 /* move.l ColPointers(pc,d0.w),(v_collindex).w */
+    uint8_t zone = (uint8_t)v_zone;
+    if (zone >= (uint8_t)(sizeof(col_pointers) / sizeof(col_pointers[0]))) return;
+    col_index_ptr = col_pointers[zone];
 }
 
 /* ===================================================================
-   OscillateNumInit — from _inc/Oscillatory Routines.asm
-   Copies the baseline (value, rate) pairs into v_oscillate as
-   big-endian words (move.w (a2)+,(a1)+): the MSB of each value word is
-   the byte that consumers read and that OscillateNumDo compares.
+   OscillateNumInit
    =================================================================== */
 void OscillateNumInit(void) {
-    /* .baselines:  dc.w %0000000001111100  (direction bitfield),
-       then one value word + rate word per entry (2, 6, $A ... $3E). */
     static const uint16_t baselines[] = {
-        0x007C,                                  /* bitfield: bits 2..5 set (down) */
-        0x0080, 0x0000,                          /*  2 - LZ water, MZ grass platforms */
-        0x0080, 0x0000,                          /*  6 - MZ grass platforms, SBZ saws */
-        0x0080, 0x0000,                          /*  $A - MZ magma, SYZ/SLZ floats */
-        0x0080, 0x0000,                          /*  $E - platforms, moving blocks */
-        0x0080, 0x0000,                          /* $12 - MZ glass/purple block */
-        0x0080, 0x0000,                          /* $16 - MZ purple block */
-        0x0080, 0x0000,                          /* $1A - swinging platforms */
-        0x0080, 0x0000,                          /* $1E - moving/floating blocks */
-        0x0080, 0x0000,                          /* $22 - SLZ circling platforms */
-        0x50F0, 0x011E,                          /* $26 - SLZ circling platforms */
-        0x2080, 0x00B4,                          /* $2A - SYZ/SLZ floating blocks */
-        0x3080, 0x010E,                          /* $2E - SYZ/SLZ floating blocks */
-        0x5080, 0x01C2,                          /* $32 - SYZ/SLZ floating blocks */
-        0x7080, 0x0276,                          /* $36 - SYZ/SLZ floating blocks */
-        0x0080, 0x0000,                          /* $3A - unused */
-        0x0080, 0x0000,                          /* $3E - unused */
+        0x007C,
+        0x0080, 0x0000, 0x0080, 0x0000, 0x0080, 0x0000, 0x0080, 0x0000,
+        0x0080, 0x0000, 0x0080, 0x0000, 0x0080, 0x0000, 0x0080, 0x0000,
+        0x0080, 0x0000, 0x0080, 0x0000, 0x50F0, 0x011E, 0x2080, 0x00B4,
+        0x3080, 0x010E, 0x5080, 0x01C2, 0x7080, 0x0276, 0x0080, 0x0000,
+        0x0080, 0x0000,
     };
 
     for (size_t i = 0; i < sizeof(baselines) / sizeof(baselines[0]); i++) {
@@ -1128,28 +1216,11 @@ void OscillateNumInit(void) {
 }
 
 /* ===================================================================
-   OscillateNumDo — from _inc/Oscillatory Routines.asm
-   Advance each (value, rate) pair: rate += freq while rising,
-   rate -= freq while falling; flip direction when the value's MSB
-   (byte at 0(a1), stored big-endian) crosses the middle value d4.
+   OscillateNumDo
    =================================================================== */
-/* ===================================================================
- *  OscillateNumDo — from _inc/Oscillatory Routines.asm
- *  Advance each (value, rate) pair: rate += freq while rising,
- *  rate -= freq while falling; flip direction when the value's MSB
- *  (byte at 0(a1), stored big-endian) crosses the middle value d4.
- *
- *  El flip de dirección debe decidirse con el valor YA actualizado
- *  (el ASM hace _add.w d0,0(a1) ANTES del _cmp.b 0(a1),d4). Leer el
- *  MSB viejo retrasa el flip un frame y acelera la oscilación.
- *  =================================================================== */
 void OscillateNumDo(void) {
-    /* cmpi.b #6,(v_player+obRoutine).w ; bhs.s .end — Sonic just died */
-    if (obRoutine(RAM_ADDR(v_player)) >= 6) {
-        return;
-    }
+    if (obRoutine(RAM_ADDR(v_player)) >= 6) return;
 
-    /* .settings: frequency, middle value — one per entry, 16 total. */
     static const uint16_t settings[][2] = {
         {2, 0x10}, {2, 0x18}, {2, 0x20}, {2, 0x30},
         {4, 0x20}, {8, 0x08}, {8, 0x40}, {4, 0x40},
@@ -1157,152 +1228,87 @@ void OscillateNumDo(void) {
         {5, 0x50}, {7, 0x70}, {2, 0x10}, {2, 0x10},
     };
 
-    uint16_t d3 = RAM_U16(0xFE5E);               /* direction bitfield */
+    uint16_t d3 = RAM_U16(0xFE5E);
 
     for (int i = 0; i < 16; i++) {
-        int bit = 15 - i;                        /* d1, decrements from 15 */
-        uint32_t addr = 0xFE5E + 2 + (uint32_t)i * 4;  /* value word; rate at +2 */
-        uint16_t d2 = settings[i][0];            /* frequency */
-        uint16_t d4 = settings[i][1];            /* middle value */
+        int bit = 15 - i;
+        uint32_t addr = 0xFE5E + 2 + (uint32_t)i * 4;
+        uint16_t d2 = settings[i][0];
+        uint16_t d4 = settings[i][1];
         int16_t  rate = (int16_t)RAM_U16(addr + 2);
         uint16_t value = RAM_U16(addr);
 
         if (d3 & (1u << bit)) {
-            /* .down: rate -= frequency; value += rate */
             rate  = (int16_t)(rate - (int16_t)d2);
             value = (uint16_t)(value + (uint16_t)rate);
             RAM_SET_U16(addr + 2, (uint16_t)rate);
             RAM_SET_U16(addr, value);
-
-            /* _cmp.b 0(a1),d4 ; bls.s .next — compara con el MSB NUEVO */
             uint16_t msb = value >> 8;
-            if (d4 <= msb) {
-                continue;                        /* todavía no cruzó el centro */
-            }
-            d3 &= (uint16_t)~(1u << bit);        /* bclr: empieza a subir */
+            if (d4 <= msb) continue;
+            d3 &= (uint16_t)~(1u << bit);
         } else {
-            /* .up: rate += frequency; value += rate */
             rate  = (int16_t)(rate + (int16_t)d2);
             value = (uint16_t)(value + (uint16_t)rate);
             RAM_SET_U16(addr + 2, (uint16_t)rate);
             RAM_SET_U16(addr, value);
-
-            /* _cmp.b 0(a1),d4 ; bhi.s .next — compara con el MSB NUEVO */
             uint16_t msb = value >> 8;
-            if (d4 > msb) {
-                continue;                        /* todavía no cruzó el centro */
-            }
-            d3 |= (1u << bit);                   /* bset: empieza a bajar */
+            if (d4 > msb) continue;
+            d3 |= (1u << bit);
         }
     }
 
-    RAM_SET_U16(0xFE5E, d3);                     /* update direction bitfield */
+    RAM_SET_U16(0xFE5E, d3);
 }
 
 /* ===================================================================
-   PauseGame — basic pause toggle
+   PauseGame
    =================================================================== */
 void PauseGame(void) {
-    /* nop */
-
-    /* tst.b v_lives ; beq .unpauseGame */
-    if (v_lives == 0) {
-        goto unpauseGame;
-    }
-
-    /* tst.w f_pause ; bne .startPause */
-    if (f_pause != 0) {
-        goto startPause;
-    }
-
-    /* btst #bitStart,(v_jpadpress1) ; beq .return */
-    if (!(v_jpadpress1 & btnStart)) {
-        return;
-    }
+    if (v_lives == 0) goto unpauseGame;
+    if (f_pause != 0) goto startPause;
+    if (!(v_jpadpress1 & btnStart)) return;
 
 startPause:
     f_pause = 1;
-    /* move.b #1,(v_snddriver_ram.f_pausemusic).w
-       TODO: cuando portees el driver, escribir 1 aquí.
-       Placeholder por ahora: */
-    //Sound_PauseMusic(true);
 
 pauseLoop:
-    /* move.b #id_VBlank_Paused,(v_vblank_routine).w ; bsr WaitForVBlank */
     v_vblank_routine = id_VBlank_Paused;
     WaitForVBlank();
 
-    /* tst.b f_slomocheat ; beq .checkUnpausing */
-    if (!f_slomocheat) {
-        goto checkUnpausing;
-    }
-
-    /* btst #bitA,(v_jpadpress1) ; beq .checkSlowMotion */
-    if (v_jpadpress1 & btnA) {
-        v_gamemode = 0x04;   /* id_Title */
-        goto unpauseMusic;
-    }
-
-    /* checkSlowMotion: */
-    /* btst #bitB,(v_jpadhold1) ; bne .slowMotion */
-    if (v_jpadhold1 & btnB) {
-        goto slowMotion;
-    }
-    /* btst #bitC,(v_jpadpress1) ; bne .slowMotion */
-    if (v_jpadpress1 & btnC) {
-        goto slowMotion;
-    }
+    if (!f_slomocheat) goto checkUnpausing;
+    if (v_jpadpress1 & btnA) { v_gamemode = 0x04; goto unpauseMusic; }
+    if (v_jpadhold1 & btnB) goto slowMotion;
+    if (v_jpadpress1 & btnC) goto slowMotion;
 
 checkUnpausing:
-    /* btst #bitStart,(v_jpadpress1) ; beq .pauseLoop */
-    if (!(v_jpadpress1 & btnStart)) {
-        goto pauseLoop;
-    }
+    if (!(v_jpadpress1 & btnStart)) goto pauseLoop;
 
 unpauseMusic:
-    /* move.b #$80,(v_snddriver_ram.f_pausemusic).w
-       TODO: cuando portees el driver, escribir $80 aquí. */
-    //Sound_PauseMusic(false);
-
 unpauseGame:
     f_pause = 0;
-    /* .return: */
     return;
 
 slowMotion:
     f_pause = 1;
-    /* move.b #$80,(v_snddriver_ram.f_pausemusic).w */
-    //Sound_PauseMusic(false);
     return;
 }
 
 /* ===================================================================
-   LevelSpawnPlayer — create Sonic object at level start
+   Spawn player / HUD
    =================================================================== */
 void LevelSpawnPlayer(void) {
     uint8_t *player_slot = RAM_ADDR(v_player);
-    obID(player_slot) = 0x01;  /* id_SonicPlayer = $01 — only the ID byte, no memset (matches ASM) */
+    obID(player_slot) = 0x01;
 }
 
-/* ===================================================================
-   LevelSpawnHUD — create HUD object
-   =================================================================== */
 void LevelSpawnHUD(void) {
     uint8_t *hud_slot = RAM_ADDR(v_hud);
-    obID(hud_slot) = 0x21;  /* id_HUD = $21 — only the ID byte, no memset (matches ASM) */
+    obID(hud_slot) = 0x21;
 }
 
 /* ===================================================================
-   ObjPosLoad — object position manager (ported 1:1 from
-   _inc/ObjPosLoad.asm, REV01, FixBugs=0)
-   Reads the objpos list and spawns objects as the camera scrolls.
+   ObjPosLoad (sin cambios)
    =================================================================== */
-
-/* The four objpos list pointers at v_opl_data (0xF770/+4/+8/+0xC) hold full
-   heap addresses in this port (the RAM words would truncate them to 32 bits),
-   so they live in statics instead of the mirror RAM. opl_ptr_right/
-   opl_ptr_left mirror v_opl_data/+4; opl_ptr_sec mirrors +8/+0xC (the
-   secondary list, always blank). */
 static uint8_t *opl_ptr_right;
 static uint8_t *opl_ptr_left;
 static uint8_t *opl_ptr_sec;
@@ -1311,51 +1317,36 @@ static uint16_t opl_be16(const uint8_t *p) {
     return (uint16_t)((p[0] << 8) | p[1]);
 }
 
-/* OPL_SpawnObj: check the respawn flag and spawn one object.
-   a0p: in/out pointer into the objpos list; a2: v_objstate;
-   d2: position in the respawn list.
-   Returns 0 if the object was spawned (or skipped because it was already
-   broken), nonzero if there was no free object slot. */
 static int OPL_SpawnObj(uint8_t **a0p, uint8_t *a2, uint8_t d2) {
     uint8_t *a0 = *a0p;
     uint8_t *a1;
     uint16_t d0;
 
-    if (a0[4] & 0x80) {                         /* remember respawn flag */
+    if (a0[4] & 0x80) {
         uint8_t old = a2[2 + d2];
-        a2[2 + d2] = (uint8_t)(old | 0x80);     /* bset #7 (FixBugs=0: set always) */
-        if (old & 0x80) {                       /* already destroyed before */
-            a0 += 6;
-            *a0p = a0;
-            return 0;
-        }
+        a2[2 + d2] = (uint8_t)(old | 0x80);
+        if (old & 0x80) { a0 += 6; *a0p = a0; return 0; }
     }
 
     a1 = (uint8_t *)FindFreeObj();
-    if (!a1) return 1;                          /* bne .fail */
+    if (!a1) return 1;
 
-    obX(a1) = (int16_t)opl_be16(a0);            /* move.w (a0)+,obX */
-    a0 += 2;
-    d0 = opl_be16(a0);                          /* move.w (a0)+,d0 (y + flip bits) */
-    a0 += 2;
-    obY(a1) = (int16_t)(d0 & 0x0FFF);           /* andi.w #$FFF: ignore flip bits */
+    obX(a1) = (int16_t)opl_be16(a0); a0 += 2;
+    d0 = opl_be16(a0); a0 += 2;
+    obY(a1) = (int16_t)(d0 & 0x0FFF);
     obRender(a1) = (uint8_t)((d0 & 0x4000) ? sprite_xflip : 0)
-                 | (uint8_t)((d0 & 0x8000) ? sprite_yflip : 0); /* rol #2 + andi.b */
+                 | (uint8_t)((d0 & 0x8000) ? sprite_yflip : 0);
     obStatus(a1) = obRender(a1);
-    d0 = a0[0];                                 /* move.b (a0)+,d0 (object id) */
-    a0 += 1;
-    if (d0 & 0x80) obRespawnNo(a1) = d2;        /* remember bit: give respawn slot */
-    obID(a1)       = (uint8_t)(d0 & 0x7F);      /* ignore respawn bit */
-    obSubtype(a1)  = a0[0];                     /* move.b (a0)+,obSubtype */
-    a0 += 1;
-
+    d0 = a0[0]; a0 += 1;
+    if (d0 & 0x80) obRespawnNo(a1) = d2;
+    obID(a1)       = (uint8_t)(d0 & 0x7F);
+    obSubtype(a1)  = a0[0]; a0 += 1;
     *a0p = a0;
     return 0;
 }
 
 static void OPL_Next(void);
 
-/* OPL_Main: initialise the spawn windows and respawn list. */
 static void OPL_Main(void) {
     uint8_t *a2 = RAM_ADDR(v_objstate);
     uint8_t *a0, *start;
@@ -1363,33 +1354,25 @@ static void OPL_Main(void) {
     uint8_t zone = (uint8_t)v_zone;
     uint8_t act  = (uint8_t)v_act;
 
-    /* move.w (v_zone_act).w,d0; lsl.b #6,d0; lsr.w #4,d0:
-       d0 = zone*16 + act*4 == (zone*4+act)*4, the 4-byte ObjPos_Index row. */
     unsigned row = zone * 4 + act;
     if (row >= sizeof(objpos_index) / sizeof(objpos_index[0]) ||
         objpos_index[row].main == NULL) {
-        v_opl_routine = 0;                      /* no objpos data mapped */
+        v_opl_routine = 0;
         return;
     }
 
-    v_opl_routine = (uint8_t)(v_opl_routine + 2); /* goto OPL_Next next */
+    v_opl_routine = (uint8_t)(v_opl_routine + 2);
 
-    a0 = (uint8_t *)objpos_index[row].main;     /* adda.w (a0,d0.w),a0 */
-    opl_ptr_right = a0;                         /* move.l a0,(v_opl_data)   */
-    opl_ptr_left  = a0;                         /* move.l a0,(v_opl_data+4) */
-    opl_ptr_sec   = NULL;                       /* move.l a1,(v_opl_data+8/+C) */
+    a0 = (uint8_t *)objpos_index[row].main;
+    opl_ptr_right = a0;
+    opl_ptr_left  = a0;
+    opl_ptr_sec   = NULL;
 
-    *a2 = 0x01;                                 /* move.w #$101,(a2)+ */
+    *a2 = 0x01;
     *(a2 + 1) = 0x01;
     a2 += 2;
-    /* FixBugs=0: the loop counter is measured in words ($5E), but the loop
-       clears longwords, so $17C bytes are cleared instead of $BE. */
-    for (int i = 0x5E; i >= 0; i--) {
-        *(uint32_t *)a2 = 0;
-        a2 += 4;
-    }
+    for (int i = 0x5E; i >= 0; i--) { *(uint32_t *)a2 = 0; a2 += 4; }
 
-    /* .use_screen_x: d6 = (v_screenposx - 128), clamped at 0, & ~0x7F */
     d6 = (uint16_t)v_screenposx;
     if (d6 >= 128) d6 -= 128;
     else           d6 = 0;
@@ -1397,244 +1380,186 @@ static void OPL_Main(void) {
 
     a0   = opl_ptr_right;
     start = a0;
-    while (opl_be16(a0) < d6) {                 /* bls .found_right: stop when x >= d6 */
-        if (a0[4] & 0x80) {                     /* remember flag */
-            (*a2)++;                            /* addq.b #1,(a2) (ASM's d2 read is dead) */
-        }
+    while (opl_be16(a0) < d6) {
+        if (a0[4] & 0x80) (*a2)++;
         a0 += 6;
     }
-    opl_ptr_right = a0;                         /* .found_right: move.l a0,(v_opl_data) */
+    opl_ptr_right = a0;
 
-    a0 = start;                                 /* movea.l (v_opl_data+4),a0 */
-    if (d6 >= 128) {                            /* bcs.s .found_left (borrow when < 128) */
-        d6 -= 128;                              /* subi.w #128,d6 */
-        while (opl_be16(a0) < d6) {             /* bls .found_left */
-            if (a0[4] & 0x80) (*(a2 + 1))++;    /* addq.b #1,1(a2) */
+    a0 = start;
+    if (d6 >= 128) {
+        d6 -= 128;
+        while (opl_be16(a0) < d6) {
+            if (a0[4] & 0x80) (*(a2 + 1))++;
             a0 += 6;
         }
     }
-    opl_ptr_left = a0;                          /* .found_left: move.l a0,(v_opl_data+4) */
+    opl_ptr_left = a0;
 
-    v_opl_screen = 0xFFFF;                      /* move.w #-1,(v_opl_screen) */
-
-    OPL_Next();                                 /* fall-through to OPL_Next */
+    v_opl_screen = 0xFFFF;
+    OPL_Next();
 }
 
-/* OPL_MovedLeft: recycle the respawn list while the camera moves left. */
 static void OPL_MovedLeft(uint16_t d6) {
     uint8_t *a2 = RAM_ADDR(v_objstate);
     uint8_t *a0;
     uint8_t d2 = 0;
     int16_t d6s;
 
-    v_opl_screen = d6;                          /* move.w d6,(v_opl_screen) */
-    a0 = opl_ptr_left;                          /* movea.l (v_opl_data+4),a0 */
-    d6s = (int16_t)d6 - 128;                    /* subi.w #128,d6 */
-    if (d6s >= 0) {                             /* bcs.s .found_left */
+    v_opl_screen = d6;
+    a0 = opl_ptr_left;
+    d6s = (int16_t)d6 - 128;
+    if (d6s >= 0) {
         while (1) {
-            uint16_t cx = opl_be16(a0 - 6);     /* cmp.w -6(a0),d6 */
-            if ((int16_t)cx <= d6s) break;      /* bge.s .found_left: stop when x <= d6 */
-            a0 -= 6;                            /* subq.w #6,a0 */
-            if (a0[4] & 0x80) {                 /* remember flag */
-                (*(a2 + 1))--;                  /* subq.b #1,1(a2) */
-                d2 = *(a2 + 1);                 /* move.b 1(a2),d2 */
-            }
-            if (OPL_SpawnObj(&a0, a2, d2)) {    /* bne.s .failed_to_spawn */
-                if (a0[4] & 0x80) (*(a2 + 1))++; /* revert second counter */
-                a0 += 6;                        /* addq.w #6,a0 */
+            uint16_t cx = opl_be16(a0 - 6);
+            if ((int16_t)cx <= d6s) break;
+            a0 -= 6;
+            if (a0[4] & 0x80) { (*(a2 + 1))--; d2 = *(a2 + 1); }
+            if (OPL_SpawnObj(&a0, a2, d2)) {
+                if (a0[4] & 0x80) (*(a2 + 1))++;
+                a0 += 6;
                 break;
             }
-            a0 -= 6;                            /* goto previous objpos entry */
+            a0 -= 6;
         }
     }
-    opl_ptr_left = a0;                          /* .found_left: move.l a0,(v_opl_data+4) */
+    opl_ptr_left = a0;
 
-    /* right side: recycle the right respawn slots, no spawning */
-    a0 = opl_ptr_right;                         /* movea.l (v_opl_data),a0 */
-    d6s += 128 + 320 + 320;                     /* addi.w #128+320+320,d6 */
+    a0 = opl_ptr_right;
+    d6s += 128 + 320 + 320;
     while (1) {
-        uint16_t cx = opl_be16(a0 - 6);         /* cmp.w -6(a0),d6 */
-        if (d6s > (int16_t)cx) break;           /* bgt.s .found_right: stop when x < d6 */
-        if (a0[-2] & 0x80) (*a2)--;             /* subq.b #1,(a2) (flag at -2(a0)) */
-        a0 -= 6;                                /* subq.w #6,a0 */
+        uint16_t cx = opl_be16(a0 - 6);
+        if (d6s > (int16_t)cx) break;
+        if (a0[-2] & 0x80) (*a2)--;
+        a0 -= 6;
     }
-    opl_ptr_right = a0;                         /* .found_right: move.l a0,(v_opl_data) */
+    opl_ptr_right = a0;
 }
 
-/* OPL_MovedRight: spawn objects as the camera moves right (or on the first
-   frame, since v_opl_screen starts at -1). */
 static void OPL_MovedRight(uint16_t d6) {
     uint8_t *a2 = RAM_ADDR(v_objstate);
     uint8_t *a0;
     uint8_t d2 = 0;
     uint16_t d6u;
 
-    v_opl_screen = d6;                          /* move.w d6,(v_opl_screen) */
-    a0 = opl_ptr_right;                         /* movea.l (v_opl_data),a0 */
-    d6u = d6 + 320 + 320;                       /* addi.w #320+320,d6 */
+    v_opl_screen = d6;
+    a0 = opl_ptr_right;
+    d6u = d6 + 320 + 320;
 
-while (1) {                                 /* .loop_find_right */
-        if (opl_be16(a0) >= d6u) break;         /* bls.s .found_right: stop when x >= d6 */
-        if (a0[4] & 0x80) {                     /* remember flag */
-            d2 = *a2;                           /* move.b (a2),d2 */
-            (*a2)++;                            /* addq.b #1,(a2) */
-        }
-        if (OPL_SpawnObj(&a0, a2, d2)) break;   /* bne -> .found_right (no free slot) */
+    while (1) {
+        if (opl_be16(a0) >= d6u) break;
+        if (a0[4] & 0x80) { d2 = *a2; (*a2)++; }
+        if (OPL_SpawnObj(&a0, a2, d2)) break;
     }
-    opl_ptr_right = a0;                         /* .found_right: move.l a0,(v_opl_data) */
+    opl_ptr_right = a0;
 
-    a0 = opl_ptr_left;                          /* movea.l (v_opl_data+4),a0 */
-    if (d6u >= 768) {                           /* bcs.s .found_left (borrow when < 768) */
-        d6u -= 320 + 320 + 128;                 /* subi.w #320+320+128,d6 */
-        while (1) {                             /* .loop_find_left */
-            if (opl_be16(a0) >= d6u) break;     /* bls.s .found_left: stop when x >= d6 */
-            if (a0[4] & 0x80) (*(a2 + 1))++;    /* addq.b #1,1(a2) */
+    a0 = opl_ptr_left;
+    if (d6u >= 768) {
+        d6u -= 320 + 320 + 128;
+        while (1) {
+            if (opl_be16(a0) >= d6u) break;
+            if (a0[4] & 0x80) (*(a2 + 1))++;
             a0 += 6;
         }
     }
-    opl_ptr_left = a0;                          /* .found_left: move.l a0,(v_opl_data+4) */
+    opl_ptr_left = a0;
 }
 
-/* OPL_Next: process one frame of object loading. */
 static void OPL_Next(void) {
     uint16_t d6;
     int16_t prev;
 
-    if (opl_ptr_right == NULL) return;          /* empty list */
-    d6 = (uint16_t)v_screenposx & 0xFF80;       /* andi.w #$FF80 */
-    prev = (int16_t)v_opl_screen;               /* cmp.w (v_opl_screen),d6 */
-    if ((int16_t)d6 == prev) return;            /* beq.w OPL_NoMove */
-    if ((int16_t)d6 >= prev) OPL_MovedRight(d6); /* bge.s OPL_MovedRight */
+    if (opl_ptr_right == NULL) return;
+    d6 = (uint16_t)v_screenposx & 0xFF80;
+    prev = (int16_t)v_opl_screen;
+    if ((int16_t)d6 == prev) return;
+    if ((int16_t)d6 >= prev) OPL_MovedRight(d6);
     else                     OPL_MovedLeft(d6);
 }
 
-/* ObjPosLoad: dispatch on the opl routine. */
 void ObjPosLoad(void) {
     if (v_opl_routine == 0) OPL_Main();
     else                    OPL_Next();
 }
 
 /* ===================================================================
-   AnimateLevelAct — ported from _inc/AnimateLevelGfx.asm
-
-   LoadTiles (AnimateLevelGfx.asm:415-421): copy `count` 8x8 tiles
-   (Raw art, 4BPP) from src to VRAM at a byte address.
+   AnimateLevelAct (sin cambios)
    =================================================================== */
 static void load_tiles_vram(const uint8_t *src, uint32_t vram_byte, int count) {
     VDP_WriteVRAM(src, vram_byte, (uint32_t)count * tile_size);
 }
 
-/* AniArt_GiantRing (AnimateLevelGfx.asm:577-601): the giant ring object
-   sets v_gfxbigring to Art_BigRing_size; each frame we copy 14 tiles
-   further forward through the (uncompressed) art.  No giant ring exists
-   in GHZ act 1, so v_gfxbigring stays 0 here; the body is just the same
-   count-down copy (host-bounds-guarded, per the v_collindex fix). */
 static void anis_giant_ring(void) {
-    if (v_gfxbigring == 0) {
-        return;
-    }
-    v_gfxbigring = (uint16_t)(v_gfxbigring - 14 * tile_size);  /* subi.w #.size*tile_size */
-    if ((int16_t)v_gfxbigring < 0) {
-        v_gfxbigring = 0;                                      /* host safety: no wrap loop */
-        return;
-    }
-    const uint8_t *a1 = Art_BigRing + v_gfxbigring;            /* lea (a1,d0.w),a1 */
-    if ((uint32_t)v_gfxbigring + 14 * tile_size > Art_BigRing_len) {
-        return;                                                /* host safety */
-    }
+    if (v_gfxbigring == 0) return;
+    v_gfxbigring = (uint16_t)(v_gfxbigring - 14 * tile_size);
+    if ((int16_t)v_gfxbigring < 0) { v_gfxbigring = 0; return; }
+    const uint8_t *a1 = Art_BigRing + v_gfxbigring;
+    if ((uint32_t)v_gfxbigring + 14 * tile_size > Art_BigRing_len) return;
     load_tiles_vram(a1, ArtTile_Giant_Ring * tile_size + v_gfxbigring, 14);
 }
 
-/* AniArt_GHZ (AnimateLevelGfx.asm:41-113): waterfall, big flower and
-   small flower, each on its own v_laniX timer/frame pair. */
-static const uint8_t flower_seq[4] = { 0, 1, 2, 1 };           /* .flowerSeq */
+static const uint8_t flower_seq[4] = { 0, 1, 2, 1 };
 
 static void anis_ghz(void) {
-    if (!Art_GhzWater || !Art_GhzFlower1 || !Art_GhzFlower2) {
-        return;
-    }
+    if (!Art_GhzWater || !Art_GhzFlower1 || !Art_GhzFlower2) return;
 
-    /* AniArt_GHZ_Waterfall (.size = 8) */
-    if ((int8_t)(--v_lani0_time) < 0) {                        /* bpl = time remains */
+    if ((int8_t)(--v_lani0_time) < 0) {
         v_lani0_time = 6 - 1;
         const uint8_t *a1 = Art_GhzWater;
-        uint8_t d0 = v_lani0_frame;                            /* frame ID before increment */
+        uint8_t d0 = v_lani0_frame;
         v_lani0_frame++;
-        if (d0 & 1) {                                          /* 2 frames */
-            a1 += 8 * tile_size;
-        }
+        if (d0 & 1) a1 += 8 * tile_size;
         load_tiles_vram(a1, ArtTile_GHZ_Waterfall * tile_size, 8);
     }
 
-    /* AniArt_GHZ_Bigflower (.size = 16) */
     if ((int8_t)(--v_lani1_time) < 0) {
         v_lani1_time = 16 - 1;
         const uint8_t *a1 = Art_GhzFlower1;
         uint8_t d0 = v_lani1_frame;
         v_lani1_frame++;
-        if (d0 & 1) {                                          /* 2 frames */
-            a1 += 16 * tile_size;
-        }
+        if (d0 & 1) a1 += 16 * tile_size;
         load_tiles_vram(a1, ArtTile_GHZ_Big_Flower_1 * tile_size, 16);
     }
 
-    /* AniArt_GHZ_Smallflower (.size = 12) */
-    if ((int8_t)(--v_lani2_time) >= 0) {
-        return;
-    }
+    if ((int8_t)(--v_lani2_time) >= 0) return;
     v_lani2_time = 8 - 1;
     uint8_t d0 = v_lani2_frame;
     v_lani2_frame++;
-    d0 &= 3;                                                   /* 4 counter frames */
-    d0 = flower_seq[d0];                                       /* actual flower frame 0-2 */
-    if (!(d0 & 1)) {                                           /* frames 0 and 2 hold longer */
-        v_lani2_time = 128 - 1;
-    }
-    uint32_t off = (uint32_t)d0 * 3 * 0x80;                    /* lsl #7 * 3 (frame * 12 tiles) */
+    d0 &= 3;
+    d0 = flower_seq[d0];
+    if (!(d0 & 1)) v_lani2_time = 128 - 1;
+    uint32_t off = (uint32_t)d0 * 3 * 0x80;
     load_tiles_vram(Art_GhzFlower2 + off, ArtTile_GHZ_Small_Flower * tile_size, 12);
 }
 
-/* AniArt_MZ_Magma (AnimateLevelGfx.asm:428-566): the 16 routines select
-   a 4-byte window [j..j+3] (mod 16) out of each 16-byte art row; the
-   table below mirrors AniArt_MZMagma's offsets (each entry is the byte
-   start of the longword the ASM routine writes). */
 static const uint8_t magma_col_start[16] = {
-    0,  1,  2,  3,  4,  5,  6,  7,
-    8,  9,  10, 11, 12, 13, 14, 15,
+    0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
 };
 
 static void anis_mz(void) {
-    if (!Art_MzLava1 || !Art_MzLava2 || !Art_MzTorch) {
-        return;
-    }
+    if (!Art_MzLava1 || !Art_MzLava2 || !Art_MzTorch) return;
 
-    /* AniArt_MZ_Lava (.size = 8) */
     if ((int8_t)(--v_lani0_time) < 0) {
         v_lani0_time = 20 - 1;
         uint8_t d0 = v_lani0_frame;
-        v_lani0_frame = (uint8_t)((d0 + 1) % 3);               /* 3 frames, wraps */
-        d0 = v_lani0_frame;                                    /* mulu uses the NEW frame */
+        v_lani0_frame = (uint8_t)((d0 + 1) % 3);
+        d0 = v_lani0_frame;
         load_tiles_vram(Art_MzLava1 + (uint32_t)d0 * (8 * tile_size),
                         ArtTile_MZ_Animated_Lava * tile_size, 8);
     }
 
-    /* AniArt_MZ_Magma: column collation, oscillated over 4 columns.
-       v_oscillate+$A is the sine-wave sync position (OscillateNumDo);
-       the port holds v_lani1_frame increment too (unused downstream). */
     if ((int8_t)(--v_lani1_time) < 0) {
         v_lani1_time = 2 - 1;
-        v_lani1_frame++;                                       /* increment frame counter (unused) */
-        const uint8_t *a4 = Art_MzLava2 + ((uint32_t)v_lani0_frame << 9);  /* ror.w #7 -> *$200 */
-        uint16_t d3 = (uint16_t)ram[0xFE5E + 0xA];         /* move.b (v_oscillate+$A).w,d3 — MSB byte */
+        v_lani1_frame++;
+        const uint8_t *a4 = Art_MzLava2 + ((uint32_t)v_lani0_frame << 9);
+        uint16_t d3 = (uint16_t)ram[0xFE5E + 0xA];
         uint8_t *dst = &vdp.vram[ArtTile_MZ_Animated_Magma * tile_size];
-        for (int iter = 0; iter < 4; iter++) {                 /* move.w #4-1,d2 */
-            int j = ((d3 * 2) & 0x1E) >> 1;                    /* andi.w #$1E */
-            j = magma_col_start[j];                            /* jump into collation table */
+        for (int iter = 0; iter < 4; iter++) {
+            int j = ((d3 * 2) & 0x1E) >> 1;
+            j = magma_col_start[j];
             const uint8_t *a1 = a4;
-            for (int row = 0; row < 0x20; row++) {             /* dbf d1,#$20-1 */
-                for (int b = 0; b < 4; b++) {
-                    dst[b] = a1[(j + b) & 15];
-                }
+            for (int row = 0; row < 0x20; row++) {
+                for (int b = 0; b < 4; b++) dst[b] = a1[(j + b) & 15];
                 dst += 4;
                 a1 += 0x10;
             }
@@ -1642,12 +1567,11 @@ static void anis_mz(void) {
         }
     }
 
-    /* AniArt_MZ_Torch (.size = 6) */
     if ((int8_t)(--v_lani2_time) < 0) {
         v_lani2_time = 8 - 1;
-        uint8_t d0 = v_lani3_frame;                            /* old frame */
+        uint8_t d0 = v_lani3_frame;
         v_lani3_frame++;
-        v_lani3_frame &= 3;                                    /* 3 frames, wraps */
+        v_lani3_frame &= 3;
         if ((uint32_t)d0 * (6 * tile_size) + 6 * tile_size <= Art_MzTorch_len) {
             load_tiles_vram(Art_MzTorch + (uint32_t)d0 * (6 * tile_size),
                             ArtTile_MZ_Torch * tile_size, 6);
@@ -1655,122 +1579,89 @@ static void anis_mz(void) {
     }
 }
 
-/* AniArt_SBZ (AnimateLevelGfx.asm:207-286): two smoke puffs, each with
-   an 8-frame cycle (frame 0 = blank + reschedule) shared on one art. */
 static void anis_sbz(void) {
-    if (!Art_SbzSmoke) {
-        return;
-    }
+    if (!Art_SbzSmoke) return;
 
-    /* .check_smokePuff1 */
     if (v_lani2_frame != 0) {
-        v_lani2_frame--;                                       /* subq.b #1 */
+        v_lani2_frame--;
         goto check_smokePuff2;
     }
-    /* .smokePuff1 */
-    if ((int8_t)(--v_lani0_time) >= 0) {
-        goto check_smokePuff2;
-    }
+    if ((int8_t)(--v_lani0_time) >= 0) goto check_smokePuff2;
     v_lani0_time = 8 - 1;
     {
         uint8_t d0 = v_lani0_frame;
         v_lani0_frame++;
-        d0 &= 7;                                               /* 8 frames */
-        if (d0 != 0) {                                         /* beq .untilNextPuff1 */
+        d0 &= 7;
+        if (d0 != 0) {
             d0--;
             load_tiles_vram(Art_SbzSmoke + (uint32_t)d0 * (12 * tile_size),
                             ArtTile_SBZ_Smoke_Puff_1 * tile_size, 12);
             return;
         }
-        /* .untilNextPuff1 */
         v_lani2_frame = 3 * 60;
-        /* .clearSky — write 6 blank tiles twice (12 total) */
         load_tiles_vram(Art_SbzSmoke, ArtTile_SBZ_Smoke_Puff_1 * tile_size, 6);
         load_tiles_vram(Art_SbzSmoke, ArtTile_SBZ_Smoke_Puff_1 * tile_size + 6 * tile_size, 6);
     }
 
 check_smokePuff2:
-    /* .check_smokePuff2 */
-    if (v_lani2_time != 0) {
-        v_lani2_time--;
-        return;
-    }
-    /* .smokePuff2 */
-    if ((int8_t)(--v_lani1_time) >= 0) {
-        return;
-    }
+    if (v_lani2_time != 0) { v_lani2_time--; return; }
+    if ((int8_t)(--v_lani1_time) >= 0) return;
     v_lani1_time = 8 - 1;
     {
         uint8_t d0 = v_lani1_frame;
         v_lani1_frame++;
         d0 &= 7;
-        if (d0 != 0) {                                         /* beq .untilNextPuff2 */
+        if (d0 != 0) {
             d0--;
             load_tiles_vram(Art_SbzSmoke + (uint32_t)d0 * (12 * tile_size),
                             ArtTile_SBZ_Smoke_Puff_2 * tile_size, 12);
             return;
         }
-        /* .untilNextPuff2 */
         v_lani2_time = 2 * 60;
-        /* .clearSky */
         load_tiles_vram(Art_SbzSmoke, ArtTile_SBZ_Smoke_Puff_2 * tile_size, 6);
         load_tiles_vram(Art_SbzSmoke, ArtTile_SBZ_Smoke_Puff_2 * tile_size + 6 * tile_size, 6);
     }
 }
 
-/* AniArt_Ending (AnimateLevelGfx.asm:294-392): the flowers.  The flower
-   patterns are prerendered into the 256x256-definition RAM by the ending
-   loader (not ported yet), so the RAM-sourced reads are zero until then. */
 static const uint8_t ending_flower2_seq[8] = { 0, 0, 0, 1, 2, 2, 2, 1 };
 static const uint8_t ending_flower34_seq[4] = { 0, 1, 2, 1 };
 
 static void anis_ending(void) {
-    if (!Art_GhzFlower1 || !Art_GhzFlower2) {
-        return;
-    }
+    if (!Art_GhzFlower1 || !Art_GhzFlower2) return;
 
-    /* AniArt_Ending_BigFlower (.size = 16) */
     if ((int8_t)(--v_lani1_time) < 0) {
         v_lani1_time = 8 - 1;
         const uint8_t *a1 = Art_GhzFlower1;
-        uint8_t *a2 = RAM_ADDR(v_256x256 + 0x4A * chunk_size); /* v_256x256_def+$4A*chunk_size */
+        uint8_t *a2 = RAM_ADDR(v_256x256 + 0x4A * chunk_size);
         uint8_t d0 = v_lani1_frame;
         v_lani1_frame++;
-        if (d0 & 1) {                                          /* 2 frames */
-            a1 += 16 * tile_size;
-            a2 += 16 * tile_size;
-        }
+        if (d0 & 1) { a1 += 16 * tile_size; a2 += 16 * tile_size; }
         load_tiles_vram(a1, ArtTile_GHZ_Big_Flower_1 * tile_size, 16);
         load_tiles_vram(a2, ArtTile_GHZ_Big_Flower_2 * tile_size, 16);
     }
 
-    /* AniArt_Ending_SmallFlower (.size = 12) */
     if ((int8_t)(--v_lani2_time) < 0) {
         v_lani2_time = 8 - 1;
         uint8_t d0 = v_lani2_frame;
         v_lani2_frame++;
-        d0 &= 7;                                               /* 8 counter frames */
-        d0 = ending_flower2_seq[d0];                           /* actual flower frame */
+        d0 &= 7;
+        d0 = ending_flower2_seq[d0];
         load_tiles_vram(Art_GhzFlower2 + (uint32_t)d0 * 3 * 0x80,
                         ArtTile_GHZ_Small_Flower * tile_size, 12);
     }
 
-    /* AniArt_Ending_Flower3 (.size = 16) */
     if ((int8_t)(--v_lani4_time) < 0) {
         v_lani4_time = 15 - 1;
         uint8_t d0 = v_lani4_frame;
         v_lani4_frame++;
         d0 &= 3;
         d0 = ending_flower34_seq[d0];
-        uint32_t off = (uint32_t)d0 * 2 * 0x100;               /* lsl #8 * 2 */
+        uint32_t off = (uint32_t)d0 * 2 * 0x100;
         load_tiles_vram(RAM_ADDR(v_256x256 + 0x4C * chunk_size) + off,
                         ArtTile_GHZ_Flower_3 * tile_size, 16);
     }
 
-    /* AniArt_Ending_Flower4 (.size = 16) */
-    if ((int8_t)(--v_lani5_time) >= 0) {
-        return;
-    }
+    if ((int8_t)(--v_lani5_time) >= 0) return;
     v_lani5_time = 12 - 1;
     uint8_t d0 = v_lani5_frame;
     v_lani5_frame++;
@@ -1781,172 +1672,111 @@ static void anis_ending(void) {
                     ArtTile_GHZ_Flower_4 * tile_size, 16);
 }
 
-static void anis_none(void) {
-    /* AniArt_none (AnimateLevelGfx.asm:400-401) — zones without animated gfx */
-}
+static void anis_none(void) {}
 
-/* AniArt_Index (AnimateLevelGfx.asm:25-32): word-relative jump table. */
 static const void (*const aniart_index[])(void) = {
-    anis_ghz,     /* GHZ */
-    anis_none,    /* LZ */
-    anis_mz,      /* MZ */
-    anis_none,    /* SLZ */
-    anis_none,    /* SYZ */
-    anis_sbz,     /* SBZ */
-    anis_ending,  /* Ending */
+    anis_ghz, anis_none, anis_mz, anis_none, anis_none, anis_sbz, anis_ending,
 };
 
-/* AnimateLevelAct — AnimateLevelGfx (AnimateLevelGfx.asm:6-21) */
 void AnimateLevelAct(void) {
-    if (f_pause != 0) {                                        /* don't animate gfx while paused */
-        return;
-    }
-    anis_giant_ring();                                         /* public call inside due to (a6) */
-    uint8_t zone = (uint8_t)v_zone;                            /* get current zone ID */
-    if (zone >= (uint8_t)(sizeof(aniart_index) / sizeof(aniart_index[0]))) {
-        return;                                                /* zonewarning AniArt_Index,2 */
-    }
-    aniart_index[zone]();                                      /* jmp AniArt_Index(pc,d0.w) */
+    if (f_pause != 0) return;
+    anis_giant_ring();
+    uint8_t zone = (uint8_t)v_zone;
+    if (zone >= (uint8_t)(sizeof(aniart_index) / sizeof(aniart_index[0]))) return;
+    aniart_index[zone]();
 }
 
 /* ===================================================================
-   PaletteCycle (_inc/PaletteCycle.asm)
-   Zone-specific palette cycling (waterfalls, lights, etc.)
+   PaletteCycle (sin cambios)
    =================================================================== */
-
-/* PalCycle_GHZ + PalCycle_Title (PaletteCycle.asm:42-67). Shared by GHZ
-   and the Ending sequence. Every 6 frames, 4 colours (palette line 3,
-   colours 8-B) are replaced with the next block of 4 colours from
-   Pal_GHZCycWater (4 blocks of 4, big-endian words). */
 static void palcycle_ghz(void) {
     const uint8_t *tab = Pal_GHZCycWater;
     if (!tab || Pal_GHZCycWater_len < 32) return;
 
-    /* Decrementar temporizador */
     v_pcyc_time = (uint16_t)(v_pcyc_time - 1);
-    if ((v_pcyc_time & 0x8000) == 0) return; /* Timer aún positivo (>= 0) */
+    if ((v_pcyc_time & 0x8000) == 0) return;
+    v_pcyc_time = 6 - 1;
 
-    v_pcyc_time = 6 - 1; /* Reset timer */
-
-    uint16_t d0 = v_pcyc_num & 3; /* cycle > 3 resets to 0 */
+    uint16_t d0 = v_pcyc_num & 3;
     v_pcyc_num = (uint16_t)(v_pcyc_num + 1);
-
-    /* Cada bloque son 8 bytes (4 colores uint16_t) */
     int base = (int)d0 * 4;
 
-    /* Escribir en la paleta RAM (Línea 3, colores 8 a 11) */
     uint16_t *a1 = (uint16_t *)RAM_ADDR(v_palette_line_3 + (8 * 2));
     for (int i = 0; i < 4; i++) {
         uint16_t color = ((uint16_t)tab[(base + i) * 2] << 8) | tab[(base + i) * 2 + 1];
         a1[i] = color;
-        vdp.cram[40 + i] = color; /* Sincronizar CRAM (Línea 3 = offset 32, 32+8 = 40) */
+        vdp.cram[40 + i] = color;
     }
 }
 
-/* PalCycle_MZ (PaletteCycle.asm:158-166): Marble Zone has no palette cycles */
-static void palcycle_none(void) {
-}
-
-/* PalCycle_LZ/SLZ/SYZ/SBZ: still TODO — need conveyor/script cycle data.
-   Until ported they act like PalCycle_MZ and simply return. */
+static void palcycle_none(void) {}
 #define palcycle_todo palcycle_none
 
-/* PalCycle_Index (PaletteCycle.asm:27-34): word-relative jump table. */
 static const void (*const palcycle_index[])(void) = {
-    palcycle_ghz,    /* GHZ   */
-    palcycle_todo,   /* LZ    */
-    palcycle_none,   /* MZ    */
-    palcycle_todo,   /* SLZ   */
-    palcycle_todo,   /* SYZ   */
-    palcycle_todo,   /* SBZ   */
-    palcycle_ghz,    /* Ending (reuses GHZ) */
+    palcycle_ghz, palcycle_todo, palcycle_none, palcycle_todo,
+    palcycle_todo, palcycle_todo, palcycle_ghz,
 };
 
 void PaletteCycle(void) {
-    /* PaletteCycle (PaletteCycle.asm:6-21): dispatch by zone ID */
     uint8_t zone = (uint8_t)v_zone;
-    if (zone >= (uint8_t)(sizeof(palcycle_index) / sizeof(palcycle_index[0]))) {
-        return; /* zonewarning PalCycle_Index,2 */
-    }
-    palcycle_index[zone](); /* jmp PalCycle_Index(pc,d0.w) */
+    if (zone >= (uint8_t)(sizeof(palcycle_index) / sizeof(palcycle_index[0]))) return;
+    palcycle_index[zone]();
 }
 
 /* ===================================================================
-   SignpostArtLoad (sonic.asm:3186-3208)
-   End-of-act signpost pattern loading. Also locks the left boundary.
-   NewPLC(plcid_Signpost) queues the signpost, hidden bonus and giant
-   ring flash patterns (PLC_Signpost).
+   SignpostArtLoad (sin cambios)
    =================================================================== */
 void SignpostArtLoad(void) {
-    if (v_debuguse != 0) return;                 /* tst.w v_debuguse ; bne.s .return */
-    if (v_act == act3) return;                   /* cmpi.b #act3 ; beq.s .return (boss fight) */
+    if (v_debuguse != 0) return;
+    if (v_act == act3) return;
 
-    int16_t d0 = (int16_t)RAM_WORD(0xF700);      /* move.w (v_screenposx).w,d0 */
-    int16_t d1 = (int16_t)v_limitright2 - 0x100; /* move.w v_limitright2,d1 ; subi.w #$100 */
-    if (d0 < d1) return;                         /* cmp.w d1,d0 ; blt.s .return */
+    int16_t d0 = (int16_t)RAM_WORD(0xF700);
+    int16_t d1 = (int16_t)v_limitright2 - 0x100;
+    if (d0 < d1) return;
+    if (f_timecount == 0) return;
+    if (d1 == (int16_t)v_limitleft2) return;
 
-    if (f_timecount == 0) return;                /* tst.b f_timecount ; beq.s .return (time stopped) */
-    if (d1 == (int16_t)v_limitleft2) return;     /* cmp.w v_limitleft2,d1 ; beq.s .return (already locked) */
-
-    v_limitleft2 = (uint16_t)d1;                 /* move.w d1,(v_limitleft2).w */
-    NewPLC(plcid_Signpost);                      /* moveq #plcid_Signpost,d0 ; bra.w NewPLC */
+    v_limitleft2 = (uint16_t)d1;
+    NewPLC(plcid_Signpost);
 }
 
-/* ===================================================================
-   MoveSonicInDemo — stub (sonic.asm MoveSonicInDemo)
-   Simulate controls during demo playback. Returns immediately
-   outside demo mode.
-   =================================================================== */
-void MoveSonicInDemo(void) {
-    /* TODO: demo playback control simulation */
-}
+void MoveSonicInDemo(void) {}
 
 /* ===================================================================
-   Level_Process — called once per frame from MainGameLoop
-   Ported from sonic.asm Level_MainLoop (lines 2998-3046)
+   Level_Process (sin cambios)
    =================================================================== */
 void Level_Process(void) {
-    /* One-time init. g_last_mode (from MainGameLoop) holds the mode
-       dispatched last frame: entering the level mode from anywhere else
-       forces Level_Enter even if a previous level session left
-       level_init_done set — mirrors the ASM, where GM_Level's setup
-       re-runs on every entry (start, restart, game-over→title→start). */
-    if (g_last_mode != (uint8_t)0x0C /* GM_Level */ || !level_init_done) {
+    if (g_last_mode != (uint8_t)0x0C || !level_init_done) {
         Level_Enter();
         level_init_done = 1;
         return;
     }
 
-    /* --- Per-frame gameplay (Level_MainLoop, sonic.asm:2998-3046) --- */
-
-    PauseGame();                        /* handle pausing (sonic.asm:2999) */
-
+    PauseGame();
     v_vblank_routine = id_VBlank_Levels;
-    WaitForVBlank();                    /* sonic.asm:3000-3001 */
-    v_framecount = v_framecount + 1;    /* sonic.asm:3002 */
+    WaitForVBlank();
+    v_framecount = v_framecount + 1;
 
-    MoveSonicInDemo();                  /* demo controls (stub for now) */
-    LZWaterFeatures();                  /* water features (stub for GHZ) */
-    ExecuteObjects();                   /* sonic.asm:3006 */
+    MoveSonicInDemo();
+    LZWaterFeatures();
+    ExecuteObjects();
 
-    /* f_restart check (FixBugs placement, sonic.asm:3008-3010) */
     if (f_restart) {
         level_init_done = 0;
         return;
     }
 
-    /* DeformLayers: skip if Sonic is dying (routine >= 6) or in debug */
     if (v_debuguse == 0 && obRoutine(&ram[v_player]) >= 6) {
-        /* Sonic dying — skip plane scrolling */
+        /* Sonic dying — skip */
     } else {
-        DeformLayers();                 /* sonic.asm:3026 */
+        DeformLayers();
     }
 
-    BuildSprites();                     /* sonic.asm:3029 */
-    ObjPosLoad();                       /* sonic.asm:3030 */
-    PaletteCycle();                     /* sonic.asm:3031 */
-    RunPLC();                           /* sonic.asm:3032 */
-    OscillateNumDo();                   /* sonic.asm:3033 */
-    SynchroAnimate();                   /* sonic.asm:3034 */
-    SignpostArtLoad();                  /* sonic.asm:3035 */
+    BuildSprites();
+    ObjPosLoad();
+    PaletteCycle();
+    RunPLC();
+    OscillateNumDo();
+    SynchroAnimate();
+    SignpostArtLoad();
 }
