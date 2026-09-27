@@ -24,7 +24,7 @@ Coverage per zone, counting only the objects the disassembly attributes to it:
 | Spring Yard (SYZ) | 14 | 0 | — |
 | Star Light (SLZ) | 8 | 10 | — |
 | Labyrinth (LZ) | 5 | 15 | — |
-| Sandopolis (SBZ) | 5 | 19 | — |
+| Scrap Brain (SBZ) | 5 | 19 | — |
 | Final (FZ) | 0 | 3 | — |
 | Global (no zone named) | 27 | 10 | 5 |
 
@@ -40,7 +40,7 @@ Coverage per zone, counting only the objects the disassembly attributes to it:
   `src/objects.c`. *Not ported* means the ID falls through to
   `NullObject_Main`, which deletes the object on the spot, exactly like the ASM
   `NullObject`. Such objects are simply absent from the level, which is why the
-  missing ones are mostly the whole of Labyrinth, Sandopolis and Star Light.
+  missing ones are mostly the whole of Labyrinth, Scrap Brain and Star Light.
 - **Routine** — the `obRoutine` dispatcher for the object inside
   `src/objects.c`, which is sorted by object ID.
 - **Zones** — from the disassembly file name and its header comment. *any* means
@@ -233,7 +233,7 @@ them.
 | `$65` | `id_Waterfall` | decorative waterfall objects (LZ) | `65 LZ Waterfalls.asm` |
 | `$77` | `id_BossLabyrinth` | Eggman (LZ) | `77 Boss - LZ Main.asm` |
 
-### Sandopolis (SBZ) — 19 pending
+### Scrap Brain (SBZ) — 19 pending
 
 | ID | `id_*` | Description | Disasm source |
 |---|---|---|---|
