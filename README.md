@@ -391,7 +391,7 @@ src/
 ├── config.c/.h    — sonic1.cfg load/save (binary, magic "S1CF")
 ├── options.h      — options menu row indices + VRAM layout
 ├── level.c/.h     — Level_Enter/Process, ObjPosLoad, scrolling, LZ water system
-├── objects.c/.h   — object dispatch, Sonic, rings, ReactToItem, title cards
+├── objects.c/.h   — obj_map[] dispatch table, then every object sorted by ID
 ├── special.c/.h   — Special Stage state machine + PalCycle_SS
 ├── sprites.c/.h   — BuildSprites / sprite rendering from sprite_queue
 ├── data.c/.h      — all tables/pointers/asset loading from build/assets/
@@ -413,7 +413,26 @@ src/
 └── debugmode.c/.h — debug object placement (from _incObj/DebugMode.asm)
 
 disasm/            — original Sega disassembly + uncompressed assets (source of truth)
+Objects-List.md    — every object ID, its disasm source and its ported status
 ```
+
+### Reading `src/objects.c`
+
+`src/objects.c` is ~17k lines, so it is laid out to stay navigable:
+
+1. The `obj_map[]` table, one row per implemented object, **sorted by object
+   ID**, with the ID and the `disasm/_incObj/` source in the trailing comment.
+2. `Objects_Init` / `ExecuteObjects` / `DisplaySprite` / `FindFreeObj` /
+   `DeleteObject`.
+3. **Part 1** — shared helpers from `disasm/_incObj/sub/` (`CalcSine`,
+   `SpeedToPos`, `ObjFloorDist`, `RememberState`, `SolidObject`, `FindFreeObj`,
+   `AnimateSprite`, …).
+4. **Parts 2-4** — the object implementations, in the **same ascending ID
+   order** as `obj_map[]`, split at `$30` and `$60` purely for navigation.
+
+So `$4C` (MZ lava geyser maker) is found the same way in the table and in the
+code. Each section banner names the `.asm` file it was translated from, and
+**Objects-List.md** lists the rest.
 
 ## Architecture notes
 
@@ -623,13 +642,17 @@ on anyone else's box. Always set it.
   through the level-select cheats).
 - Software "Delay"-style VBlank features and the Z80 sound driver (the PC
   sound system replaces the Z80). `DACDriverLoad()` is an empty stub.
-- **Object coverage**: 72 IDs are registered in `obj_dispatch[]` out of the
-  136 object sources in `disasm/_incObj/`. Unregistered IDs fall through to
-  `NullObject` → `DeleteObject` (`objects.c:105`), so most badniks, springs,
-  platforms and triggers simply do not spawn yet.
+- **Object coverage**: 72 of the 134 object IDs the game can spawn
+  (`$01`-`$8C`) are registered in `obj_map[]` in `src/objects.c`. The other 62
+  fall through to `NullObject_Main` → `DeleteObject`, so they never appear in a
+  level; 7 of those are flagged *unused* by the disassembly and need no port,
+  leaving 55 reachable objects pending, almost all of Labyrinth, Sandopolis and
+  Star Light. See **[Objects-List.md](Objects-List.md)** for the full table:
+  every ID, its `disasm/_incObj/` source, its zones, and its status.
 - `Render the VDP sprite table to an SDL texture` (`sprites.c:187`) — sprites
   are composited in software instead.
-- `Object 4C` is referenced but not ported (`objects.c:12196`).
+- Object 4C's mappings are referenced but its graphics are not loaded
+  (`objects.c` Object 4C section).
 
 **Partially ported**
 

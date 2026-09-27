@@ -400,7 +400,7 @@ src/
 ├── config.c/.h    — carga/guardado de sonic1.cfg (binario, magic "S1CF")
 ├── options.h      — índices de filas del menú de opciones + layout de VRAM
 ├── level.c/.h     — Level_Enter/Process, ObjPosLoad, scrolling, sistema de agua LZ
-├── objects.c/.h   — dispatch de objetos, Sonic, anillos, ReactToItem, title cards
+├── objects.c/.h   — tabla de dispatch obj_map[], luego cada objeto ordenado por ID
 ├── special.c/.h   — máquina de estados del Special Stage + PalCycle_SS
 ├── sprites.c/.h   — BuildSprites / renderizado de sprites desde sprite_queue
 ├── data.c/.h      — todas las tablas/punteros/carga de assets desde build/assets/
@@ -422,7 +422,28 @@ src/
 └── debugmode.c/.h — colocación de objeto debug (desde _incObj/DebugMode.asm)
 
 disasm/            — desensamblado original Sega + assets sin comprimir (fuente de verdad)
+Objects-List.md    — cada ID de objeto, su fuente en el desensamblado y su estado
 ```
+
+### Cómo leer `src/objects.c`
+
+`src/objects.c` tiene ~17k líneas, así que está organizado para que se pueda
+navegar:
+
+1. La tabla `obj_map[]`, una fila por objeto implementado, **ordenada por ID de
+   objeto**, con el ID y la fuente en `disasm/_incObj/` en el comentario final.
+2. `Objects_Init` / `ExecuteObjects` / `DisplaySprite` / `FindFreeObj` /
+   `DeleteObject`.
+3. **Parte 1** — helpers compartidos de `disasm/_incObj/sub/` (`CalcSine`,
+   `SpeedToPos`, `ObjFloorDist`, `RememberState`, `SolidObject`, `FindFreeObj`,
+   `AnimateSprite`, …).
+4. **Partes 2-4** — las implementaciones de objetos, en el **mismo orden
+   ascendente de ID** que `obj_map[]`, divididas en `$30` y `$60` solo por
+   navegación.
+
+Así, `$4C` (MZ lava geyser maker) se localiza igual en la tabla y en el código.
+Cada banner de sección nombra el fichero `.asm` del que se tradujo, y
+**Objects-List.md** lista el resto.
 
 ## Notas de arquitectura
 
@@ -629,13 +650,18 @@ cualquier otro. Defínela siempre.
   alcanzan por los cheats del level select).
 - Features VBlank estilo "Delay" por software y el driver de sonido Z80 (el
   sistema de sonido PC reemplaza al Z80). `DACDriverLoad()` es un stub vacío.
-- **Cobertura de objetos**: hay 72 IDs registrados en `obj_dispatch[]` de los
-  136 fuentes de objeto en `disasm/_incObj/`. Los IDs no registrados caen en
-  `NullObject` → `DeleteObject` (`objects.c:105`), así que la mayoría de
-  badniks, muelles, plataformas y triggers todavía no aparecen.
+- **Cobertura de objetos**: hay 72 de los 134 IDs de objeto que el juego puede
+  generar (`$01`-`$8C`) registrados en `obj_map[]` en `src/objects.c`. Los
+  otros 62 caen en `NullObject_Main` → `DeleteObject`, así que nunca aparecen
+  en un nivel; de esos, 7 los marca el desensamblado como *unused* y no
+  necesitan port, dejando 55 objetos alcanzables pendientes, casi todos de
+  Labyrinth, Sandopolis y Star Light. Ver
+  **[Objects-List.md](Objects-List.md)** para la tabla completa: cada ID, su
+  fuente en `disasm/_incObj/`, sus zonas y su estado.
 - `Render the VDP sprite table to an SDL texture` (`sprites.c:187`) — los
   sprites se componen por software en su lugar.
-- `Object 4C` se referencia pero no está portado (`objects.c:12196`).
+- El objeto 4C referencia sus mappings pero sus gráficos no están cargados
+  (sección Object 4C en `objects.c`).
 
 **Parcialmente portado**
 
