@@ -646,7 +646,7 @@ on anyone else's box. Always set it.
   (`$01`-`$8C`) are registered in `obj_map[]` in `src/objects.c`. The other 62
   fall through to `NullObject_Main` → `DeleteObject`, so they never appear in a
   level; 7 of those are flagged *unused* by the disassembly and need no port,
-  leaving 55 reachable objects pending, almost all of Labyrinth, Sandopolis and
+  leaving 55 reachable objects pending, almost all of Labyrinth, Scrap Brain and
   Star Light. See **[Objects-List.md](Objects-List.md)** for the full table:
   every ID, its `disasm/_incObj/` source, its zones, and its status.
 - `Render the VDP sprite table to an SDL texture` (`sprites.c:187`) — sprites

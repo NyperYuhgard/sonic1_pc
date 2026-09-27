@@ -655,7 +655,7 @@ cualquier otro. Defínela siempre.
   otros 62 caen en `NullObject_Main` → `DeleteObject`, así que nunca aparecen
   en un nivel; de esos, 7 los marca el desensamblado como *unused* y no
   necesitan port, dejando 55 objetos alcanzables pendientes, casi todos de
-  Labyrinth, Sandopolis y Star Light. Ver
+  Labyrinth, Scrap Brain y Star Light. Ver
   **[Objects-List.md](Objects-List.md)** para la tabla completa: cada ID, su
   fuente en `disasm/_incObj/`, sus zonas y su estado.
 - `Render the VDP sprite table to an SDL texture` (`sprites.c:187`) — los
