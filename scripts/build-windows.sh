@@ -173,6 +173,20 @@ main() {
     require_cmd pkg-config
     require_cmd x86_64-w64-mingw32-gcc "install gcc-mingw-w64-x86-64 (Debian/Ubuntu)"
     require_cmd x86_64-w64-mingw32-windres "install binutils-mingw-w64-x86-64"
+
+    # Make the prefix absolute. A relative one (e.g. --prefix Lib-Windows/prefix)
+    # would otherwise be resolved by CMake against the *build* directory, not
+    # the caller's cwd, and the toolchain file would report a missing pkgconfig
+    # dir even though the prefix is right there.
+    # Assigned to a local first: "VAR=$(false) || die" would blank VAR before
+    # the message could report what the caller actually asked for.
+    local prefix_abs
+    if ! prefix_abs="$(cd -- "$OPT_PREFIX" 2>/dev/null && pwd -P)"; then
+        die "mingw-w64 prefix not found: $OPT_PREFIX
+  Pass --prefix DIR (absolute or relative to the current directory)."
+    fi
+    OPT_PREFIX="$prefix_abs"
+
     check_mingw_sdl2 "$OPT_PREFIX"
 
     # scripts/pkg-config-mingw.sh reads the prefix from the environment.
