@@ -49,9 +49,8 @@ die()  { printf '%s[error]%s %s\n' "$C_ERR" "$C_RESET" "$*" >&2; exit 1; }
 # Variants
 #
 # A variant maps to a CMake build type. "release" deliberately keeps an empty
-# CMAKE_BUILD_TYPE: that is the project default documented in AGENTS.md
-# (-O2, no -g, no -DNDEBUG), which is what CMakeLists.txt treats as the
-# non-Debug case.
+# CMAKE_BUILD_TYPE, which is the project default: that hits the else branch of
+# CMakeLists.txt:110 and adds -O2 only (no -g, no -DNDEBUG).
 # ---------------------------------------------------------------------------
 
 variant_build_type() {
