@@ -26,7 +26,7 @@ Ver `CONTRIBUTING.md` para las guías completas de contribución.
 
 ## Dependencias
 
-- Compilador C11 y CMake ≥ 3.10
+- Compilador C11 y CMake ≥ 3.13
 - SDL2
 - SDL2_mixer (con soporte OGG)
 
@@ -35,6 +35,10 @@ En Debian/Ubuntu:
 ```
 sudo apt install build-essential cmake libsdl2-dev libsdl2-mixer-dev
 ```
+
+El cross-build de Windows necesita mingw-w64 y un prefijo de SDL2 para mingw en
+vez de lo anterior; mira [Scripts de compilación](#scripts-de-compilación) más
+abajo.
 
 ## Compilar y ejecutar
 
@@ -83,18 +87,33 @@ scripts/build-windows.sh all
 scripts/build-windows.bat                      # lo mismo, desde cmd.exe en Windows (necesita WSL2)
 ```
 
-`dist/win/<variant>/` es autocontenido: `sonic1.exe`, las DLLs de SDL2 y
-`assets/`. Hace falta SDL2 cross-compilado, y como mingw-w64 no incluye
-AddressSanitizer la variante `asan` es solo para Linux/WSL2:
+`dist/win/<variant>/` es autocontenido: `sonic1.exe` más `assets/`. SDL2,
+SDL2_mixer y los códecs Ogg/Vorbis se enlazan **estáticos** por defecto, así que
+no hay DLLs de runtime que repartir. Como mingw-w64 no incluye AddressSanitizer
+la variante `asan` es solo para Linux/WSL2.
+
+Hace falta un prefijo de SDL2 para mingw-w64. Va incluido en el repo en
+`Lib-Windows/prefix` (7.7 MB: cabeceras, archivos estáticos y los `.pc`), así que
+no hace falta cross-compilar nada:
 
 ```
 sudo apt install gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
-scripts/build-windows.sh release --prefix ~/mingw64   # SDL2 cross-compilado para mingw-w64
+scripts/build-windows.sh release --prefix Lib-Windows/prefix
 ```
 
-Bloqueo conocido: `src/data.c` mapea los datos de niveles con `mmap` de POSIX
-(`sys/mman.h`), que mingw-w64 no provee, así que el `.exe` no enlaza hasta que
-eso se sustituya por su equivalente en Windows (`VirtualAlloc`).
+Para compilar ese prefijo desde cero en vez de usarlo, hay que cross-compilar
+libogg, libvorbis, SDL2 (`-DSDL_SHARED=OFF -DSDL_STATIC=ON`) y SDL2_mixer
+(`-DSDL2MIXER_VORBIS=VORBISFILE -DSDL2MIXER_DEPS_SHARED=OFF`) al prefijo que
+quieras; `scripts/build-windows.sh --help` tiene la receta completa, incluidas
+las dos trampas: usa un toolchain mínimo en vez del de `scripts/` (aborta
+mientras el prefijo aún no tenga `pkgconfig/`), y no desactives los códecs
+Ogg/Vorbis, porque el juego necesita `Mix_SetMusicPosition` y
+`Mix_GetMusicPosition`, que dependen de libvorbisfile.
+
+`src/data.c` mantiene su ruta `mmap` de POSIX en Linux y usa `VirtualAlloc` bajo
+`_WIN32`. Ojo: `VirtualAlloc(NULL, ...)` devuelve direcciones por encima de 4 GB
+en Windows de 64 bits, lo que truncaría el campo `obMap` de 32 bits, así que la
+ruta de Windows pide una dirección baja explícitamente.
 
 Ejecuta `scripts/build-linux.sh --help` / `scripts/build-windows.sh --help` para
 ver todas las opciones.

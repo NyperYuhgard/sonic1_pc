@@ -7,15 +7,64 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include <sys/mman.h>
-#include <unistd.h>
 #include <limits.h>
 
+/* Windows has no mmap(); VirtualAlloc/VirtualFree are used instead. Both
+   back-ends are selected at compile time: _WIN32 for the Windows build,
+   POSIX mmap everywhere else. See alloc_32bit() below for the details. */
+#if defined(_WIN32)
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#else
+#  include <sys/mman.h>
+#  include <unistd.h>          /* readlink() */
+#endif
+
 /* ============================================================================
-   mmap helpers
+   alloc_32bit / free_32bit
    Los punteros de mappings se guardan en campos de 32 bits (obMap), así que
    los datos deben vivir por debajo de 4 GB. MAP_32BIT fuerza esa dirección.
    ========================================================================== */
+
+#if defined(_WIN32)
+
+/* Win32 equivalent of the mmap pair below.
+   MEM_32BIT does not exist on 64-bit Windows (ignored on x64), and
+   VirtualAlloc(NULL, ...) hands out addresses above 4 GB there, which would
+   truncate obMap. So the low 4 GB is requested explicitly: reserve with a
+   low hint address and walk up by the allocation granularity until one is
+   free. The first 64 KB block is unused in a normal process, so this
+   succeeds on the first try in practice. */
+static const uint8_t *alloc_32bit(size_t n) {
+    size_t hdr = sizeof(size_t);
+    size_t total = n + hdr;
+
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    size_t gran = (size_t)si.dwAllocationGranularity;
+    if (gran < 0x10000) gran = 0x10000;   /* 64 KB is the real x64 granularity */
+
+    for (uintptr_t hint = 0x10000; hint < 0x100000000ull; hint += gran) {
+        void *base = VirtualAlloc((void *)hint, total,
+                                  MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        if (!base) continue;
+        ((size_t *)base)[0] = n;         /* same length header as the POSIX path */
+        return (const uint8_t *)base + hdr;
+    }
+    return NULL;
+}
+
+static void free_32bit(const uint8_t *p) {
+    if (!p) return;
+    VirtualFree((void *)(p - sizeof(size_t)), 0, MEM_RELEASE);
+}
+
+#else /* POSIX */
 
 static const uint8_t *alloc_32bit(size_t n) {
     size_t hdr = sizeof(size_t);
@@ -31,6 +80,8 @@ static void free_32bit(const uint8_t *p) {
     size_t n = ((const size_t *)p)[-1];
     munmap((void *)(p - sizeof(size_t)), n + sizeof(size_t));
 }
+
+#endif /* _WIN32 */
 
 /* ============================================================================
    Forward declarations
@@ -512,15 +563,33 @@ const uint8_t *SS_StartLoc;         size_t SS_StartLoc_len;
    Resolución del directorio assets/
    ========================================================================== */
 
+/* Resolves the assets/ directory, sitting next to our own executable so the
+   game works from any working directory. */
 static const char *assets_base_path(void) {
     static char base[PATH_MAX];
     static int init = 0;
     if (init) return base;
     init = 1;
+
+#if defined(_WIN32)
+    /* No /proc on Windows: ask the loader for our own image path. Returns the
+       length without the terminator, or 0 on failure (and does not terminate
+       the buffer when it truncates, hence the length check). */
+    DWORD n = GetModuleFileNameA(NULL, base, (DWORD)sizeof(base) - 1);
+    if (n > 0 && n < sizeof(base) - 1) base[n] = '\0';
+    else n = 0;
+#else
     ssize_t n = readlink("/proc/self/exe", base, sizeof(base) - 1);
+    if (n > 0) base[n] = '\0';
+    else n = 0;
+#endif
+
     if (n > 0) {
-        base[n] = '\0';
         char *slash = strrchr(base, '/');
+#if defined(_WIN32)
+        char *bslash = strrchr(base, '\\');
+        if (bslash && (!slash || bslash > slash)) slash = bslash;
+#endif
         if (slash) {
             *slash = '\0';
             char tmp[PATH_MAX + 64];

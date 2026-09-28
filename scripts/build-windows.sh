@@ -22,13 +22,19 @@ DEFAULT_MINGW_PREFIX="/usr/x86_64-w64-mingw32"
 
 OPT_PREFIX="${SONIC_MINGW_PREFIX:-$DEFAULT_MINGW_PREFIX}"
 OPT_DLLS=1
+# Static by default: a self-contained sonic1.exe with no runtime DLLs.
+OPT_STATIC=1
 
 usage() {
     cat <<EOF
 ${C_BOLD}Usage:${C_RESET} $(basename "$0") [variant|all] [options]
 
 Cross-compiles sonic1_pc to Windows x86_64 with mingw-w64 and packages the
-result in dist/win/<variant>/ (sonic1.exe + SDL2 DLLs + assets/).
+result in dist/win/<variant>/ (sonic1.exe + assets/).
+
+By default SDL2, SDL2_mixer and the Ogg/Vorbis codecs are linked statically
+(CMake option SONIC_STATIC_SDL), so the dist holds a single self-contained
+sonic1.exe and needs no SDL2 DLLs at runtime.
 
 ${C_BOLD}Variants${C_RESET}:
   release         -O2, no -g, no -DNDEBUG  (project default, fastest)
@@ -44,23 +50,32 @@ ${C_BOLD}Options:${C_RESET}
   -c, --clean       remove the CMake build and dist folders first
       --no-assets   skip the asset staging step
       --no-dlls     do not copy SDL2 DLLs into the dist folder
+      --dynamic     link SDL2 dynamically instead (dist ships SDL2*.dll).
+                    Needs the shared archives and the runtime DLLs in the
+                    prefix, which the static build does not install.
   -j, --jobs N      parallel build jobs (default: $(default_jobs))
   -h, --help        show this help
 
 ${C_BOLD}Cross dependencies:${C_RESET}
 The prefix must provide pkgconfig/sdl2.pc and pkgconfig/SDL2_mixer.pc built
-for mingw-w64. On Debian/Ubuntu the cross compiler alone is:
+for mingw-w64, plus the static archives libSDL2.a, libSDL2main.a and
+libSDL2_mixer.a (with libvorbisfile.a, libvorbis.a and libogg.a) for the
+default static build. On Debian/Ubuntu the cross compiler alone is:
   sudo apt install gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
+
 SDL2 itself has to be cross-built (or taken from a prepared bundle), for
 example with:
   cmake -S SDL2 -B build-sdl2 \\
         -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN_FILE \\
         -DSONIC_MINGW_PREFIX=$HOME/mingw64 \\
         -DCMAKE_INSTALL_PREFIX=$HOME/mingw64 \\
-        -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST=OFF
+        -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF
   cmake --build build-sdl2 --target install
-and the same for SDL2_mixer (-DSDL2_MIXER_* options, needs libvorbis/libogg
-cross-built too).
+and the same for SDL2_mixer (-DSDL2MIXER_* options, with
+-DSDL2MIXER_VORBIS=VORBISFILE -DSDL2MIXER_DEPS_SHARED=OFF), which also needs
+libogg and libvorbis cross-built. Do NOT reuse this repo's toolchain file for
+the dependencies: it aborts when the prefix has no pkgconfig dir yet, which is
+the state they start from.
 
 ${C_BOLD}Examples:${C_RESET}
   $(basename "$0") release --clean
@@ -103,15 +118,26 @@ check_mingw_sdl2() {
 }
 
 # copy_mingw_dlls <prefix> <dist dir> - copies the SDL2 runtime next to the exe.
+#
+# Both naming conventions are matched: the SDL2 CMake build installs SDL2.dll /
+# SDL2_mixer.dll (no "lib" prefix) while autotools/MSYS2 builds install
+# libSDL2-2.0.dll. The file name is dictated by the import library (it is baked
+# into the PE import table), so it must be copied verbatim and never renamed.
 copy_mingw_dlls() {
-    local prefix="$1" dest="$2" f copied=0
-    for f in "$prefix"/bin/libSDL2*.dll "$prefix"/bin/libwinpthread-1.dll; do
+    local prefix="$1" dest="$2" f base found=0 copied=0
+    for f in "$prefix"/bin/libSDL2*.dll "$prefix"/bin/SDL2*.dll \
+             "$prefix"/bin/libwinpthread-1.dll; do
         [ -e "$f" ] || continue
+        found=$((found + 1))
+        base="$(basename "$f")"
+        [ -e "$dest/$base" ] && continue   # already staged by an earlier run
         cp "$f" "$dest/"
-        ok "copied $(basename "$f")"
+        ok "copied $base"
         copied=$((copied + 1))
     done
-    if [ "$copied" = 0 ]; then
+    # Warn on "nothing to stage", not on "nothing new to stage": a rebuild over
+    # an existing dist folder copies nothing yet still has a complete runtime.
+    if [ "$found" = 0 ]; then
         warn "no SDL2 DLLs found in $prefix/bin; the .exe will need them on PATH (or link SDL2 statically)"
     fi
 }
@@ -127,6 +153,7 @@ main() {
                 OPT_PREFIX="${args[$((i + 1))]}"; i=$((i + 1)) ;;
             --prefix=*) OPT_PREFIX="${args[$i]#--prefix=}" ;;
             --no-dlls)  OPT_DLLS=0 ;;
+            --dynamic)  OPT_STATIC=0 ;;
             *)          filtered+=("${args[$i]}") ;;
         esac
         i=$((i + 1))
@@ -161,6 +188,10 @@ main() {
         cmake_args=(-DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE"
                     -DSONIC_MINGW_PREFIX="$OPT_PREFIX")
 
+        if [ "$OPT_STATIC" = 1 ]; then
+            cmake_args+=(-DSONIC_STATIC_SDL=ON)
+        fi
+
         if [ "$OPT_CLEAN" = 1 ]; then
             rm -rf "$build_dir" "$dist_dir"
         fi
@@ -172,9 +203,11 @@ main() {
         [ -f "$dll" ] || die "expected binary not found: $dll"
 
         # Package: exe + DLLs + assets, ready to copy to a Windows machine.
+        # With SONIC_STATIC_SDL the SDL2 runtime is linked in, so there are no
+        # DLLs to stage and the dist is just the exe plus the assets.
         mkdir -p "$dist_dir"
         cp "$dll" "$dist_dir/sonic1.exe"
-        if [ "$OPT_DLLS" = 1 ]; then
+        if [ "$OPT_STATIC" = 0 ] && [ "$OPT_DLLS" = 1 ]; then
             copy_mingw_dlls "$OPT_PREFIX" "$dist_dir"
         fi
         if [ "$OPT_ASSETS" = 1 ]; then

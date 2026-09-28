@@ -26,7 +26,7 @@ See `CONTRIBUTING.md` for the full contributing guidelines.
 
 ## Dependencies
 
-- A C11 compiler and CMake ≥ 3.10
+- A C11 compiler and CMake ≥ 3.13
 - SDL2
 - SDL2_mixer (with OGG support)
 
@@ -35,6 +35,9 @@ On Debian/Ubuntu:
 ```
 sudo apt install build-essential cmake libsdl2-dev libsdl2-mixer-dev
 ```
+
+The Windows cross-build needs mingw-w64 and a mingw-targeted SDL2 prefix
+instead; see [Build scripts](#build-scripts) below.
 
 ## Build & run
 
@@ -82,18 +85,33 @@ scripts/build-windows.sh all
 scripts/build-windows.bat                      # same, from cmd.exe on Windows (needs WSL2)
 ```
 
-`dist/win/<variant>/` is self-contained: `sonic1.exe`, the SDL2 DLLs and
-`assets/`. Cross-built SDL2 is required, and since mingw-w64 ships no
-AddressSanitizer the `asan` variant is Linux/WSL2 only:
+`dist/win/<variant>/` is self-contained: `sonic1.exe` plus `assets/`. SDL2,
+SDL2_mixer and the Ogg/Vorbis codecs are linked **statically** by default, so
+there are no runtime DLLs to ship. Since mingw-w64 ships no AddressSanitizer
+the `asan` variant is Linux/WSL2 only.
+
+A prepared mingw-w64 SDL2 prefix is required. One is bundled in the repository
+at `Lib-Windows/prefix` (7.7 MB: headers, static archives and the `.pc` files),
+so no cross-build is needed:
 
 ```
 sudo apt install gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
-scripts/build-windows.sh release --prefix ~/mingw64   # SDL2 cross-built for mingw-w64
+scripts/build-windows.sh release --prefix Lib-Windows/prefix
 ```
 
-Known blocker: `src/data.c` maps level data with POSIX `mmap` (`sys/mman.h`),
-which mingw-w64 does not provide, so the `.exe` does not link until that is
-replaced by a Windows equivalent (`VirtualAlloc`).
+To build that prefix from scratch instead, cross-build libogg, libvorbis, SDL2
+(`-DSDL_SHARED=OFF -DSDL_STATIC=ON`) and SDL2_mixer
+(`-DSDL2MIXER_VORBIS=VORBISFILE -DSDL2MIXER_DEPS_SHARED=OFF`) into a prefix of
+your choice; `scripts/build-windows.sh --help` has the full recipe, including
+the two traps: use a minimal toolchain file rather than the one in `scripts/`
+(it aborts while the prefix has no `pkgconfig/` yet), and do not disable the
+Ogg/Vorbis codecs, because the game needs `Mix_SetMusicPosition` and
+`Mix_GetMusicPosition`, which need libvorbisfile.
+
+`src/data.c` keeps its POSIX `mmap` path on Linux and uses `VirtualAlloc` under
+`_WIN32`. Note that `VirtualAlloc(NULL, ...)` returns addresses above 4 GB on
+64-bit Windows, which would truncate the 32-bit `obMap` field, so the Windows
+path requests a low address explicitly.
 
 Run `scripts/build-linux.sh --help` / `scripts/build-windows.sh --help` for the
 full option list.
