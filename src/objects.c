@@ -661,7 +661,7 @@ void AnimateSprite(void *obj, const uint8_t *anim_script) {
                     obAniFrame(o) -= back;
                     frame_idx = obAniFrame(o);
                     frame_id = anim_data[1 + frame_idx];
-obFrame(o) = frame_id & 0x1F;
+                    obFrame(o) = frame_id & 0x1F;
                         uint8_t status = obStatus(o);
                         uint8_t render = obRender(o);
                         uint8_t flip_bits = (frame_id >> 5) & (sprite_xflip | sprite_yflip);
