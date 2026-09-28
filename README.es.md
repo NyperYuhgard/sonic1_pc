@@ -181,7 +181,6 @@ principal:
 | `G` | Alterna el visor Plano A/B (nametables completas, se adapta al tamaño de ventana sin estirar: lado a lado o apilado, scroll con rueda/arrastre) |
 | `V` | Visor de planos: alterna el modo de wrap de 128 filas (estilo BlastEm) |
 | `R` | Alterna el visor RAM (hex + decimal en vivo, agrupado en secciones etiquetadas) |
-| `F` | Alterna la free camera |
 | `T` | Alterna la ventana del TAS editor |
 | `F1`–`F8` | Acciones de TAS (ver abajo) |
 | `ESC` | Salir (barra de título de la ventana) |
@@ -195,23 +194,6 @@ ratón y panea con arrastre del botón izquierdo, pero solo mientras el puntero
 está dentro de esa ventana (`src/input.c:55-75`). El visor RAM es de solo
 lectura; sus secciones son GAME STATE, BOUNDS & CAMERA, SONIC,
 LOOP/ROLL/TRACK, FLAGS, SYNC/OSCILLATE y MISC (`src/ramview.c:219-227`).
-
-### Free camera
-
-`F` la alterna. La cámara entonces se mueve 8 px por frame, clampada a los
-límites del nivel (`v_limitleft2` / `v_limitright2` / `v_limittop2` /
-`v_limitbtm2`):
-
-| Tecla | Dirección |
-|---|---|
-| `Home` | Arriba |
-| `End` | Abajo |
-| `PageUp` | Derecha |
-| `Delete` | Izquierda |
-
-Mueve la cámara real del mundo en 16.16 y fuerza un redraw completo del FG
-para que el plano se refresque mientras haces panning
-(`src/freecamera.c:31-51`).
 
 ### Teclas de TAS
 
@@ -398,7 +380,6 @@ Nada de esto existe en el juego de Mega Drive — es la capa PC.
 | Visor Object RAM (`O`) | `objview.c` | Slots de objetos en vivo |
 | Visor Plano A/B (`G`, `V`) | `planeview.c` | Nametables completas con un rectángulo sobre la región de 320x224 muestreada, toggle de wrap de 128 filas |
 | Visor RAM (`R`) | `ramview.c` | Hex + decimal de `ram[]` en vivo, en 7 secciones etiquetadas |
-| Free camera (`F`) | `freecamera.c` | Mueve la cámara real del mundo en 16.16, clampada a los límites del nivel |
 | Overlay de colisión | `vdp.c` | `SONIC_DEBUG_COLLISION` pinta cada celda de colisión 16x16, coloreada por los flags de superficie que devuelve `FindNearestTile` |
 | TAS | `tas.c`, `tas.h`, `tas_editor.c/.h` | Graba/reproduce hasta 1 h @ 60 Hz, `tas.bin` (`TASFILE` v1), 8 savestates de estado completo (64 KB RAM + VRAM + CRAM + VSRAM + registros VDP), más un editor frame a frame |
 | Pantalla End Demo | `enddemo.c` | Pantalla SDL con una fuente de pixel-art vectorial hecha a mano en vez de la rutina del ASM |
@@ -434,7 +415,6 @@ src/
 ├── tas.c/.h       — grabación / reproducción / savestates del TAS
 ├── tas_editor.c/.h— editor de frames del TAS
 ├── font8x8.h      — fuente bitmap 8x8 compartida por los visores
-├── freecamera.c/.h— free camera de debug
 ├── objview.c/.h   — visor de Object RAM para debug
 ├── planeview.c/.h — visor de Planos A/B para debug
 ├── ramview.c/.h   — visor de RAM para debug
@@ -653,9 +633,9 @@ cualquier otro. Defínela siempre.
   completo de nivel (colocación de objetos, paletas, estado PLC).
 - Build con sanitizer (`-DSONIC_SANITIZE=ON`) es la primera parada para
   accesos a memoria salvaje.
-- El overlay de colisión + la free camera + el visor RAM cubren casi todo lo
-  que responde a "por qué este objeto está en el sitio equivocado" sin
-  necesidad de inspeccionar imágenes.
+- El overlay de colisión + el visor RAM cubren casi todo lo que responde a
+  "¿por qué este objeto está en el sitio equivocado?" sin necesidad de
+  inspeccionar imágenes.
 
 ## Roadmap / stubs conocidos
 

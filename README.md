@@ -177,7 +177,6 @@ All of these work at any time, in any game mode, from the main window:
 | `G` | Toggle the Plane A/B viewer (full nametables, adapts to window size without stretching: side-by-side or stacked, wheel/drag scroll) |
 | `V` | Plane viewer: toggle the 128-row wrap mode (BlastEm-style) |
 | `R` | Toggle the RAM viewer (live hex + decimal, grouped into labelled sections) |
-| `F` | Toggle the free camera |
 | `T` | Toggle the TAS editor window |
 | `F1`–`F8` | TAS actions (see below) |
 | `ESC` | Quit (window title bar) |
@@ -191,21 +190,6 @@ with left-drag, but only while the pointer is inside that window
 (`src/input.c:55-75`). The RAM viewer is read-only; its sections are GAME
 STATE, BOUNDS & CAMERA, SONIC, LOOP/ROLL/TRACK, FLAGS, SYNC/OSCILLATE and
 MISC (`src/ramview.c:219-227`).
-
-### Free camera
-
-`F` toggles it. The camera then pans 8 px per frame, clamped to the level
-bounds (`v_limitleft2` / `v_limitright2` / `v_limittop2` / `v_limitbtm2`):
-
-| Key | Direction |
-|---|---|
-| `Home` | Up |
-| `End` | Down |
-| `PageUp` | Right |
-| `Delete` | Left |
-
-It moves the real 16.16 world camera and forces a full FG redraw so the plane
-refreshes while panning (`src/freecamera.c:31-51`).
 
 ### TAS keys
 
@@ -388,7 +372,6 @@ None of this exists in the Mega Drive game — it is the PC layer.
 | Object RAM viewer (`O`) | `objview.c` | Live object slots |
 | Plane A/B viewer (`G`, `V`) | `planeview.c` | Full nametables with a rectangle over the sampled 320x224 region, 128-row wrap toggle |
 | RAM viewer (`R`) | `ramview.c` | Live hex + decimal of `ram[]` in 7 labelled sections |
-| Free camera (`F`) | `freecamera.c` | Pans the real 16.16 world camera, clamped to the level bounds |
 | Collision overlay | `vdp.c` | `SONIC_DEBUG_COLLISION` paints every 16x16 collision cell, coloured by the surface flags `FindNearestTile` returns |
 | TAS | `tas.c`, `tas.h`, `tas_editor.c/.h` | Record/replay up to 1 h @ 60 Hz, `tas.bin` (`TASFILE` v1), 8 full-state savestates (64 KB RAM + VRAM + CRAM + VSRAM + VDP registers), plus a frame editor |
 | End Demo screen | `enddemo.c` | SDL screen with a hand-rolled vector pixel font instead of the ASM routine |
@@ -424,7 +407,6 @@ src/
 ├── tas.c/.h       — TAS record / playback / savestates
 ├── tas_editor.c/.h— TAS frame editor window
 ├── font8x8.h      — shared 8x8 bitmap font for the viewers
-├── freecamera.c/.h— debug free camera
 ├── objview.c/.h   — Object RAM debug viewer window
 ├── planeview.c/.h — Plane A/B debug viewer window
 ├── ramview.c/.h   — RAM debug viewer window
@@ -645,8 +627,8 @@ on anyone else's box. Always set it.
   boot (object placement, palettes, PLC state).
 - Sanitizer build (`-DSONIC_SANITIZE=ON`) is the first stop for wild memory
   access.
-- The collision overlay + free camera + RAM viewer cover most "why is this
-  object in the wrong place" questions without any image inspection.
+- The collision overlay + RAM viewer cover most "why is this object in the
+  wrong place" questions without any image inspection.
 
 ## Roadmap / known stubs
 

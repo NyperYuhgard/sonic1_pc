@@ -1088,14 +1088,9 @@ void DeformLayers(void) {
     v_fg_scroll_flags  = 0;                         /* clr.w all four redraw flags */
     v_bg1_scroll_flags = 0;
     v_bg2_scroll_flags = 0;
-    v_bg3_scroll_flags = 0;
-
-    /* Debug free camera: skip normal Sonic-following scroll when active */
-    extern int FreeCamera_IsActive(void);
-    if (!FreeCamera_IsActive()) {
-        ScrollHoriz();                              /* camera + fg redraw flags */
-        ScrollVertical();
-    }
+    v_bg3_scroll_flags = 0;  
+    ScrollHoriz();                              /* camera + fg redraw flags */
+    ScrollVertical();
     DynamicLevelEvents();                           /* boundaries / bosses */
 
     /* send integer camera Y positions to the VDP shadow registers */

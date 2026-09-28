@@ -50,7 +50,6 @@ set(SOURCES
     src/hud.c
     src/collision.c
     src/objview.c
-    src/freecamera.c
     src/debugmode.c
     src/ramview.c
     src/planeview.c

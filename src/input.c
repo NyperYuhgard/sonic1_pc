@@ -8,7 +8,7 @@
 #include "objview.h"
 #include "ramview.h"
 #include "planeview.h"
-#include "freecamera.h"
+
 #include <SDL2/SDL.h>
 #include <string.h>
 
@@ -21,7 +21,6 @@ static int prev_objview_key = 0;
 static int prev_ramview_key = 0;
 static int prev_planeview_key = 0;
 static int prev_planeview_wrap_key = 0;
-static int prev_f_key = 0;
 
 void Input_Init(void) {
     memset(joypad_hold, 0, sizeof(joypad_hold));
@@ -116,11 +115,7 @@ void Input_Read(void) {
     prev_ramview_key = keys[SDL_SCANCODE_R];
     prev_objview_key = keys[SDL_SCANCODE_O];
 
-    /* Debug: F toggles free camera mode (down-edge only) */
-    if (keys[SDL_SCANCODE_F] && !prev_f_key) {
-        FreeCamera_Toggle();
-    }
-    prev_f_key = keys[SDL_SCANCODE_F];
+    
 
     uint8_t new_state[2] = {0, 0};
 
@@ -165,8 +160,7 @@ void Input_Read(void) {
     v_jpadhold2  = joypad_hold[1];
     v_jpadpress2 = joypad_press[1];
 
-    /* Debug free camera: read keys after joypads are written */
-    FreeCamera_Update(keys);
+
 }
 
 /* ------------------------------------------------------------------ */
