@@ -408,7 +408,6 @@ const uint8_t *Map_Bub;
 const uint8_t *Map_WFall;
 const uint8_t *Map_Pole;
 const uint8_t *Map_Flap;
-const uint8_t *Map_Fire;
 const uint8_t *Map_Brick;           size_t Map_Brick_len;
 const uint8_t *Map_Geyser;          size_t Map_Geyser_len;
 const uint8_t *Map_LWall;           size_t Map_LWall_len;
@@ -427,7 +426,6 @@ const uint8_t *Map_Seesaw;
 const uint8_t *Map_Bomb;
 const uint8_t *Map_Roll;            size_t Map_Roll_len;
 const uint8_t *Map_Light;           size_t Map_Light_len;
-const uint8_t *Map_Bump;
 const uint8_t *Map_Plat_SYZ;        size_t Map_Plat_SYZ_len;
 const uint8_t *Map_FBlock;          size_t Map_FBlock_len;
 const uint8_t *Map_BBall;           size_t Map_BBall_len;
@@ -1325,10 +1323,10 @@ void Data_Quit(void) {
    ========================================================================== */
 
 const uint8_t  LevSelCode_US[] = {btnUp, btnDn, btnL, btnR, 0, 0xFF};
-const uint32_t LevSelCode_US_len = 6;
+size_t        LevSelCode_US_len = 6;
 
 const uint8_t  LevSelCode_J[]  = {btnUp, btnDn, btnL, btnR, 0, 0xFF};
-const uint32_t LevSelCode_J_len = 6;
+size_t        LevSelCode_J_len = 6;
 
 const uint16_t LevSel_Ptrs[] = {
     id_GHZ_act1, id_GHZ_act2, id_GHZ_act3,
@@ -1342,7 +1340,7 @@ const uint16_t LevSel_Ptrs[] = {
     (uint16_t)(id_SS << 8), /* Special Stage (dummy) */
     0x8000                  /* Sound Test */
 };
-const uint32_t LevSel_Ptrs_len = sizeof(LevSel_Ptrs);
+size_t        LevSel_Ptrs_len = sizeof(LevSel_Ptrs);
 
 /* ============================================================================
    PARSER ASM — animaciones, mappings y DPLC
