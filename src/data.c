@@ -395,20 +395,22 @@ const uint8_t *Map_Newt;            size_t Map_Newt_len;
 const uint8_t *Map_Lamp;
 const uint8_t *Map_GRing;           size_t Map_GRing_len;
 const uint8_t *Map_Bonus;
-const uint8_t *Map_Jaws;
-const uint8_t *Map_Burro;
-const uint8_t *Map_Harp;
 const uint8_t *Map_Push;            size_t Map_Push_len;
 const uint8_t *Map_But;             size_t Map_But_len;
 const uint8_t *Map_MBlockLZ;        size_t Map_MBlockLZ_len;
-const uint8_t *Map_LBlock;
-const uint8_t *Map_Gar;
-const uint8_t *Map_LConv;
-const uint8_t *Map_Orb;
-const uint8_t *Map_Bub;
-const uint8_t *Map_WFall;
-const uint8_t *Map_Pole;
-const uint8_t *Map_Flap;
+const uint8_t *Map_LBlock;          size_t Map_LBlock_len;
+const uint8_t *Map_Gar;             size_t Map_Gar_len;
+const uint8_t *Map_LConv;           size_t Map_LConv_len;
+const uint8_t *Map_Orb;             size_t Map_Orb_len;
+const uint8_t *Map_Bub;             size_t Map_Bub_len;
+const uint8_t *Map_WFall;           size_t Map_WFall_len;
+const uint8_t *Map_Pole;            size_t Map_Pole_len;
+const uint8_t *Map_Flap;            size_t Map_Flap_len;
+const uint8_t *Map_Jaws;            size_t Map_Jaws_len;
+const uint8_t *Map_Burro;           size_t Map_Burro_len;
+const uint8_t *Map_Harp;            size_t Map_Harp_len;
+const uint8_t *Map_Surf;            size_t Map_Surf_len;
+const uint8_t *Map_UnusedFace;      size_t Map_UnusedFace_len;
 const uint8_t *Map_Brick;           size_t Map_Brick_len;
 const uint8_t *Map_Geyser;          size_t Map_Geyser_len;
 const uint8_t *Map_LWall;           size_t Map_LWall_len;
@@ -469,6 +471,14 @@ const uint8_t *Ani_Yad;             size_t Ani_Yad_len;
 const uint8_t *Ani_Bump;            size_t Ani_Bump_len;
 const uint8_t *Ani_Roll;            size_t Ani_Roll_len;
 const uint8_t *Ani_Splash;          size_t Ani_Splash_len;
+const uint8_t *Ani_Drown;           size_t Ani_Drown_len;
+const uint8_t *Ani_Flap;            size_t Ani_Flap_len;
+const uint8_t *Ani_Harp;            size_t Ani_Harp_len;
+const uint8_t *Ani_Jaws;            size_t Ani_Jaws_len;
+const uint8_t *Ani_Burro;           size_t Ani_Burro_len;
+const uint8_t *Ani_Orb;             size_t Ani_Orb_len;
+const uint8_t *Ani_Bub;             size_t Ani_Bub_len;
+const uint8_t *Ani_WFall;           size_t Ani_WFall_len;
 const uint8_t *SonicDynPLC;         size_t SonicDynPLC_len;
 
 /* ---------------- Layouts de nivel (Level_*) ---------------- */
@@ -528,6 +538,12 @@ const uint8_t *ObjPos_SBZ1;         size_t ObjPos_SBZ1_len;
 const uint8_t *ObjPos_SBZ2;         size_t ObjPos_SBZ2_len;
 const uint8_t *ObjPos_FZ;           size_t ObjPos_FZ_len;
 const uint8_t *ObjPos_End;          size_t ObjPos_End_len;
+const uint8_t *ObjPos_LZ1pf1;       size_t ObjPos_LZ1pf1_len;
+const uint8_t *ObjPos_LZ1pf2;       size_t ObjPos_LZ1pf2_len;
+const uint8_t *ObjPos_LZ2pf1;       size_t ObjPos_LZ2pf1_len;
+const uint8_t *ObjPos_LZ2pf2;       size_t ObjPos_LZ2pf2_len;
+const uint8_t *ObjPos_LZ3pf1;       size_t ObjPos_LZ3pf1_len;
+const uint8_t *ObjPos_LZ3pf2;       size_t ObjPos_LZ3pf2_len;
 
 /* ---------------- Colisión ---------------- */
 const uint8_t *Col_GHZ;             size_t Col_GHZ_len;
@@ -939,6 +955,20 @@ int Data_Init(void) {
     LOAD_MAP("_maps/Roller.asm", Map_Roll);
     LOAD_MAP("_maps/SYZ Boss Blocks.asm", Map_BossBlock);
     LOAD_MAP("_maps/Water Splash.asm", Map_Splash);
+    /* Labyrinth Zone */
+    LOAD_MAP("_maps/Pole that Breaks.asm", Map_Pole);
+    LOAD_MAP("_maps/Flapping Door.asm", Map_Flap);
+    LOAD_MAP("_maps/Harpoon.asm", Map_Harp);
+    LOAD_MAP("_maps/Water Surface.asm", Map_Surf);
+    LOAD_MAP("_maps/Jaws.asm", Map_Jaws);
+    LOAD_MAP("_maps/Burrobot.asm", Map_Burro);
+    LOAD_MAP("_maps/Orbinaut.asm", Map_Orb);
+    LOAD_MAP("_maps/LZ Blocks.asm", Map_LBlock);
+    LOAD_MAP("_maps/Gargoyle.asm", Map_Gar);
+    LOAD_MAP("_maps/LZ Conveyor.asm", Map_LConv);
+    LOAD_MAP("_maps/Bubbles and Drowning Countdown.asm", Map_Bub);
+    LOAD_MAP("_maps/Waterfalls.asm", Map_WFall);
+    LOAD_MAP("_maps/Unused Sonic Face.asm", Map_UnusedFace);
 
     /* ---------------- Animaciones ---------------- */
     LOAD_ANIM("_anim/Sonic.asm",                     Ani_Sonic);
@@ -966,6 +996,15 @@ int Data_Init(void) {
     LOAD_ANIM("_anim/Bumper.asm",                    Ani_Bump);
     LOAD_ANIM("_anim/Roller.asm",                    Ani_Roll);
     LOAD_ANIM("_anim/Water Splash.asm",              Ani_Splash);
+    /* Labyrinth Zone */
+    LOAD_ANIM("_anim/Drowning Countdown.asm",        Ani_Drown);
+    LOAD_ANIM("_anim/Flapping Door.asm",             Ani_Flap);
+    LOAD_ANIM("_anim/Harpoon.asm",                   Ani_Harp);
+    LOAD_ANIM("_anim/Jaws.asm",                      Ani_Jaws);
+    LOAD_ANIM("_anim/Burrobot.asm",                  Ani_Burro);
+    LOAD_ANIM("_anim/Orbinaut.asm",                  Ani_Orb);
+    LOAD_ANIM("_anim/Bubbles.asm",                   Ani_Bub);
+    LOAD_ANIM("_anim/Waterfalls.asm",                Ani_WFall);
     /* El DPLC de Sonic no es un anim script, pero comparte el parser:  */
     LOAD_ANIM("_maps/Sonic - Dynamic Gfx Script.asm", SonicDynPLC);
 
@@ -1026,6 +1065,13 @@ int Data_Init(void) {
     LOAD("objpos/sbz2.bin",     ObjPos_SBZ2);
     LOAD("objpos/fz.bin",       ObjPos_FZ);
     LOAD("objpos/ending.bin",   ObjPos_End);
+    /* Conveyor platform corner lists (63 LZ Conveyor) */
+    LOAD("objpos/platforms/lz1pf1.bin", ObjPos_LZ1pf1);
+    LOAD("objpos/platforms/lz1pf2.bin", ObjPos_LZ1pf2);
+    LOAD("objpos/platforms/lz2pf1.bin", ObjPos_LZ2pf1);
+    LOAD("objpos/platforms/lz2pf2.bin", ObjPos_LZ2pf2);
+    LOAD("objpos/platforms/lz3pf1.bin", ObjPos_LZ3pf1);
+    LOAD("objpos/platforms/lz3pf2.bin", ObjPos_LZ3pf2);
 
     /* ---------------- Colisión ---------------- */
     LOAD("collide/GHZ.bin",                     Col_GHZ);

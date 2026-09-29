@@ -9,10 +9,10 @@ updated together when an object is added (see the last section).
 | | |
 |---|---|
 | Object IDs in the game | 134 (`$01`-`$8C`; `$02`-`$07` do not exist) |
-| Ported | 72 |
-| Not ported | 62 |
+| Ported | 87 |
+| Not ported | 47 |
 | &nbsp;&nbsp;of those, unused by the game | 7 |
-| &nbsp;&nbsp;of those, actually reachable | 55 |
+| &nbsp;&nbsp;of those, actually reachable | 40 |
 | Disasm object source files | 110 (some hold two or three IDs) |
 
 Coverage per zone, counting only the objects the disassembly attributes to it:
@@ -22,9 +22,9 @@ Coverage per zone, counting only the objects the disassembly attributes to it:
 | Green Hill (GHZ) | 16 | 1 | 1 |
 | Marble (MZ) | 23 | 0 | 1 |
 | Spring Yard (SYZ) | 14 | 0 | — |
-| Star Light (SLZ) | 8 | 10 | — |
-| Labyrinth (LZ) | 5 | 15 | — |
-| Scrap Brain (SBZ) | 5 | 19 | — |
+| Star Light (SLZ) | 9 | 9 | — |
+| Labyrinth (LZ) | 19 | 0 | — |
+| Scrap Brain (SBZ) | 6 | 18 | — |
 | Final (FZ) | 0 | 3 | — |
 | Global (no zone named) | 27 | 10 | 5 |
 
@@ -40,7 +40,8 @@ Coverage per zone, counting only the objects the disassembly attributes to it:
   `src/objects.c`. *Not ported* means the ID falls through to
   `NullObject_Main`, which deletes the object on the spot, exactly like the ASM
   `NullObject`. Such objects are simply absent from the level, which is why the
-  missing ones are mostly the whole of Labyrinth, Scrap Brain and Star Light.
+  missing ones are almost all of Scrap Brain and Star Light, plus the SLZ and FZ
+  bosses and the end-of-game sequences.
 - **Routine** — the `obRoutine` dispatcher for the object inside
   `src/objects.c`, which is sorted by object ID.
 - **Zones** — from the disassembly file name and its header comment. *any* means
@@ -54,9 +55,9 @@ Coverage per zone, counting only the objects the disassembly attributes to it:
 | `$01` | `id_SonicPlayer` | Sonic the Hedgehog | any | **Ported** | `SonicPlayer_Main` | `01 Sonic.asm` |
 | `$08` | `id_Splash` | water splash (LZ) | LZ | **Ported** | — | `08 LZ Water Splash.asm` |
 | `$09` | `id_SonicSpecial` | Sonic the Hedgehog (in Special Stages) | any | **Ported** | `SonicSpecial_Main` | `09 Sonic in Special Stage.asm` |
-| `$0A` | `id_DrownCount` | drowning countdown numbers and small bubbles that float out of Sonic's mouth (LZ) | LZ | Not ported | — | `0A LZ Drowning Countdown.asm` |
-| `$0B` | `id_Pole` | breakable pole in wind tunnels that Sonic hangs onto (LZ) | LZ | Not ported | — | `0B LZ Pole that Breaks.asm` |
-| `$0C` | `id_FlapDoor` | flapping door before wind tunnels (LZ) | LZ | Not ported | — | `0C LZ Flapping Door.asm` |
+| `$0A` | `id_DrownCount` | drowning countdown numbers and small bubbles that float out of Sonic's mouth (LZ) | LZ | **Ported** | `DrownCount_Main` | `0A LZ Drowning Countdown.asm` |
+| `$0B` | `id_Pole` | breakable pole in wind tunnels that Sonic hangs onto (LZ) | LZ | **Ported** | `Pole_ObjectMain` | `0B LZ Pole that Breaks.asm` |
+| `$0C` | `id_FlapDoor` | flapping door before wind tunnels (LZ) | LZ | **Ported** | `FlapDoor_Main` | `0C LZ Flapping Door.asm` |
 | `$0D` | `id_Signpost` | signpost at the end of a level | any | **Ported** | `Signpost_Main` | `0D Signpost.asm` |
 | `$0E` | `id_TitleSonic` | Sonic on the title screen | any | **Ported** | `TitleSonic_Main` | `0E, 0F Title Screen - Sonic, Press Start, TM.asm` |
 | `$0F` | `id_PSBTM` | "PRESS START BUTTON", "TM", and masking sprites on title screen | any | **Ported** | `PSBTM_Main` | `0E, 0F Title Screen - Sonic, Press Start, TM.asm` |
@@ -66,12 +67,12 @@ Coverage per zone, counting only the objects the disassembly attributes to it:
 | `$13` | `id_LavaMaker` | lava ball maker (MZ, SLZ) | MZ, SLZ | **Ported** | `LavaMaker_Main` | `13, 14 MZ, SLZ Fire Balls and Maker.asm` |
 | `$14` | `id_LavaBall` | lava balls (MZ, SLZ) | MZ, SLZ | **Ported** | `LavaBall_Main` | `13, 14 MZ, SLZ Fire Balls and Maker.asm` |
 | `$15` | `id_SwingingPlatform` | swinging platforms (GHZ, MZ, SLZ) - spiked ball on a chain (SBZ) | GHZ, MZ, SLZ, SBZ | **Ported** | `SwingingPlatform_Main` | `15 Swinging Platforms.asm` |
-| `$16` | `id_Harpoon` | harpoon (LZ) | LZ | Not ported | — | `16 LZ Harpoon.asm` |
+| `$16` | `id_Harpoon` | harpoon (LZ) | LZ | **Ported** | `Harpoon_Main` | `16 LZ Harpoon.asm` |
 | `$17` | `id_Helix` | rotating helix of spikes on a horizontal pole (GHZ) | GHZ | **Ported** | `Helix_Main` | `17 GHZ Spiked Pole Helix.asm` |
 | `$18` | `id_BasicPlatform` | basic platforms (GHZ, SYZ, SLZ) | GHZ, SYZ, SLZ | **Ported** | `Platform_Main` | `18 Platforms.asm` |
 | `$19` | `id_Obj19` | blank (This was the infamous rolling GHZ ball level obstacle in the prototype) | GHZ | Not ported | — | `19 Unused - Blank.asm` |
 | `$1A` | `id_CollapseLedge` | collapsing ledge (GHZ) | GHZ | **Ported** | `CollapseLedge_Main` | `1A, 53 Collapsing Ledges and Floors.asm` |
-| `$1B` | `id_WaterSurface` | water surface (LZ) (Two objects are loaded, one for the left and one for the right side.) | LZ | Not ported | — | `1B LZ Water Surface.asm` |
+| `$1B` | `id_WaterSurface` | water surface (LZ) (Two objects are loaded, one for the left and one for the right side.) | LZ | **Ported** | `WaterSurface_Main` | `1B LZ Water Surface.asm` |
 | `$1C` | `id_Scenery` | scenery (GHZ bridge stump, SLZ lava thrower) | GHZ, SYZ, SLZ | **Ported** | `Scenery_Main` | `1C GHZ, SYZ Scenery.asm` |
 | `$1D` | `id_MagicSwitch` | switch that activates when Sonic touches it (this is not used anywhere in the game) | any | Not ported | — | `1D Unused - Switch.asm` |
 | `$1E` | `id_BallHog` | Ball Hog enemy (SBZ) | SBZ | Not ported | — | `1E, 20 Badnik - Ball Hog and Cannonball.asm` |
@@ -88,8 +89,8 @@ Coverage per zone, counting only the objects the disassembly attributes to it:
 | `$29` | `id_Points` | points that appear from destroyed badniks and other places | any | **Ported** | `Points_Main` | `28, 29 Animals and Points.asm` |
 | `$2A` | `id_AutoDoor` | small vertical door (SBZ) | SBZ | Not ported | — | `2A SBZ Small Door.asm` |
 | `$2B` | `id_Chopper` | Chopper enemy (GHZ) | GHZ | **Ported** | `Chopper_Main` | `2B Badnik - Chopper.asm` |
-| `$2C` | `id_Jaws` | Jaws enemy (LZ) | LZ | Not ported | — | `2C Badnik - Jaws.asm` |
-| `$2D` | `id_Burrobot` | Burrobot enemy (LZ) | LZ | Not ported | — | `2D Badnik - Burrobot.asm` |
+| `$2C` | `id_Jaws` | Jaws enemy (LZ) | LZ | **Ported** | `Jaws_ObjectMain` | `2C Badnik - Jaws.asm` |
+| `$2D` | `id_Burrobot` | Burrobot enemy (LZ) | LZ | **Ported** | `Burrobot_Main` | `2D Badnik - Burrobot.asm` |
 | `$2E` | `id_PowerUp` | contents of monitors | any | **Ported** | `PowerUp_Main` | `26, 2E Monitors and Power-Ups.asm` |
 | `$2F` | `id_LargeGrass` | large grass-covered platforms (MZ) | MZ | **Ported** | `LargeGrass_Main` | `2F, 35 MZ Large Grassy Platforms and Burning Grass.asm` |
 | `$30` | `id_GlassBlock` | large green glass pillars (MZ) | MZ | **Ported** | `GlassBlock_Main` | `30 MZ Large Green Glass Blocks.asm` |
@@ -140,12 +141,12 @@ Coverage per zone, counting only the objects the disassembly attributes to it:
 | `$5D` | `id_Fan` | fans (SLZ) | SLZ | Not ported | — | `5D SLZ Fan.asm` |
 | `$5E` | `id_Seesaw` | seesaws (SLZ) | SLZ | Not ported | — | `5E SLZ Seesaw.asm` |
 | `$5F` | `id_Bomb` | Walking Bomb enemy (SLZ, SBZ) | SLZ, SBZ | Not ported | — | `5F Badnik - Walking Bomb.asm` |
-| `$60` | `id_Orbinaut` | Orbinaut enemy (LZ, SLZ, SBZ) | SLZ, LZ, SBZ | Not ported | — | `60 Badnik - Orbinaut.asm` |
-| `$61` | `id_LabyrinthBlock` | multi-variant blocks (LZ) | LZ | Not ported | — | `61 LZ Blocks.asm` |
-| `$62` | `id_Gargoyle` | gargoyle head that spits fireballs (LZ) | LZ | Not ported | — | `62 LZ Gargoyle.asm` |
-| `$63` | `id_LabyrinthConvey` | platforms on a conveyor belt (LZ) | LZ | Not ported | — | `63 LZ Conveyor.asm` |
-| `$64` | `id_Bubble` | air bubbles (LZ) | LZ | Not ported | — | `64 LZ Air Bubbles.asm` |
-| `$65` | `id_Waterfall` | decorative waterfall objects (LZ) | LZ | Not ported | — | `65 LZ Waterfalls.asm` |
+| `$60` | `id_Orbinaut` | Orbinaut enemy (LZ, SLZ, SBZ) | SLZ, LZ, SBZ | **Ported** | `Orbinaut_Main` | `60 Badnik - Orbinaut.asm` |
+| `$61` | `id_LabyrinthBlock` | multi-variant blocks (LZ) | LZ | **Ported** | `LabyrinthBlock_Main` | `61 LZ Blocks.asm` |
+| `$62` | `id_Gargoyle` | gargoyle head that spits fireballs (LZ) | LZ | **Ported** | `Gargoyle_Main` | `62 LZ Gargoyle.asm` |
+| `$63` | `id_LabyrinthConvey` | platforms on a conveyor belt (LZ) | LZ | **Ported** | `LabyrinthConvey_Main` | `63 LZ Conveyor.asm` |
+| `$64` | `id_Bubble` | air bubbles (LZ) | LZ | **Ported** | `Bubble_Main` | `64 LZ Air Bubbles.asm` |
+| `$65` | `id_Waterfall` | decorative waterfall objects (LZ) | LZ | **Ported** | `Waterfall_Main` | `65 LZ Waterfalls.asm` |
 | `$66` | `id_Junction` | rotating disc junction that grabs Sonic (SBZ) | SBZ | Not ported | — | `66 SBZ Rotating Junction.asm` |
 | `$67` | `id_RunningDisc` | disc that Sonic runs around (SBZ act 2) | SBZ | Not ported | — | `67 SBZ Running Disc.asm` |
 | `$68` | `id_Conveyor` | conveyor belts (SBZ) | SBZ | Not ported | — | `68 SBZ Conveyor Belt.asm` |
@@ -163,7 +164,7 @@ Coverage per zone, counting only the objects the disassembly attributes to it:
 | `$74` | `id_BossFire` | lava that Eggman drops (MZ) | MZ | **Ported** | `BossFire_Main` | `73, 74 Boss - MZ Main and Fire.asm` |
 | `$75` | `id_BossSpringYard` | Eggman (SYZ) | SYZ | **Ported** | `BossSpringYard_Main` | `75, 76 Boss - SYZ Main and Blocks.asm` |
 | `$76` | `id_BossBlock` | blocks that Eggman picks up (SYZ) | SYZ | **Ported** | `BossBlock_Main` | `75, 76 Boss - SYZ Main and Blocks.asm` |
-| `$77` | `id_BossLabyrinth` | Eggman (LZ) | LZ | Not ported | — | `77 Boss - LZ Main.asm` |
+| `$77` | `id_BossLabyrinth` | Eggman (LZ) | LZ | **Ported** | `BossLabyrinth_ObjectMain` | `77 Boss - LZ Main.asm` |
 | `$78` | `id_Caterkiller` | Caterkiller enemy (MZ, SBZ) | MZ, SBZ | **Ported** | `Caterkiller_Main` | `78 Badnik - Caterkiller.asm` |
 | `$79` | `id_Lamppost` | lamppost | any | Not ported | — | `79 Lamppost.asm` |
 | `$7A` | `id_BossStarLight` | Eggman (SLZ) | SLZ | Not ported | — | `7A, 7B Boss - SLZ Main and Spike Balls.asm` |
@@ -198,7 +199,7 @@ them.
 |---|---|---|---|
 | `$49` | `id_WaterSound` | invisible waterfall sound effect trigger (GHZ) | `49 GHZ Waterfall Sound.asm` |
 
-### Star Light (SLZ) — 10 pending
+### Star Light (SLZ) — 9 pending
 
 | ID | `id_*` | Description | Disasm source |
 |---|---|---|---|
@@ -209,30 +210,10 @@ them.
 | `$5D` | `id_Fan` | fans (SLZ) | `5D SLZ Fan.asm` |
 | `$5E` | `id_Seesaw` | seesaws (SLZ) | `5E SLZ Seesaw.asm` |
 | `$5F` | `id_Bomb` | Walking Bomb enemy (SLZ, SBZ) | `5F Badnik - Walking Bomb.asm` |
-| `$60` | `id_Orbinaut` | Orbinaut enemy (LZ, SLZ, SBZ) | `60 Badnik - Orbinaut.asm` |
 | `$7A` | `id_BossStarLight` | Eggman (SLZ) | `7A, 7B Boss - SLZ Main and Spike Balls.asm` |
 | `$7B` | `id_BossSpikeball` | exploding spike balls that Eggman drops (SLZ) | `7A, 7B Boss - SLZ Main and Spike Balls.asm` |
 
-### Labyrinth (LZ) — 15 pending
-
-| ID | `id_*` | Description | Disasm source |
-|---|---|---|---|
-| `$0A` | `id_DrownCount` | drowning countdown numbers and small bubbles that float out of Sonic's mouth (LZ) | `0A LZ Drowning Countdown.asm` |
-| `$0B` | `id_Pole` | breakable pole in wind tunnels that Sonic hangs onto (LZ) | `0B LZ Pole that Breaks.asm` |
-| `$0C` | `id_FlapDoor` | flapping door before wind tunnels (LZ) | `0C LZ Flapping Door.asm` |
-| `$16` | `id_Harpoon` | harpoon (LZ) | `16 LZ Harpoon.asm` |
-| `$1B` | `id_WaterSurface` | water surface (LZ) (Two objects are loaded, one for the left and one for the right side.) | `1B LZ Water Surface.asm` |
-| `$2C` | `id_Jaws` | Jaws enemy (LZ) | `2C Badnik - Jaws.asm` |
-| `$2D` | `id_Burrobot` | Burrobot enemy (LZ) | `2D Badnik - Burrobot.asm` |
-| `$60` | `id_Orbinaut` | Orbinaut enemy (LZ, SLZ, SBZ) | `60 Badnik - Orbinaut.asm` |
-| `$61` | `id_LabyrinthBlock` | multi-variant blocks (LZ) | `61 LZ Blocks.asm` |
-| `$62` | `id_Gargoyle` | gargoyle head that spits fireballs (LZ) | `62 LZ Gargoyle.asm` |
-| `$63` | `id_LabyrinthConvey` | platforms on a conveyor belt (LZ) | `63 LZ Conveyor.asm` |
-| `$64` | `id_Bubble` | air bubbles (LZ) | `64 LZ Air Bubbles.asm` |
-| `$65` | `id_Waterfall` | decorative waterfall objects (LZ) | `65 LZ Waterfalls.asm` |
-| `$77` | `id_BossLabyrinth` | Eggman (LZ) | `77 Boss - LZ Main.asm` |
-
-### Scrap Brain (SBZ) — 19 pending
+### Scrap Brain (SBZ) — 18 pending
 
 | ID | `id_*` | Description | Disasm source |
 |---|---|---|---|
@@ -240,7 +221,6 @@ them.
 | `$20` | `id_Cannonball` | cannonball that Ball Hog throws (SBZ) | `1E, 20 Badnik - Ball Hog and Cannonball.asm` |
 | `$2A` | `id_AutoDoor` | small vertical door (SBZ) | `2A SBZ Small Door.asm` |
 | `$5F` | `id_Bomb` | Walking Bomb enemy (SLZ, SBZ) | `5F Badnik - Walking Bomb.asm` |
-| `$60` | `id_Orbinaut` | Orbinaut enemy (LZ, SLZ, SBZ) | `60 Badnik - Orbinaut.asm` |
 | `$66` | `id_Junction` | rotating disc junction that grabs Sonic (SBZ) | `66 SBZ Rotating Junction.asm` |
 | `$67` | `id_RunningDisc` | disc that Sonic runs around (SBZ act 2) | `67 SBZ Running Disc.asm` |
 | `$68` | `id_Conveyor` | conveyor belts (SBZ) | `68 SBZ Conveyor Belt.asm` |

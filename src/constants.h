@@ -963,6 +963,41 @@ enum {
 #define id_EndEggman                      0x8B
 #define id_TryChaos                       0x8C
 
+/* Sonic animation IDs (from disasm "_anim/Sonic.asm", sonani macro).
+   NOTE: these share the id_* namespace with object IDs but are a distinct
+   numbering used by obAnim / Sonic_ResetOnFloor. */
+#define id_SonStand                        0x00
+#define id_SonWalk                         0x01
+#define id_SonRun                          0x02
+#define id_SonRoll                         0x03
+#define id_SonPush                         0x04
+#define id_SonWait                         0x05
+#define id_SonBalance                      0x06
+#define id_SonLookUp                       0x07
+#define id_SonDuck                         0x08
+#define id_SonWarp1                        0x09
+#define id_SonWarp2                        0x0A
+#define id_SonWarp3                        0x0B
+#define id_SonWarp4                        0x0C
+#define id_SonStop                         0x0D
+#define id_SonFloat1                       0x0E
+#define id_SonFloat2                       0x0F
+#define id_SonSpring                       0x10
+#define id_SonHang                         0x11
+#define id_SonLeap1                        0x12
+#define id_SonLeap2                        0x13
+#define id_SonSurf                         0x14
+#define id_SonGetAir                       0x15
+#define id_SonBurnt                        0x16
+#define id_SonDrown                        0x17
+#define id_SonDeath                        0x18
+#define id_SonShrink                       0x19
+#define id_SonHurt                         0x1A
+#define id_SonSlide                        0x1B
+#define id_SonNull                         0x1C
+#define id_SonFloat3                       0x1D
+#define id_SonFloat4                       0x1E
+
 /* Level select */
 #define levsel_sndtest_row                0x14
 #define levsel_line_count                 21

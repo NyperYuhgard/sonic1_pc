@@ -125,6 +125,21 @@ static void Roller_Main(void *obj);
 static void BossSpringYard_Main(void *obj);
 static void BossBlock_Main(void *obj);
 static void WaterSplash_Main(void *obj);
+/* Labyrinth Zone objects */
+static void DrownCount_Main(void *obj);
+static void Pole_ObjectMain(void *obj);
+static void FlapDoor_Main(void *obj);
+static void Harpoon_Main(void *obj);
+static void WaterSurface_Main(void *obj);
+static void Jaws_ObjectMain(void *obj);
+static void Burrobot_Main(void *obj);
+static void Orbinaut_Main(void *obj);
+static void LabyrinthBlock_Main(void *obj);
+static void Gargoyle_Main(void *obj);
+static void LabyrinthConvey_Main(void *obj);
+static void Bubble_Main(void *obj);
+static void Waterfall_Main(void *obj);
+static void BossLabyrinth_ObjectMain(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -165,6 +180,9 @@ static const ObjEntry obj_map[] = {
     { id_SonicPlayer,      SonicPlayer_Main,      },  /* $01  01 Sonic.asm */
     { id_Splash,           WaterSplash_Main,      },  /* $08  08 LZ Water Splash.asm */
     { id_SonicSpecial,     SonicSpecial_Main,     },  /* $09  09 Sonic in Special Stage.asm */
+    { id_DrownCount,       DrownCount_Main,       },  /* $0A  0A LZ Drowning Countdown.asm */
+    { id_Pole,             Pole_ObjectMain,       },  /* $0B  0B LZ Pole that Breaks.asm */
+    { id_FlapDoor,         FlapDoor_Main,         },  /* $0C  0C LZ Flapping Door.asm */
     { id_Signpost,         Signpost_Main,         },  /* $0D  0D Signpost.asm */
     { id_TitleSonic,       TitleSonic_Main,       },  /* $0E  0E,0F Title Screen - Sonic, Press Start, TM.asm */
     { id_PSBTM,            PSBTM_Main,            },  /* $0F  0E,0F Title Screen - Sonic, Press Start, TM.asm */
@@ -174,9 +192,11 @@ static const ObjEntry obj_map[] = {
     { id_LavaMaker,        LavaMaker_Main,        },  /* $13  13,14 MZ, SLZ Fire Balls and Maker.asm */
     { id_LavaBall,         LavaBall_Main,         },  /* $14  13,14 MZ, SLZ Fire Balls and Maker.asm */
     { id_SwingingPlatform, SwingingPlatform_Main, },  /* $15  15 Swinging Platforms.asm */
+    { id_Harpoon,          Harpoon_Main,          },  /* $16  16 LZ Harpoon.asm */
     { id_Helix,            Helix_Main,            },  /* $17  17 GHZ Spiked Pole Helix.asm */
     { id_BasicPlatform,    Platform_Main,         },  /* $18  18 Platforms.asm */
     { id_CollapseLedge,    CollapseLedge_Main,    },  /* $1A  1A,53 Collapsing Ledges and Floors.asm */
+    { id_WaterSurface,     WaterSurface_Main,     },  /* $1B  1B LZ Water Surface.asm */
     { id_Scenery,          Scenery_Main,          },  /* $1C  1C GHZ, SYZ Scenery.asm */
     /* $1F-$2F badniks, rings, monitors, power-ups and FX -------------------------- */
     { id_Crabmeat,         Crabmeat_Main,         },  /* $1F  1F Badnik - Crabmeat.asm */
@@ -189,6 +209,8 @@ static const ObjEntry obj_map[] = {
     { id_Animals,          Animals_Main,          },  /* $28  28,29 Animals and Points.asm */
     { id_Points,           Points_Main,           },  /* $29  28,29 Animals and Points.asm */
     { id_Chopper,          Chopper_Main,          },  /* $2B  2B Badnik - Chopper.asm */
+    { id_Jaws,             Jaws_ObjectMain,       },  /* $2C  2C Badnik - Jaws.asm */
+    { id_Burrobot,         Burrobot_Main,         },  /* $2D  2D Badnik - Burrobot.asm */
     { id_PowerUp,          PowerUp_Main,          },  /* $2E  26,2E Monitors and Power-Ups.asm */
     { id_LargeGrass,       LargeGrass_Main,       },  /* $2F  2F,35 MZ Large Grassy Platforms and Burning Grass.asm */
     /* $30-$4F platforms, spikes, cards and Green Hill objects --------------------- */
@@ -231,10 +253,17 @@ static const ObjEntry obj_map[] = {
     { id_SpikeBall,        SpikeBall_Main,        },  /* $57  57 SYZ, LZ Spiked Ball and Chain.asm */
     { id_BigSpikeBall,     BigSpikeBall_Main,     },  /* $58  58 SYZ Big Spiked Ball.asm */
     /* $60-$8C bosses, Special Stage and end screens ------------------------------- */
+    { id_Orbinaut,         Orbinaut_Main,         },  /* $60  60 Badnik - Orbinaut.asm */
+    { id_LabyrinthBlock,   LabyrinthBlock_Main,   },  /* $61  61 LZ Blocks.asm */
+    { id_Gargoyle,         Gargoyle_Main,         },  /* $62  62 LZ Gargoyle.asm */
+    { id_LabyrinthConvey,  LabyrinthConvey_Main,  },  /* $63  63 LZ Conveyor.asm */
+    { id_Bubble,           Bubble_Main,           },  /* $64  64 LZ Air Bubbles.asm */
+    { id_Waterfall,        Waterfall_Main,        },  /* $65  65 LZ Waterfalls.asm */
     { id_BossMarble,       BossMarble_Main,       },  /* $73  73,74 Boss - MZ Main and Fire.asm */
     { id_BossFire,         BossFire_Main,         },  /* $74  73,74 Boss - MZ Main and Fire.asm */
     { id_BossSpringYard,   BossSpringYard_Main,   },  /* $75  75,76 Boss - SYZ Main and Blocks.asm */
     { id_BossBlock,        BossBlock_Main,        },  /* $76  75,76 Boss - SYZ Main and Blocks.asm */
+    { id_BossLabyrinth,    BossLabyrinth_ObjectMain,},  /* $77  77 Boss - LZ Main.asm */
     { id_Caterkiller,      Caterkiller_Main,      },  /* $78  78 Badnik - Caterkiller.asm */
     { id_RingFlash,        RingFlash_Main,        },  /* $7C  4B,7C Giant Ring and Flash.asm */
     { id_SSResult,         SSResult_Main,         },  /* $7E  7E,7F Special Stage Results and Chaos Emeralds.asm */
@@ -17504,5 +17533,2379 @@ static void CreditsText_Main(void *obj) {
         default: /* Cred_Display: routine 2 - just display credits sprite */
             DisplaySprite(obj);
             break;
+    }
+}
+
+/* ===========================================================================
+   Part 5  Labyrinth Zone objects ($0A-$0C, $16, $1B, $2C, $2D, $60-$65, $77)
+   ---------------------------------------------------------------------------
+   Ported 1:1 from the REV01 disassembly (FixBugs=0) of:
+
+     disasm/_incObj/0A LZ Drowning Countdown.asm
+     disasm/_incObj/0B LZ Pole that Breaks.asm
+     disasm/_incObj/0C LZ Flapping Door.asm
+     disasm/_incObj/16 LZ Harpoon.asm
+     disasm/_incObj/1B LZ Water Surface.asm
+     disasm/_incObj/2C Badnik - Jaws.asm
+     disasm/_incObj/2D Badnik - Burrobot.asm
+     disasm/_incObj/60 Badnik - Orbinaut.asm
+     disasm/_incObj/61 LZ Blocks.asm
+     disasm/_incObj/62 LZ Gargoyle.asm
+     disasm/_incObj/63 LZ Conveyor.asm
+     disasm/_incObj/64 LZ Air Bubbles.asm
+     disasm/_incObj/65 LZ Waterfalls.asm
+     disasm/_incObj/77 Boss - LZ Main.asm
+
+   plus the shared subroutines they need:
+     disasm/_incObj/sub ChkObjectVisible.asm
+     disasm/_incObj/Sonic Collision.asm (ObjHitCeiling)
+     disasm/_incObj/sub DeleteObject.asm (DeleteChild)
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Shared Labyrinth Zone helpers
+   --------------------------------------------------------------------------- */
+
+/* ObjHitCeiling — disasm/_incObj/Sonic Collision.asm 450-471.
+   Local copy of the ceiling probe; returns d1 (negative = ceiling hit). */
+static int16_t LZ_ObjHitCeiling(uint8_t *o) {
+    int16_t d1;
+    int16_t y = (int16_t)((obY(o) - (int8_t)obHeight(o)) ^ 0xF);
+    FindFloor(y, obX(o), 0x0E, 0x1000, -0x10, &v_anglebuffer, o, &d1);
+    return d1;
+}
+
+/* ChkObjectVisible — disasm/_incObj/sub ChkObjectVisible.asm 9-29.
+   Returns 0 when the object is on screen, 1 when it is off screen (the
+   routine's d0, which callers test with `bne`). */
+static int LZ_ChkObjectVisible(uint8_t *o) {
+    int16_t d0 = (int16_t)(obX(o) - (int16_t)RAM_WORD(v_screenposx));
+    if (d0 < 0) return 1;                                 /* bmi.s .offscreen */
+    if (d0 >= 320) return 1;                               /* cmpi.w #320,d0 / bge */
+    int16_t d1 = (int16_t)(obY(o) - (int16_t)RAM_WORD(v_screenposy));
+    if (d1 < 0) return 1;
+    if (d1 >= 224) return 1;
+    return 0;                                             /* moveq #0,d0 */
+}
+
+/* Drown_WobbleData — disasm/_incObj/0A LZ Drowning Countdown.asm 178-201.
+   Revision 1 repeats the 64-byte ripple table twice, so this is the 128-byte
+   REV01 form (the first "4" of the third line already became a "3"). */
+static const int8_t Drown_WobbleData[128] = {
+    0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2,
+    2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2,
+    2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+    0, -1, -1, -1, -1, -1, -2, -2, -2, -2, -2, -3, -3, -3, -3, -3,
+    -3, -3, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,
+    -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -3,
+    -3, -3, -3, -3, -3, -3, -2, -2, -2, -2, -2, -1, -1, -1, -1, -1,
+};
+
+/* ---------------------------------------------------------------------------
+   Object $0A - LZ Drowning Countdown
+   disasm/_incObj/0A LZ Drowning Countdown.asm
+   --------------------------------------------------------------------------- */
+#define drown_restarttime(o)  (*(int16_t *)((uint8_t *)(o) + 0x2C)) /* objoff_2C */
+#define drown_origX(o)        (*(int16_t *)((uint8_t *)(o) + 0x30)) /* objoff_30 */
+#define drown_displaytime(o)  (*(uint8_t *)((uint8_t *)(o) + 0x32)) /* objoff_32 */
+#define drown_type(o)         (*(uint8_t *)((uint8_t *)(o) + 0x33)) /* objoff_33 */
+#define drown_extrabubbles(o) (*(uint8_t *)((uint8_t *)(o) + 0x34)) /* objoff_34 */
+#define drown_extrabubflag(o) (*(int16_t *)((uint8_t *)(o) + 0x36)) /* objoff_36 */
+#define drown_numtime(o)      (*(int16_t *)((uint8_t *)(o) + 0x38)) /* objoff_38 */
+#define drown_delaytime(o)    (*(int16_t *)((uint8_t *)(o) + 0x3A)) /* objoff_3A */
+
+static void Drown_Main(uint8_t *o);
+static void Drown_Animate(uint8_t *o);
+static void Drown_ChkWater(uint8_t *o);
+static void Drown_Display(uint8_t *o);
+static void Drown_Countdown(uint8_t *o);
+static void Drown_AirLeft(uint8_t *o);
+static void Drown_ShowNumber(uint8_t *o);
+static void Drown_CheckSpawnExtraBubbles(uint8_t *o);
+static void Drown_SpawnExtraBubbles(uint8_t *o);
+static void Drown_DecrementExtraBubbles(uint8_t *o);
+
+/* Drown_ShowNumber — routine shared by Drown_ChkWater.wobble and
+   Drown_Display; converts a floating number bubble into the screen-fixed
+   countdown bubble and hands it over to Drown_AirLeft. */
+static void Drown_ShowNumber(uint8_t *o) {
+    if (drown_numtime(o) == 0) return;              /* tst.w / beq.s .return */
+    drown_numtime(o) = (int16_t)(drown_numtime(o) - 1);
+    if (drown_numtime(o) != 0) return;             /* bne.s .return */
+    if (obAnim(o) >= 7) return;                     /* cmpi.b #7 / bhs.s .return */
+
+    drown_numtime(o) = 15;                          /* move.w #15 */
+    obVelY(o) = 0;
+    obRender(o) = sprite_rendered;                  /* screen-fixed positioning */
+
+    int16_t d0 = (int16_t)(obX(o) - (int16_t)RAM_WORD(v_screenposx));
+    d0 = (int16_t)(d0 + 0x80);
+    obX(o) = d0;
+    d0 = (int16_t)(obY(o) - (int16_t)RAM_WORD(v_screenposy));
+    d0 = (int16_t)(d0 + 0x80);
+    obScreenY(o) = d0;                              /* same field as obSubpixelX */
+
+    obRoutine(o) = 0x0C;                            /* -> Drown_AirLeft */
+}
+
+/* Drown_Main — routine 0 */
+static void Drown_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                       /* -> Drown_Animate */
+    obMap(o) = (uint32_t)(uintptr_t)Map_Bub;
+    obGfx(o) = (uint16_t)(ArtTile_LZ_Bubbles | Tile_Prio);
+    obRender(o) = (uint8_t)(sprite_rendered | sprite_cam_field);
+    obActWid(o) = 32 / 2;
+    obPriority(o) = 1;
+
+    uint16_t d0 = obSubtype(o);
+    if (!(d0 & 0x80)) {                                       /* bpl.s .numberBubble */
+        /* .numberBubble: a plain bubble rising out of Sonic's mouth */
+        obAnim(o) = (uint8_t)d0;
+        drown_origX(o) = obX(o);
+        obVelY(o) = (int16_t)-0x88;
+        Drown_Animate(o);                                    /* fall through */
+        return;
+    }
+
+    obRoutine(o) = 0x0A;                             /* -> Drown_Countdown */
+    /* FixBugs=0: the countdown object is left pointing at the unused Sonic
+       face mappings (it is invisible anyway; only the numbers are shown). */
+    obMap(o) = (uint32_t)(uintptr_t)Map_UnusedFace;
+    obGfx(o) = (uint16_t)ArtTile_LZ_UnusedFace;
+    d0 = (uint16_t)(d0 & 0x7F);
+    drown_type(o) = (uint8_t)d0;
+    Drown_Countdown(o);                                      /* bra.w */
+}
+
+/* Drown_Animate — routine 2 */
+static void Drown_Animate(uint8_t *o) {
+    AnimateSprite(o, Ani_Drown);      /* afRoutine advances to Drown_ChkWater */
+}
+
+/* Drown_ChkWater — routine 4 */
+static void Drown_ChkWater(uint8_t *o) {
+    if ((uint16_t)v_waterpos1 < (uint16_t)obY(o)) {           /* blo.s .wobble */
+        /* .wobble */
+        if (f_wtunnelmode) drown_origX(o) = (int16_t)(drown_origX(o) + 4);
+
+        uint8_t d0 = obAngle(o);
+        obAngle(o) = (uint8_t)(d0 + 1);
+        d0 = (uint8_t)(d0 & 0x7F);
+        d0 = (uint8_t)Drown_WobbleData[d0];
+        int16_t wx = (int16_t)(int16_t)(int8_t)d0;
+        wx = (int16_t)(wx + drown_origX(o));
+        obX(o) = wx;
+
+        Drown_ShowNumber(o);
+
+        SpeedToPos(o);
+        if (!(obRender(o) & 0x80)) {                          /* bpl.s .delete */
+            DeleteObject(o);
+            return;
+        }
+        DisplaySprite(o);
+        return;
+    }
+
+    obRoutine(o) = 6;                                         /* -> Drown_Display */
+    obAnim(o) = (uint8_t)(obAnim(o) + 7);
+    /* FixBugs=0: `cmpi.b #$D,obAnim` is dead — beq and bra share the target. */
+    Drown_Display(o);
+}
+
+/* Drown_Display — routine 6 and routine $E */
+static void Drown_Display(uint8_t *o) {
+    Drown_ShowNumber(o);
+    AnimateSprite(o, Ani_Drown);
+    DisplaySprite(o);
+}
+
+/* Drown_AirLeft — routine $C */
+static void Drown_AirLeft(uint8_t *o) {
+    if ((uint16_t)v_air > 12) {                               /* bhi.s .delete */
+        DeleteObject(o);
+        return;
+    }
+
+    drown_numtime(o) = (int16_t)(drown_numtime(o) - 1);
+    if (drown_numtime(o) != 0) {                              /* bne.s .display */
+        AnimateSprite(o, Ani_Drown);
+        if (!(obRender(o) & 0x80)) { DeleteObject(o); return; }
+        DisplaySprite(o);
+        return;
+    }
+
+    obRoutine(o) = 0x0E;                             /* -> Drown_Display (2nd) */
+    obAnim(o) = (uint8_t)(obAnim(o) + 7);
+    Drown_Display(o);
+}
+
+/* Drown_DecrementExtraBubbles — shared tail of the bubble-spawn sequence. */
+static void Drown_DecrementExtraBubbles(uint8_t *o) {
+    drown_extrabubbles(o) = (uint8_t)(drown_extrabubbles(o) - 1);
+    if (drown_extrabubbles(o) >= 0) return;                   /* bpl.s .return */
+    drown_extrabubflag(o) = 0;                                /* clr.w */
+}
+
+/* Drown_CheckSpawnExtraBubbles — decide whether a new extra bubble is due. */
+static void Drown_CheckSpawnExtraBubbles(uint8_t *o) {
+    if (drown_extrabubflag(o) == 0) return;                   /* beq.w .return */
+    drown_delaytime(o) = (int16_t)(drown_delaytime(o) - 1);
+    if (drown_delaytime(o) >= 0) return;                      /* bpl.w .return */
+    Drown_SpawnExtraBubbles(o);                               /* fall through */
+}
+
+/* Drown_Countdown — routine $A: the actual air countdown / drowning logic. */
+static void Drown_Countdown(uint8_t *o) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+
+    if (drown_restarttime(o) != 0) {                          /* bne .sonicIsDrowning */
+        /* .sonicIsDrowning */
+        drown_restarttime(o) = (int16_t)(drown_restarttime(o) - 1);
+        if (drown_restarttime(o) == 0) {
+            obRoutine(a1) = 6;                                /* -> Sonic_Death */
+            return;
+        }
+        /* .sinking */
+        SpeedToPos(a1);
+        obVelY(a1) = (int16_t)(obVelY(a1) + 0x10);
+        Drown_CheckSpawnExtraBubbles(o);
+        return;
+    }
+
+    if (obRoutine(a1) >= 6) return;                           /* bhs.w .return */
+    if (!(obStatus(a1) & (1 << 6))) return;                   /* beq.w .return */
+
+    drown_numtime(o) = (int16_t)(drown_numtime(o) - 1);
+    if (drown_numtime(o) >= 0) {                              /* bpl */
+        Drown_CheckSpawnExtraBubbles(o);
+        return;
+    }
+    drown_numtime(o) = 60 - 1;
+
+    drown_extrabubflag(o) = 1;
+    uint16_t r = RandomNumber();
+    drown_extrabubbles(o) = (uint8_t)(r & 1);
+
+    int16_t air = v_air;
+    int warn = 0;
+    if (air == 25 || air == 20 || air == 15) warn = 1;
+    if ((uint16_t)air > 12) {
+        /* .reduceAir */
+    } else if (air == 12) {
+        Sound_Queue(bgm_Drowning, true);             /* jsr (QueueSound1).l */
+        /* .countdown */
+        drown_displaytime(o) = (uint8_t)(drown_displaytime(o) - 1);
+        if ((int8_t)drown_displaytime(o) < 0) {
+            drown_displaytime(o) = drown_type(o);
+            drown_extrabubflag(o) = (int16_t)(drown_extrabubflag(o) | 0x8000);
+        }
+    } else {
+        /* .countdown */
+        drown_displaytime(o) = (uint8_t)(drown_displaytime(o) - 1);
+        if ((int8_t)drown_displaytime(o) < 0) {
+            drown_displaytime(o) = drown_type(o);
+            drown_extrabubflag(o) = (int16_t)(drown_extrabubflag(o) | 0x8000);
+        }
+    }
+    if (warn) Sound_Queue(sfx_Warning, false);        /* .warningSound */
+
+    /* .reduceAir: subq.w #1,(v_air).w */
+    {
+        int16_t before = v_air;
+        v_air = (int16_t)(before - 1);
+        if (before >= 1) {                           /* bhs .gotoSpawnExtraBubbles */
+            Drown_SpawnExtraBubbles(o);
+            return;
+        }
+    }
+
+    /* Sonic drowns here */
+    ResumeMusic();
+    f_playerctrl = 0x81;
+    Sound_Queue(sfx_Drown, false);
+    drown_extrabubbles(o) = 10;
+    drown_extrabubflag(o) = 1;
+    drown_restarttime(o) = 2 * 60;
+
+    Sonic_ResetOnFloor(a1);
+    obAnim(a1) = id_SonDrown;                 /* id_Drown */
+    obStatus(a1) = (uint8_t)(obStatus(a1) | 0x02);
+    obGfx(a1) = (uint16_t)(obGfx(a1) | 0x8000);  /* bset #7 on the word */
+    obVelY(a1) = 0;
+    obVelX(a1) = 0;
+    obInertia(a1) = 0;
+    f_nobgscroll = 1;
+    /* FixBugs=0 omits `move.b #2,obRoutine(a1)` and `clr.b (f_timecount).w`. */
+    return;
+}
+
+/* Drown_SpawnExtraBubbles — spawn one bubble, then the shared tail. */
+static void Drown_SpawnExtraBubbles(uint8_t *o) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+
+    uint16_t r = RandomNumber();
+    r = (uint16_t)(r & 0xF);
+    drown_delaytime(o) = (int16_t)r;
+
+    uint8_t *a2 = (uint8_t *)FindFreeObj();
+    if (!a2) return;                                          /* bne.w .return */
+
+    obID(a2) = id_DrownCount;
+    obX(a2) = obX(a1);
+    int16_t d0 = 6;                                           /* moveq #6,d0 */
+    if (obStatus(a1) & 0x01) {                                /* btst #0 */
+        d0 = (int16_t)-d0;
+        obAngle(a2) = 0x40;
+    }
+    obX(a2) = (int16_t)(obX(a2) + d0);
+    obY(a2) = obY(a1);
+    obSubtype(a2) = 6;                                        /* "small bubble" */
+
+    if (drown_restarttime(o) != 0) {
+        /* Sonic is drowning: bubbles come out of his mouth. */
+        drown_delaytime(o) = (int16_t)(drown_delaytime(o) & 7);
+        /* addi.w #0,drown_delaytime — no-op left over in the ASM */
+        d0 = (int16_t)(obY(a1) - 12);
+        obY(a2) = d0;
+        obAngle(a2) = (uint8_t)RandomNumber();
+        if (((uint16_t)v_framecount & 3) == 0) obSubtype(a2) = 0x0E;
+        Drown_DecrementExtraBubbles(o);
+        return;
+    }
+
+    /* .checkNumberBubble */
+    if (drown_extrabubflag(o) & 0x8000) {
+        int16_t d2 = (int16_t)((uint16_t)v_air >> 1);         /* number bubble ID */
+        if ((RandomNumber() & 3) == 0) {
+            uint16_t old = (uint16_t)drown_extrabubflag(o);
+            drown_extrabubflag(o) = (int16_t)(old | 0x4000); /* bset #6 */
+            if (!(old & 0x4000)) {                            /* bne: old bit clear */
+                obSubtype(a2) = (uint8_t)d2;
+                drown_numtime(a2) = 28;
+            }
+        }
+        /* .secondTry */
+        if (drown_extrabubbles(o) == 0) {
+            uint16_t old = (uint16_t)drown_extrabubflag(o);
+            drown_extrabubflag(o) = (int16_t)(old | 0x4000);
+            if (!(old & 0x4000)) {
+                obSubtype(a2) = (uint8_t)d2;
+                drown_numtime(a2) = 28;
+            }
+        }
+    }
+
+    Drown_DecrementExtraBubbles(o);
+}
+
+/* Object $0A dispatcher */
+static void DrownCount_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00: Drown_Main(o); break;
+        case 0x02: Drown_Animate(o); break;
+        case 0x04: Drown_ChkWater(o); break;
+        case 0x06:                                         /* fall through */
+        case 0x0E: Drown_Display(o); break;
+        case 0x08:                                         /* fall through */
+        case 0x10: DeleteObject(o); break;
+        case 0x0A: Drown_Countdown(o); break;
+        case 0x0C: Drown_AirLeft(o); break;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Object $0B - LZ Pole that Breaks
+   disasm/_incObj/0B LZ Pole that Breaks.asm
+   --------------------------------------------------------------------------- */
+#define pole_breaktime(o) (*(int16_t *)((uint8_t *)(o) + 0x30)) /* objoff_30 */
+#define pole_grabbed(o)   (*(uint8_t *)((uint8_t *)(o) + 0x32)) /* objoff_32 */
+
+static void Pole_Action(uint8_t *o);
+static void Pole_Display(uint8_t *o);
+
+/* Pole_Main — routine 0 */
+static void Pole_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                       /* -> Pole_Action */
+    obMap(o) = (uint32_t)(uintptr_t)Map_Pole;
+    obGfx(o) = (uint16_t)(ArtTile_LZ_Pole | Tile_Pal3);
+    obRender(o) = sprite_cam_field;
+    obActWid(o) = 16 / 2;
+    obPriority(o) = 4;
+
+    obColType(o) = (uint8_t)(col_8x64 | col_special);
+    uint32_t d0 = (uint32_t)obSubtype(o) * 60;               /* mulu.w #60 */
+    pole_breaktime(o) = (int16_t)d0;
+    Pole_Action(o);                                          /* fall through */
+}
+
+/* Pole_Action — routine 2 */
+static void Pole_Action(uint8_t *o) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+    int16_t d0;
+
+    if (pole_grabbed(o)) {
+        if (pole_breaktime(o) != 0) {
+            pole_breaktime(o) = (int16_t)(pole_breaktime(o) - 1);
+            if (pole_breaktime(o) == 0) {
+                obFrame(o) = 1;                              /* "broken pole" */
+                goto release;
+            }
+        }
+
+        /* .checkMoveUp */
+        d0 = (int16_t)(obY(o) - 24);
+        if (v_jpadhold1 & btnUp) {
+            obY(a1) = (int16_t)(obY(a1) - 1);
+            if ((uint16_t)obY(a1) <= (uint16_t)d0) obY(a1) = d0;
+        }
+
+        /* .checkMoveDown */
+        d0 = (int16_t)(d0 + 12 + 24);
+        if (v_jpadhold1 & btnDn) {
+            obY(a1) = (int16_t)(obY(a1) + 1);
+            if ((uint16_t)obY(a1) > (uint16_t)d0) obY(a1) = d0;
+        }
+
+        /* .checkLetGo */
+        if (!(v_jpadpress2 & btnABC)) {                      /* beq.s Pole_Display */
+            Pole_Display(o);
+            return;
+        }
+    } else {
+        /* .checkGrab */
+        if (obColProp(o) == 0) {                              /* beq.s Pole_Display */
+            Pole_Display(o);
+            return;
+        }
+        d0 = (int16_t)(obX(o) + 20);
+        if ((uint16_t)d0 >= (uint16_t)obX(a1)) {             /* cmp.w obX(a1),d0 */
+            Pole_Display(o);
+            return;
+        }
+        obColProp(o) = 0;
+        if (obRoutine(a1) >= 4) {                             /* cmpi.b #4 / bhs */
+            Pole_Display(o);
+            return;
+        }
+        obVelX(a1) = 0;
+        obVelY(a1) = 0;
+        d0 = (int16_t)(obX(o) + 20);
+        obX(a1) = d0;
+        obStatus(a1) = (uint8_t)(obStatus(a1) & ~0x01);
+        obAnim(a1) = id_SonHang;                    /* id_Hang, $11 */
+        f_playerctrl = 1;
+        f_wtunneldisallow = 1;
+        pole_grabbed(o) = 1;
+        Pole_Display(o);
+        return;
+    }
+
+release:
+    obColType(o) = 0;
+    obRoutine(o) = (uint8_t)(obRoutine(o) + 2);   /* -> Pole_Display */
+    f_playerctrl = 0;
+    f_wtunneldisallow = 0;
+    pole_grabbed(o) = 0;
+    Pole_Display(o);
+}
+
+/* Pole_Display — routine 4 */
+static void Pole_Display(uint8_t *o) {
+    RememberState(o);
+}
+
+/* Object $0B dispatcher */
+static void Pole_ObjectMain(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00: Pole_Main(o); break;
+        case 0x02: Pole_Action(o); break;
+        case 0x04: Pole_Display(o); break;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Object $0C - LZ Flapping Door
+   disasm/_incObj/0C LZ Flapping Door.asm
+   --------------------------------------------------------------------------- */
+#define flap_wait(o) (*(int16_t *)((uint8_t *)(o) + 0x30)) /* objoff_30 */
+#define flap_time(o) (*(int16_t *)((uint8_t *)(o) + 0x32)) /* objoff_32 */
+
+static void Flap_OpenClose(uint8_t *o) {
+    flap_wait(o) = (int16_t)(flap_wait(o) - 1);
+    if (flap_wait(o) >= 0) goto animate;                      /* bpl.s */
+    flap_wait(o) = flap_time(o);
+    obAnim(o) = (uint8_t)(obAnim(o) ^ 0x01);                 /* bchg #0 */
+    if (obRender(o) & 0x80) Sound_Queue(sfx_Door, false);   /* bpl → skip */
+
+animate:
+    AnimateSprite(o, Ani_Flap);
+    f_wtunneldisallow = 0;
+
+    if (obFrame(o) != 0) goto display;                       /* bne.s .display */
+    if ((uint16_t)obX(RAM_ADDR(v_player)) >= (uint16_t)obX(o)) goto display;
+
+    f_wtunneldisallow = 1;
+    {
+        int16_t d1 = (int16_t)(16 / 2 + sonic_solid_width);
+        int16_t d2 = 64 / 2;
+        int16_t d3 = (int16_t)(d2 + 1);
+        int16_t d4 = obX(o);
+        int16_t d3out = 0, d5out = 0;
+        SolidObject(o, d1, d2, d3, d4, &d3out, &d5out);
+    }
+display:
+    RememberState(o);
+}
+
+/* Object $0C dispatcher */
+static void FlapDoor_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00:
+            obRoutine(o) += 2;                               /* -> Flap_OpenClose */
+            obMap(o) = (uint32_t)(uintptr_t)Map_Flap;
+            obGfx(o) = (uint16_t)(ArtTile_LZ_Flapping_Door | Tile_Pal3);
+            obRender(o) = (uint8_t)(obRender(o) | sprite_cam_field);
+            obActWid(o) = 80 / 2;
+            flap_time(o) = (int16_t)((uint32_t)obSubtype(o) * 60); /* mulu.w #60 */
+            Flap_OpenClose(o);
+            break;
+        case 0x02: Flap_OpenClose(o); break;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Object $16 - LZ Harpoon
+   disasm/_incObj/16 LZ Harpoon.asm
+   --------------------------------------------------------------------------- */
+#define harp_time(o) (*(int16_t *)((uint8_t *)(o) + 0x30)) /* objoff_30 */
+
+/* Harp_ColTypes — disasm/_incObj/16 LZ Harpoon.asm 41-47, indexed by obFrame. */
+static const uint8_t Harp_ColTypes[6] = {
+    (uint8_t)(col_16x8 | col_hurt),   /* frame 0, sideways, retracted  */
+    (uint8_t)(col_48x8 | col_hurt),   /* frame 1, sideways, moving     */
+    (uint8_t)(col_80x8 | col_hurt),   /* frame 2, sideways, extended  */
+    (uint8_t)(col_8x16  | col_hurt),  /* frame 3, upright,  retracted  */
+    (uint8_t)(col_8x48  | col_hurt),  /* frame 4, upright,  moving     */
+    (uint8_t)(col_8x80  | col_hurt),  /* frame 5, upright,  extended   */
+};
+
+static void Harp_Move(uint8_t *o) {
+    AnimateSprite(o, Ani_Harp);
+    uint8_t d0 = obFrame(o);
+    if (d0 > 5) d0 = 5;                 /* ASM reads OOB; clamp for safety */
+    obColType(o) = Harp_ColTypes[d0];
+    RememberState(o);
+}
+
+static void Harp_Wait(uint8_t *o) {
+    harp_time(o) = (int16_t)(harp_time(o) - 1);
+    if (harp_time(o) >= 0) {                            /* bpl.s .display */
+        RememberState(o);
+        return;
+    }
+    harp_time(o) = 60;
+    obRoutine(o) = (uint8_t)(obRoutine(o) - 2);         /* back to Harp_Move */
+    obAnim(o) = (uint8_t)(obAnim(o) ^ 0x01);           /* bchg #0 */
+    RememberState(o);
+}
+
+/* Object $16 dispatcher */
+static void Harpoon_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00:
+            obRoutine(o) += 2;                           /* -> Harp_Move */
+            obMap(o) = (uint32_t)(uintptr_t)Map_Harp;
+            obGfx(o) = (uint16_t)ArtTile_LZ_Harpoon;
+            obRender(o) = (uint8_t)(obRender(o) | sprite_cam_field);
+            obPriority(o) = 4;
+            obAnim(o) = obSubtype(o);            /* 0 = sideways, 2 = upright */
+            obActWid(o) = 40 / 2;
+            harp_time(o) = 60;
+            Harp_Move(o);
+            break;
+        case 0x02: Harp_Move(o); break;
+        case 0x04: Harp_Wait(o); break;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Object $1B - LZ Water Surface
+   disasm/_incObj/1B LZ Water Surface.asm
+   --------------------------------------------------------------------------- */
+#define surf_origX(o)  (*(int16_t *)((uint8_t *)(o) + 0x30)) /* objoff_30 */
+#define surf_freeze(o) (*(uint8_t *)((uint8_t *)(o) + 0x32)) /* objoff_32 */
+
+static void Surf_Action(uint8_t *o) {
+    /* Wrap the camera every $20px so the surface looks camera-independent. */
+    int16_t d1 = (int16_t)((uint16_t)RAM_WORD(v_screenposx) & 0xFFE0);
+    d1 = (int16_t)(d1 + surf_origX(o));
+    if (v_framebyte & 0x01) d1 = (int16_t)(d1 + 0x20);     /* flicker */
+    obX(o) = d1;
+
+    obY(o) = v_waterpos1;
+
+    if (surf_freeze(o)) goto gamePaused;
+    if (!(v_jpadpress1 & btnStart)) goto animate;
+    obFrame(o) = (uint8_t)(obFrame(o) + 3);   /* seamless "paused" frames */
+    surf_freeze(o) = 1;
+    goto display;
+
+gamePaused:
+    if (f_pause) goto display;                             /* bne.s .display */
+    surf_freeze(o) = 0;
+    obFrame(o) = (uint8_t)(obFrame(o) - 3);
+
+animate:
+    obTimeFrame(o) = (uint8_t)(obTimeFrame(o) - 1);
+    if ((int8_t)obTimeFrame(o) >= 0) goto display;         /* bpl.s .display */
+    obTimeFrame(o) = 8 - 1;
+    obFrame(o) = (uint8_t)(obFrame(o) + 1);
+    if (obFrame(o) >= 3) obFrame(o) = 0;
+
+display:
+    DisplaySprite(o);
+}
+
+/* Object $1B dispatcher */
+static void WaterSurface_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00:
+            obRoutine(o) += 2;                             /* -> Surf_Action */
+            obMap(o) = (uint32_t)(uintptr_t)Map_Surf;
+            obGfx(o) = (uint16_t)(ArtTile_LZ_Water_Surface | Tile_Pal3 | Tile_Prio);
+            obRender(o) = sprite_cam_field;
+            obActWid(o) = 256 / 2;
+            surf_origX(o) = obX(o);
+            Surf_Action(o);
+            break;
+        case 0x02: Surf_Action(o); break;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Object $2C - Badnik - Jaws
+   disasm/_incObj/2C Badnik - Jaws.asm
+   --------------------------------------------------------------------------- */
+#define jaws_turndelay_current(o) (*(int16_t *)((uint8_t *)(o) + 0x30)) /* objoff_30 */
+#define jaws_turndelay_base(o)    (*(int16_t *)((uint8_t *)(o) + 0x32)) /* objoff_32 */
+
+static void Jaws_Swim(uint8_t *o) {
+    jaws_turndelay_current(o) = (int16_t)(jaws_turndelay_current(o) - 1);
+    if (jaws_turndelay_current(o) >= 0) goto animate;      /* bpl.s .animate */
+    jaws_turndelay_current(o) = jaws_turndelay_base(o);
+    obVelX(o) = (int16_t)-obVelX(o);
+    obStatus(o) = (uint8_t)(obStatus(o) ^ 0x01);           /* bchg #0 */
+    obPrevAni(o) = 1;              /* move.b #1,obPrevAni: force anim reload */
+
+animate:
+    AnimateSprite(o, Ani_Jaws);
+    SpeedToPos(o);
+    RememberState(o);
+}
+
+/* Object $2C dispatcher */
+static void Jaws_ObjectMain(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00:
+            obRoutine(o) += 2;                             /* -> Jaws_Swim */
+            obMap(o) = (uint32_t)(uintptr_t)Map_Jaws;
+            obGfx(o) = (uint16_t)(ArtTile_Jaws | Tile_Pal2);
+            obRender(o) = (uint8_t)(obRender(o) | sprite_cam_field);
+            obColType(o) = (uint8_t)(col_32x24 | col_badnik);
+            obPriority(o) = 4;
+            /* FixBugs=0 uses 32/2 here instead of the corrected 48/2. */
+            obActWid(o) = 32 / 2;
+
+            uint16_t d0 = (uint16_t)((uint16_t)obSubtype(o) << 6); /* lsl.w #6 */
+            d0 = (uint16_t)(d0 - 1);                       /* subq.w #1 */
+            jaws_turndelay_current(o) = (int16_t)d0;
+            jaws_turndelay_base(o) = (int16_t)d0;
+
+            obVelX(o) = (int16_t)-0x40;
+            if (obStatus(o) & 0x01) obVelX(o) = 0x40;
+            Jaws_Swim(o);
+            break;
+        case 0x02: Jaws_Swim(o); break;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Object $2D - Badnik - Burrobot
+   disasm/_incObj/2D Badnik - Burrobot.asm
+   --------------------------------------------------------------------------- */
+#define burro_timedelay(o) (*(int16_t *)((uint8_t *)(o) + 0x30)) /* objoff_30 */
+#define burro_checktype(o) (*(uint8_t *)((uint8_t *)(o) + 0x32)) /* objoff_32 */
+
+static int Burro_CheckDistanceAndFaceSonic(uint8_t *o, int16_t d2,
+                                           int16_t *out_d1);
+
+/* Burro_Action_TurnAround — action 0 */
+static void Burro_Action_TurnAround(uint8_t *o) {
+    burro_timedelay(o) = (int16_t)(burro_timedelay(o) - 1);
+    if (burro_timedelay(o) >= 0) return;                    /* bpl.s .return */
+
+    ob2ndRout(o) = (uint8_t)(ob2ndRout(o) + 2);
+    burro_timedelay(o) = 255;
+    obVelX(o) = 0x80;
+    obAnim(o) = 1;
+    obStatus(o) = (uint8_t)(obStatus(o) ^ 0x01);           /* bchg #0 */
+    if (obStatus(o) & 0x01) obVelX(o) = (int16_t)-0x80;    /* bne (new bit set) */
+}
+
+/* Burro_Action_Move_NextAction — shared by Move (ledge/timer) and the
+   landing branch of Jump. */
+static void Burro_Action_Move_NextAction(uint8_t *o) {
+    /* btst #2,(v_vblank_byte).w / beq.s .jumpAgain : are we on frame 0-3 of the
+       8-frame window? Then jump again, otherwise turn around. */
+    if (!(v_vblank_byte & (1 << 2))) {                        /* .jumpAgain */
+        ob2ndRout(o) = (uint8_t)(ob2ndRout(o) + 2);            /* -> Burro_Action_Jump */
+        obVelY(o) = (int16_t)-0x400;                           /* launch upwards */
+        obAnim(o) = 2;                                         /* drilling anim */
+        return;
+    }
+    /* .turnAround */
+    ob2ndRout(o) = (uint8_t)(ob2ndRout(o) - 2);                /* -> TurnAround */
+    burro_timedelay(o) = 60 - 1;
+    obVelX(o) = 0;                                             /* stop moving */
+    obAnim(o) = 0;                                             /* still anim */
+}
+
+/* Burro_Action_Move — action 2 */
+static void Burro_Action_Move(uint8_t *o) {
+    burro_timedelay(o) = (int16_t)(burro_timedelay(o) - 1);
+    if (burro_timedelay(o) < 0) {                          /* bmi.s */
+        Burro_Action_Move_NextAction(o);
+        return;
+    }
+
+    SpeedToPos(o);
+
+    /* bchg #0,burro_checktype : alternate floor align / ledge check */
+    burro_checktype(o) = (uint8_t)(burro_checktype(o) ^ 0x01);
+    if (burro_checktype(o) != 0) {                         /* bne.s .alignToFloor */
+        int16_t d1 = 0, d3 = 0;
+        ObjFloorDist(o, &d1, &d3);
+        obY(o) = (int16_t)(obY(o) + d1);
+        return;
+    }
+
+    /* .checkLedgeAhead */
+    int16_t d3 = (int16_t)(obX(o) + 12);
+    if (!(obStatus(o) & 0x01)) d3 = (int16_t)(d3 - 12 * 2);
+    int16_t d1 = 0, angle = 0;
+    ObjFloorDist2(o, d3, &d1, &angle);
+    if (d1 >= 0x0C) {                                      /* cmpi.w #$C / bge */
+        Burro_Action_Move_NextAction(o);
+        return;
+    }
+}
+
+/* Burro_Action_Jump — action 4 */
+static void Burro_Action_Jump(uint8_t *o) {
+    SpeedToPos(o);
+    obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+    if (obVelY(o) < 0) return;                             /* bmi.s .return */
+    obAnim(o) = 3;
+
+    int16_t d1 = 0, d3 = 0;
+    ObjFloorDist(o, &d1, &d3);
+    if (d1 >= 0) return;                                   /* tst.w d1 / bpl */
+    obY(o) = (int16_t)(obY(o) + d1);
+
+    obVelY(o) = 0;
+    obAnim(o) = 1;
+    burro_timedelay(o) = 255;
+    ob2ndRout(o) = (uint8_t)(ob2ndRout(o) - 2);
+    {
+        int16_t d1b = 0;
+        /* d2 is undefined here in the ASM and the cmp result (carry) is
+           discarded by the caller, so the trigger-zone value cannot affect
+           behaviour. d1 is likewise unused after this call. */
+        (void)Burro_CheckDistanceAndFaceSonic(o, 0, &d1b);
+    }
+}
+
+/* Burro_Action_ChkSonic — action 6 */
+static void Burro_Action_ChkSonic(uint8_t *o) {
+    int16_t d1 = 0;
+    if (!Burro_CheckDistanceAndFaceSonic(o, 96, &d1)) return;      /* bhs */
+
+    uint8_t *player = RAM_ADDR(v_player);
+    int16_t d0 = (int16_t)(obY(player) - obY(o));
+    /* sub.w obY(a0),d0 / bhs.s .return : no borrow, i.e. Sonic is not above */
+    if ((uint16_t)obY(player) >= (uint16_t)obY(o)) return;
+    if ((uint16_t)d0 < 0xFF80) return;                 /* cmpi.w #-128,d0 / blo */
+    if (v_debuguse) return;                                 /* tst.w v_debuguse */
+
+    ob2ndRout(o) = (uint8_t)(ob2ndRout(o) - 2);
+    obVelX(o) = d1;                    /* move.w d1,obVelX(a0) */
+    obVelY(o) = (int16_t)-0x400;
+}
+
+/* Burro_CheckDistanceAndFaceSonic — disasm 2D 169-182. Face Sonic, then report
+   whether he is inside the d2-sized trigger zone (returns the cmp's carry). */
+static int Burro_CheckDistanceAndFaceSonic(uint8_t *o, int16_t d2,
+                                           int16_t *out_d1) {
+    int16_t d1 = 0x80;
+    obStatus(o) = (uint8_t)(obStatus(o) | 0x01);            /* bset #0: face right */
+    uint8_t *player = RAM_ADDR(v_player);
+    int16_t d0 = (int16_t)(obX(player) - obX(o));
+    /* sub.w obX(a0),d0 / bhs.s .checkDistance : no borrow, i.e. Sonic is left of
+       the Burrobot, so d0 already is the absolute distance. */
+    if ((uint16_t)obX(player) < (uint16_t)obX(o)) {
+        d0 = (int16_t)-d0;                                  /* make X-difference positive */
+        d1 = (int16_t)-d1;                                  /* move Burrobot to the left */
+        obStatus(o) = (uint8_t)(obStatus(o) & ~0x01);       /* bclr #0: face left */
+    }
+    *out_d1 = d1;
+    /* cmp.w d2,d0 : carry set when d0 < d2 (unsigned) */
+    return (uint16_t)d0 < (uint16_t)d2;
+}
+
+/* Object $2D dispatcher */
+static void Burrobot_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00:
+            obRoutine(o) += 2;                             /* -> Burro_Action */
+            obHeight(o) = 38 / 2;
+            obWidth(o) = 16 / 2;
+            obMap(o) = (uint32_t)(uintptr_t)Map_Burro;
+            obGfx(o) = (uint16_t)ArtTile_Burrobot;
+            obRender(o) = (uint8_t)(obRender(o) | sprite_cam_field);
+            obPriority(o) = 4;
+            obColType(o) = (uint8_t)(col_24x36 | col_badnik);
+            obActWid(o) = 24 / 2;
+            ob2ndRout(o) = (uint8_t)(ob2ndRout(o) + 6); /* run ChkSonic first */
+            obAnim(o) = 2;                                 /* drilling anim */
+            /* fall through */
+            __attribute__((fallthrough));
+        case 0x02:
+            switch (ob2ndRout(o)) {
+                case 0x00: Burro_Action_TurnAround(o); break;
+                case 0x02: Burro_Action_Move(o); break;
+                case 0x04: Burro_Action_Jump(o); break;
+                case 0x06: Burro_Action_ChkSonic(o); break;
+            }
+            AnimateSprite(o, Ani_Burro);
+            RememberState(o);
+            break;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Object $62 - LZ Gargoyle
+   disasm/_incObj/62 LZ Gargoyle.asm
+   --------------------------------------------------------------------------- */
+
+/* Gar_SpitRate — disasm 62 LZ Gargoyle.asm 19, indexed by subtype & $F. */
+static const uint8_t Gar_SpitRate[8] = { 30, 60, 90, 120, 150, 180, 210, 240 };
+
+static void Gar_Main(uint8_t *o) {
+    obRoutine(o) += 2;                                     /* -> Gar_MakeFire */
+    obMap(o) = (uint32_t)(uintptr_t)Map_Gar;
+    obGfx(o) = (uint16_t)(ArtTile_LZ_Gargoyle | Tile_Pal3);
+    obRender(o) = (uint8_t)(obRender(o) | sprite_cam_field);
+    obPriority(o) = 3;
+    obActWid(o) = 32 / 2;
+
+    uint8_t d0 = (uint8_t)(obSubtype(o) & 0x0F);
+    if (d0 > 7) d0 = 7;                 /* ASM reads OOB; clamp for safety */
+    obDelayAni(o) = Gar_SpitRate[d0];
+    obTimeFrame(o) = obDelayAni(o);
+    obSubtype(o) = (uint8_t)(obSubtype(o) & 0x0F);
+}
+
+static void Gar_MakeFire(uint8_t *o) {
+    obTimeFrame(o) = (uint8_t)(obTimeFrame(o) - 1);
+    if (obTimeFrame(o) != 0) return;                        /* bne.s .return */
+    obTimeFrame(o) = obDelayAni(o);
+    if (LZ_ChkObjectVisible(o)) return;                     /* bne.s .return */
+
+    uint8_t *a1 = (uint8_t *)FindFreeObj();
+    if (!a1) return;                                        /* bne.s .return */
+
+    obID(a1) = id_Gargoyle;
+    obRoutine(a1) = (uint8_t)(obRoutine(a1) + 4);   /* -> Gar_FireBall */
+    obX(a1) = obX(o);
+    obY(a1) = obY(o);
+    obRender(a1) = obRender(o);
+    obStatus(a1) = obStatus(o);
+}
+
+/* Gar_AniFire returns 1 when it tail-branched into DeleteObject. */
+static int Gar_AniFire(uint8_t *o) {
+    if ((v_framebyte & 0x07) == 0) {                        /* andi.b #7,d0 */
+        obFrame(o) = (uint8_t)(obFrame(o) ^ 0x01);         /* bchg #0 */
+    }
+
+    SpeedToPos(o);
+
+    /* btst #0,obStatus(a0) / bne.s .isRight : bit set (moving right) checks
+       the right wall, bit clear (moving left) checks the left wall. */
+    if (obStatus(o) & 0x01) {                               /* .isRight */
+        if (PushB_ObjHitWallRight(o, 8) < 0) return 1;      /* tst.w d1 / bmi */
+    } else {                                                /* .isLeft */
+        if (PushB_ObjHitWallLeft(o, -8) < 0) return 1;
+    }
+    return 0;
+}
+
+/* Object $62 dispatcher */
+static void Gargoyle_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int deleted = 0;
+
+    switch (obRoutine(o)) {
+        case 0x00: Gar_Main(o); break;
+        case 0x02: Gar_MakeFire(o); break;
+        case 0x04:                                     /* falls into Gar_AniFire */
+            obRoutine(o) += 2;
+            obHeight(o) = 16 / 2;
+            obWidth(o) = 16 / 2;
+            obMap(o) = (uint32_t)(uintptr_t)Map_Gar;
+            obGfx(o) = (uint16_t)ArtTile_LZ_Gargoyle;
+            obRender(o) = (uint8_t)(obRender(o) | sprite_cam_field);
+            obPriority(o) = 4;
+            obColType(o) = (uint8_t)(col_8x8 | col_hurt);
+            obActWid(o) = 16 / 2;
+            obFrame(o) = 2;
+            obY(o) = (int16_t)(obY(o) + 8);
+            obVelX(o) = 0x200;
+            if (!(obStatus(o) & 0x01)) obVelX(o) = (int16_t)-0x200;
+            Sound_Queue(sfx_Fireball, false);
+            deleted = Gar_AniFire(o);
+            break;
+        case 0x06: deleted = Gar_AniFire(o); break;
+    }
+
+    /* FixBugs=0: the `bmi.w DeleteObject` in Gar_AniFire branches into a
+       routine that ends in rts, so control comes back here and would still
+       fall into RememberState with a blanked slot.  Model it explicitly:
+       the object is deleted and the display pass is skipped. */
+    if (deleted) {
+        DeleteObject(o);
+        return;
+    }
+    RememberState(o);
+}
+
+/* ---------------------------------------------------------------------------
+   Object $65 - LZ Waterfalls
+   disasm/_incObj/65 LZ Waterfalls.asm
+   --------------------------------------------------------------------------- */
+static void WFall_Animate(uint8_t *o) {
+    AnimateSprite(o, Ani_WFall);
+}
+
+static void WFall_Display(uint8_t *o) {
+    RememberState(o);
+}
+
+static void WFall_OnWater(uint8_t *o) {
+    int16_t d0 = (int16_t)(v_waterpos1 - 16);
+    obY(o) = d0;
+    WFall_Animate(o);                                       /* bra.s */
+    WFall_Display(o);
+}
+
+static void WFall_Priority(uint8_t *o) {
+    obGfx(o) = (uint16_t)(obGfx(o) & ~0x8000);  /* bclr #7 on the word */
+    if (RAM_BYTE(v_lvllayout_fg + (layout_row * 2) + 6) != 7) {
+        WFall_Animate(o);
+        WFall_Display(o);
+        return;
+    }
+    obGfx(o) = (uint16_t)(obGfx(o) | 0x8000);    /* bset #7 on the word */
+    WFall_Animate(o);
+    WFall_Display(o);
+}
+
+/* Object $65 dispatcher */
+static void Waterfall_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {
+        case 0x00:
+            obRoutine(o) += 4;                         /* -> WFall_Display */
+            obMap(o) = (uint32_t)(uintptr_t)Map_WFall;
+            obGfx(o) = (uint16_t)(ArtTile_LZ_Splash | Tile_Pal3);
+            obRender(o) = (uint8_t)(obRender(o) | sprite_cam_field);
+            obActWid(o) = 48 / 2;
+            obPriority(o) = 1;
+
+            uint8_t d0 = obSubtype(o);
+            if (d0 & 0x80) obGfx(o) = (uint16_t)(obGfx(o) | 0x8000);
+
+            d0 = (uint8_t)(d0 & 0x0F);
+            obFrame(o) = d0;
+
+            if (d0 != 9) { WFall_Display(o); break; }  /* cmpi.b #9 / bne */
+            obPriority(o) = 0;
+            obRoutine(o) = (uint8_t)(obRoutine(o) - 2); /* -> WFall_Animate */
+            if (obSubtype(o) & (1 << 6)) obRoutine(o) = 6;
+            if (obSubtype(o) & (1 << 5)) obRoutine(o) = 8;
+            WFall_Animate(o);
+            WFall_Display(o);
+            break;
+        case 0x02: WFall_Animate(o); WFall_Display(o); break;
+        case 0x04: WFall_Display(o); break;
+        case 0x06: WFall_OnWater(o); break;
+        case 0x08: WFall_Priority(o); break;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Object $60 - Badnik - Orbinaut (LZ, SLZ, SBZ)
+   disasm/_incObj/60 Badnik - Orbinaut.asm
+
+   orb_circledir: equ objoff_36   circling direction for spikeballs (1 / -1)
+   orb_balldata:  equ objoff_37   ball data array (0: number of not-fired
+                                  spikeballs // 1-4: RAM indices for spikeballs)
+   orb_parent:    equ objoff_3C   address of parent Orbinaut object
+   --------------------------------------------------------------------------- */
+#define orb_circledir(o) (*(uint8_t *)((uint8_t *)(o) + 0x36))  /* objoff_36 */
+#define orb_ballcount(o) (*(uint8_t *)((uint8_t *)(o) + 0x37))  /* orb_balldata+0 */
+#define orb_ballindex(o, i) (*(uint8_t *)((uint8_t *)(o) + 0x38 + (i))) /* orb_balldata+1..4 */
+#define orb_parent(o)  (*(uint32_t *)((uint8_t *)(o) + 0x3C))  /* objoff_3C */
+
+/* Orb_DisplayNoMove / .deleteWithSpikeballs — disasm 60 128-152 */
+static void Orb_DisplayNoMove(uint8_t *o) {
+    if (!OutOfRange(o, -1)) {                    /* out_of_range.w .deleteWithSpikeballs */
+        DisplaySprite(o);                        /* bra.w DisplaySprite */
+        return;
+    }
+
+    /* .deleteWithSpikeballs: custom RememberState that also nukes the
+       (non-fired) orbiting spikeballs. */
+    uint8_t d0 = obRespawnNo(o);
+    if (d0 != 0) {                               /* beq.s .deleteBalls */
+        RAM_BYTE(v_objstate + 2 + d0) &= ~0x80;  /* bclr #7,2(a2,d0.w) */
+    }
+
+    /* .deleteBalls */
+    uint8_t d2 = (uint8_t)(orb_ballcount(o) - 1); /* subq.w #1,d2 */
+    if (!(d2 & 0x80)) {                          /* bcs.s .deleteParent (d2 = $FF) */
+        /* .loopDeleteBalls */
+        do {
+            d0 = orb_ballindex(o, 0);             /* move.b (a2)+,d0 */
+            uint8_t *a1 = (uint8_t *)Object_GetSlot(d0); /* lsl/addi -> v_objspace+d0*$40 */
+            DeleteObject(a1);                    /* bsr.w DeleteChild (same as DeleteObject) */
+            for (int i = 0; i < 3; i++) {        /* shift the (a2)+ cursor forward */
+                orb_ballindex(o, i) = orb_ballindex(o, i + 1);
+            }
+        } while (--d2 != 0xFF);                   /* dbf d2,.loopDeleteBalls */
+    }
+
+    /* .deleteParent */
+    DeleteObject(o);
+}
+
+/* Orb_Main — routine 0, disasm 60 23-95 */
+static void Orb_Main(uint8_t *o) {
+    obMap(o) = (uint32_t)(uintptr_t)Map_Orb;      /* set mappings */
+
+    obGfx(o) = (uint16_t)ArtTile_SBZ_Orbinaut;   /* SBZ-specific art tile */
+    if (v_zone != id_SBZ) {                      /* cmpi.b #id_SBZ,(v_zone).w */
+        obGfx(o) = (uint16_t)(ArtTile_SLZ_Orbinaut | Tile_Pal2);
+        if (v_zone == id_LZ) {                   /* cmpi.b #id_LZ,(v_zone).w */
+            obGfx(o) = (uint16_t)ArtTile_LZ_Orbinaut;
+        }
+    }
+    obRender(o) = (uint8_t)(obRender(o) | sprite_cam_field);
+    obPriority(o) = 4;
+    obColType(o) = (uint8_t)(col_16x16 | col_badnik);
+    obActWid(o) = 24 / 2;
+
+    uint8_t d2 = 0;                              /* d2 = angle offsets, 0 degrees */
+    uint8_t d1 = 4 - 1;                          /* moveq #4-1,d1: 4 spikeballs */
+    orb_ballcount(o) = 0;
+
+    /* .loopSpikeBalls */
+    do {
+        uint8_t *a1 = (uint8_t *)FindNextFreeObj(o); /* bsr.w FindNextFreeObj */
+        if (a1 == NULL) break;                   /* bne.s .finishSpikeBalls (RAM full) */
+        orb_ballcount(o) = (uint8_t)(orb_ballcount(o) + 1);
+        orb_ballindex(o, orb_ballcount(o) - 1) = (uint8_t)Object_GetIndex(a1);
+
+        obID(a1) = obID(o);
+        obRoutine(a1) = 6;                       /* Orb_CircleSpikeball */
+        obMap(a1) = obMap(o);
+        obGfx(a1) = obGfx(o);
+        obRender(a1) = (uint8_t)(obRender(a1) | sprite_cam_field);
+        obPriority(a1) = 4;
+        obActWid(a1) = 16 / 2;
+        obFrame(a1) = 3;                         /* spikeball frame */
+        obColType(a1) = (uint8_t)(col_8x8 | col_hurt);
+        obAngle(a1) = d2;
+        d2 = (uint8_t)(d2 + 0x40);               /* +90 degrees */
+        orb_parent(a1) = (uint32_t)Object_GetIndex(o);
+    } while (--d1 != 0xFF);                       /* dbf d1,.loopSpikeBalls */
+
+    /* .finishSpikeBalls */
+    int16_t d0 = 1;                              /* circle clockwise by default */
+    if (obStatus(o) & 0x01) d0 = (int16_t)-1;     /* btst #0: facing left -> ccw */
+    orb_circledir(o) = (uint8_t)d0;
+
+    obRoutine(o) = obSubtype(o);                 /* use subtype as base routine */
+    obRoutine(o) = (uint8_t)(obRoutine(o) + 2);  /* -> Orb_CheckSonic / Orb_DisplayAndMove */
+
+    obVelX(o) = (int16_t)-0x40;                  /* move left */
+    if (obStatus(o) & 0x01) obVelX(o) = 0x40;    /* btst #0: facing left -> right */
+}
+
+/* Orb_CheckSonic — routine 2, disasm 60 97-122 */
+static void Orb_CheckSonic(uint8_t *o) {
+    uint8_t *player = RAM_ADDR(v_player);
+    int16_t d0 = (int16_t)(obX(player) - obX(o));
+    if ((uint16_t)obX(player) < (uint16_t)obX(o)) d0 = (int16_t)-d0; /* bhs.s .chkX */
+    if ((uint16_t)d0 >= 160) goto animate;       /* cmpi.w #160,d0 / bhs */
+
+    d0 = (int16_t)(obY(player) - obY(o));
+    if ((uint16_t)obY(player) < (uint16_t)obY(o)) d0 = (int16_t)-d0; /* bhs.s .chkY */
+    if ((uint16_t)d0 >= 80) goto animate;        /* cmpi.w #80,d0 / bhs */
+
+    if (v_debuguse) goto animate;                 /* tst.w (v_debuguse).w / bne */
+
+    obAnim(o) = 1;                               /* "angry" animation */
+
+animate:
+    AnimateSprite(o, Ani_Orb);
+    Orb_DisplayNoMove(o);                        /* bra.w Orb_DisplayNoMove */
+}
+
+/* Orb_DisplayAndMove / Orb_CircleSpikeball / Orb_FiredSpikeball */
+static void Orb_DisplayAndMove(uint8_t *o) {
+    SpeedToPos(o);
+    Orb_DisplayNoMove(o);
+}
+
+static void Orb_CircleSpikeball(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)orb_parent(o)); /* movea.l orb_parent */
+
+    if (obID(a1) != id_Orbinaut) {                /* has the parent been deleted? */
+        DeleteObject(o);                          /* bne.w DeleteObject */
+        return;
+    }
+
+    if (obFrame(a1) == 2 && obAngle(o) == 0x40) { /* angry? and directly underneath? */
+        obRoutine(o) = (uint8_t)(obRoutine(o) + 2);      /* -> Orb_FiredSpikeball */
+        orb_ballcount(a1) = (uint8_t)(orb_ballcount(a1) - 1);
+        if (orb_ballcount(a1) == 0) {                     /* bne.s .fireSpikeball */
+            obRoutine(a1) = (uint8_t)(obRoutine(a1) + 2); /* -> Orb_DisplayAndMove */
+        }
+
+        /* .fireSpikeball */
+        obVelX(o) = (int16_t)-0x200;               /* shoot left */
+        if (obStatus(a1) & 0x01) obVelX(o) = 0x200; /* btst #0: parent faces right */
+
+        DisplaySprite(o);                         /* bra.w DisplaySprite */
+        return;
+    }
+
+    /* .circleBalls */
+    int16_t s0 = 0, s1 = 0;
+    CalcSine(obAngle(o), &s0, &s1);
+    s1 = (int16_t)(s1 >> 4);                      /* asr.w #4,d1: radius */
+    obX(o) = (int16_t)(s1 + obX(a1));
+    s0 = (int16_t)(s0 >> 4);                      /* asr.w #4,d0: radius */
+    obY(o) = (int16_t)(s0 + obY(a1));
+
+    obAngle(o) = (uint8_t)(obAngle(o) + orb_circledir(a1)); /* add.b d0,obAngle(a0) */
+    DisplaySprite(o);
+}
+
+static void Orb_FiredSpikeball(uint8_t *o) {
+    SpeedToPos(o);
+    if (!(obRender(o) & 0x80)) {                  /* tst.b obRender(a0) / bpl */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);
+}
+
+/* Object $60 dispatcher */
+static void Orbinaut_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                      /* Orb_Index: 0/2/4/6/8 */
+        case 0x00: Orb_Main(o); break;
+        case 0x02: Orb_CheckSonic(o); break;
+        case 0x04: Orb_DisplayAndMove(o); break;
+        case 0x06: Orb_CircleSpikeball(o); break;
+        case 0x08: Orb_FiredSpikeball(o); break;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Object $61 - multi-variant blocks (LZ)
+   disasm/_incObj/61 LZ Blocks.asm
+
+   lblk_origY:     equ objoff_30   original y-axis position
+   lblk_origX:     equ objoff_34   original x-axis position
+   lblk_time:      equ objoff_36   time delay for block movement
+   lblk_untouched: equ objoff_38   flag block as untouched
+   lblk_nudge:     equ objoff_3E   nudge Y-offset while Sonic is standing on block
+   lblk_touchtype: equ objoff_3F   Sonic's touch response from SolidObject
+   --------------------------------------------------------------------------- */
+#define lblk_origY(o)     (*(int16_t *)((uint8_t *)(o) + 0x30))  /* objoff_30 */
+#define lblk_origX(o)     (*(int16_t *)((uint8_t *)(o) + 0x34))  /* objoff_34 */
+#define lblk_time(o)      (*(int16_t *)((uint8_t *)(o) + 0x36))  /* objoff_36 */
+#define lblk_untouched(o) (*(uint8_t *)((uint8_t *)(o) + 0x38))  /* objoff_38 */
+#define lblk_nudge(o)     (*(uint8_t *)((uint8_t *)(o) + 0x3E))  /* objoff_3E */
+#define lblk_touchtype(o) (*(uint8_t *)((uint8_t *)(o) + 0x3F))  /* objoff_3F */
+
+/* LBlk_Var: width, height (half-pixels) — disasm 61 23-28 */
+static const uint8_t LBlk_Var[8] = { 32 / 2, 32 / 2,   /* block that sinks when stood on */
+                                     64 / 2, 24 / 2,   /* platform that rises when stood on */
+                                     32 / 2, 32 / 2,   /* cork block that floats on water */
+                                     32 / 2, 32 / 2 }; /* generic solid block */
+
+static void LBlk_Sink(uint8_t *o) {
+    SpeedToPos(o);
+    obVelY(o) = (int16_t)(obVelY(o) + 8);          /* make block fall faster */
+
+    int16_t d1 = 0, d3 = 0;
+    ObjFloorDist(o, &d1, &d3);
+    if (!(d1 < 0)) return;                         /* tst.w d1 / bpl.w .return */
+    d1 = (int16_t)(d1 + 1);                         /* manually adjust by 1px down */
+    obY(o) = (int16_t)(obY(o) + d1);
+    obVelY(o) = 0;
+    obSubtype(o) = 0;                              /* -> LBlk_Stationary */
+}
+
+static void LBlk_Rise(uint8_t *o) {
+    SpeedToPos(o);
+    obVelY(o) = (int16_t)(obVelY(o) - 8);          /* make block rise faster */
+
+    int16_t d1 = LZ_ObjHitCeiling(o);
+    if (!(d1 < 0)) return;                         /* tst.w d1 / bpl.w .return */
+    obY(o) = (int16_t)(obY(o) - d1);
+    obVelY(o) = 0;
+    obSubtype(o) = 0;                              /* -> LBlk_Stationary */
+}
+
+static void LBlk_CheckStand(uint8_t *o) {
+    if (lblk_time(o) != 0) {                       /* tst.w lblk_time / bne.s */
+        /* .delayAndAdvance */
+        lblk_time(o) = (int16_t)(lblk_time(o) - 1);
+        if (lblk_time(o) != 0) return;
+        obSubtype(o) = (uint8_t)(obSubtype(o) + 1); /* -> LBlk_Sink or LBlk_Rise */
+        lblk_untouched(o) = 0;
+        return;
+    }
+    if (!(obStatus(o) & (1 << 3))) return;         /* btst #3: Sonic standing on it? */
+    lblk_time(o) = 30;                             /* wait for half a second */
+}
+
+static void LBlk_SideSink(uint8_t *o) {
+    if (lblk_touchtype(o) != 1) return;            /* cmpi.b #1,lblk_touchtype */
+    obSubtype(o) = (uint8_t)(obSubtype(o) + 1);    /* -> LBlk_Sink */
+    lblk_untouched(o) = 0;
+}
+
+/* LBlk_OnWater — cork block that follows the water surface. disasm 61 154-190 */
+static void LBlk_OnWater(uint8_t *o) {
+    int16_t d0 = (int16_t)(RAM_WORD(v_waterpos1) - obY(o));
+    if (d0 == 0) return;                           /* beq.s .return2 */
+    if ((uint16_t)d0 > 0x8000) {                   /* bcc.s .corkSink (block above water) */
+        /* .corkSink: at most 2px above the water level */
+        if (d0 > 2) d0 = 2;                        /* cmpi.w #2,d0 / ble.s .sink */
+        obY(o) = (int16_t)(obY(o) + d0);
+        int16_t d1 = 0, d3 = 0;
+        ObjFloorDist(o, &d1, &d3);
+        if (!(d1 < 0)) return;                     /* bpl.w .return2 */
+        obY(o) = (int16_t)(obY(o) + d1 + 1);
+        return;
+    }
+    /* .corkRise: at most 2px below the water level */
+    if (!(d0 >= -2)) d0 = -2;                      /* cmpi.w #-2,d0 / bge.s .rise */
+    obY(o) = (int16_t)(obY(o) + d0);
+    int16_t d1 = LZ_ObjHitCeiling(o);
+    if (!(d1 < 0)) return;                         /* bpl.w .return */
+    obY(o) = (int16_t)(obY(o) - d1);
+}
+
+/* LBlk_Nudge — disasm 61 195-225. Nudges the block down while Sonic stands on it. */
+static void LBlk_Nudge(uint8_t *o) {
+    if (!lblk_untouched(o)) return;                /* tst.b lblk_untouched / beq.s */
+    if (!(obStatus(o) & (1 << 3))) {               /* btst #3 / bne.s .nudgeDown */
+        if (lblk_nudge(o) == 0) return;            /* tst.b lblk_nudge / beq.s */
+        lblk_nudge(o) = (uint8_t)(lblk_nudge(o) - 4);
+    } else {
+        /* .nudgeDown */
+        if (lblk_nudge(o) == 0x40) return;         /* cmpi.b #$40 / beq.s */
+        lblk_nudge(o) = (uint8_t)(lblk_nudge(o) + 4);
+    }
+
+    /* .updateYPosition */
+    int16_t s0 = 0, s1 = 0;
+    CalcSine(lblk_nudge(o), &s0, &s1);             /* d0 = sine */
+    int32_t d0 = (int32_t)s0 * 0x400;              /* muls.w #$400,d0 */
+    obY(o) = (int16_t)(lblk_origY(o) + (int16_t)(d0 >> 16)); /* swap d0 / add.w origY */
+}
+
+/* LBlk_Main — routine 0, disasm 61 30-57 */
+static void LBlk_Main(uint8_t *o) {
+    obRoutine(o) = (uint8_t)(obRoutine(o) + 2);    /* -> LBlk_Action */
+    obMap(o) = (uint32_t)(uintptr_t)Map_LBlock;
+    obGfx(o) = (uint16_t)(ArtTile_LZ_Blocks | Tile_Pal3);
+    obRender(o) = (uint8_t)(obRender(o) | sprite_cam_field);
+    obPriority(o) = 3;
+
+    uint16_t d0 = (uint16_t)((uint16_t)obSubtype(o) >> 3); /* lsr.w #3,d0 */
+    d0 &= 0xE;                                     /* andi.w #$E,d0 */
+    obActWid(o) = LBlk_Var[d0];                    /* width for block */
+    obHeight(o) = LBlk_Var[d0 + 1];               /* height for block */
+    obFrame(o) = (uint8_t)(d0 >> 1);               /* frame ID (0-3) */
+
+    lblk_origX(o) = obX(o);
+    lblk_origY(o) = obY(o);
+
+    uint8_t d0b = (uint8_t)(obSubtype(o) & 0x0F);  /* read only the lower digit */
+    if (d0b == 0) return;                          /* beq.s LBlk_Action */
+    if (d0b == 7) return;                          /* cmpi.b #7 / beq.s (LZ1 secret ptfm) */
+    lblk_untouched(o) = 1;
+}
+
+/* LBlk_Action — routine 2, disasm 61 59-91 */
+static void LBlk_Action(uint8_t *o) {
+    int16_t prev_x = obX(o);                       /* move.w obX(a0),-(sp) */
+
+    switch (obSubtype(o) & 0x0F) {                 /* LBlk_Types jump table */
+        case 0x0: break;                           /* LBlk_Stationary */
+        case 1: case 3: LBlk_CheckStand(o); break;
+        case 2: case 6: LBlk_Sink(o);      break;
+        case 4:         LBlk_Rise(o);      break;
+        case 5:         LBlk_SideSink(o);  break;
+        case 7:         LBlk_OnWater(o);   break;
+    }
+
+    if (obRender(o) & 0x80) {                      /* tst.b obRender(a0) / bpl.s .chkdel */
+        int16_t d1 = (int16_t)(obActWid(o) + sonic_solid_width);
+        int16_t d2 = (int16_t)obHeight(o);
+        int16_t d3 = (int16_t)(d2 + 1);            /* +1px for the stood-on check */
+        lblk_touchtype(o) = (uint8_t)SolidObject(o, d1, d2, d3, prev_x, NULL, NULL);
+        LBlk_Nudge(o);
+    }
+
+    /* .chkdel */
+    if (OutOfRange(o, lblk_origX(o))) {            /* out_of_range.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);
+}
+
+/* Object $61 dispatcher */
+static void LabyrinthBlock_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                        /* LBlk_Index: 0/2 */
+        case 0x00: LBlk_Main(o); break;
+        case 0x02: LBlk_Action(o); break;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Object $63 - platforms on a conveyor belt (LZ)
+   disasm/_incObj/63 LZ Conveyor.asm
+
+   lcon_groupid:  equ objoff_2F   copy of obSubtype from the initial group spawner
+   lcon_baseX:    equ objoff_30   base X-position for entire group
+   lcon_nextX:    equ objoff_34   next target X-position for platform
+   lcon_nextY:    equ objoff_36   next target Y-position for platform
+   lcon_posindex: equ objoff_38   current index in target positioning data
+   lcon_count:    equ objoff_39   number of entries in group (multiplied by 4)
+   lcon_increment:equ objoff_3A   value to increment to next entry (+4 or -4)
+   lcon_reversed: equ objoff_3B   flag set if conveyor direction is currently reversed
+   lcon_targetdata:equ objoff_3C  pointer to corner data for group
+   --------------------------------------------------------------------------- */
+#define lcon_groupid(o)   (*(uint8_t *)((uint8_t *)(o) + 0x2F))  /* objoff_2F */
+#define lcon_baseX(o)     (*(int16_t *)((uint8_t *)(o) + 0x30))  /* objoff_30 */
+#define lcon_nextX(o)     (*(int16_t *)((uint8_t *)(o) + 0x34))  /* objoff_34 */
+#define lcon_nextY(o)     (*(int16_t *)((uint8_t *)(o) + 0x36))  /* objoff_36 */
+#define lcon_posindex(o)  (*(uint8_t *)((uint8_t *)(o) + 0x38))  /* objoff_38 */
+#define lcon_count(o)     (*(uint8_t *)((uint8_t *)(o) + 0x39))  /* objoff_39 */
+#define lcon_increment(o) (*(uint8_t *)((uint8_t *)(o) + 0x3A))  /* objoff_3A */
+#define lcon_reversed(o)  (*(uint8_t *)((uint8_t *)(o) + 0x3B))  /* objoff_3B */
+#define lcon_targetdata(o) (*(uint32_t *)((uint8_t *)(o) + 0x3C)) /* objoff_3C */
+
+/* LCon_Data: conveyor belt corner target coordinate definitions.
+   Each group corresponds to the upper nybble of the platform subtype.
+   Format: dc.w number of entries times 4 / dc.w base X position / dc.w entries...
+   Word 0 = entry count * 4, word 1 = base X, then (X, Y) pairs. */
+static const int16_t LCon_CornerData[6][14] = {
+    /* .group0 : baseX $1070, baseY $2F0, 6 entries */
+    { 6 * 4, 0x1070,
+      0x1078, 0x021A, 0x10BE, 0x0260, 0x10BE, 0x0393,
+      0x108C, 0x03C5, 0x1022, 0x0390, 0x1022, 0x0244 },
+    /* .group1 : baseX $1280, baseY $377, 5 entries */
+    { 5 * 4, 0x1280,
+      0x127E, 0x0280, 0x12CE, 0x02D0, 0x12CE, 0x046E,
+      0x1232, 0x0420, 0x1232, 0x02CC },
+    /* .group2 : baseX $0D68, baseY $530, 4 entries */
+    { 4 * 4, 0x0D68,
+      0x0D22, 0x0482, 0x0D22, 0x05DE, 0x0DAE, 0x05DE,
+      0x0DAE, 0x0482 },
+    /* .group3 : baseX $0DA0, baseY $440, 4 entries */
+    { 4 * 4, 0x0DA0,
+      0x0D62, 0x03A2, 0x0DEE, 0x03A2, 0x0DEE, 0x04DE,
+      0x0D62, 0x04DE },
+    /* .group4 : baseX $0D00, baseY $310, 5 entries */
+    { 5 * 4, 0x0D00,
+      0x0CAC, 0x0242, 0x0DDE, 0x0242, 0x0DDE, 0x03DE,
+      0x0C52, 0x03DE, 0x0C52, 0x029C },
+    /* .group5 : baseX $1300, baseY $264, 4 entries */
+    { 4 * 4, 0x1300,
+      0x1252, 0x020A, 0x13DE, 0x020A, 0x13DE, 0x02BE,
+      0x1252, 0x02BE },
+};
+
+/* ObjPosLZPlatform_Index (offset 0x38 in the ASM's ObjPos_Index table) maps
+   group IDs 0-5 to the custom platform positioning data in objpos/platforms/. */
+static const uint8_t *LZ_ConveyorPlatformData(uint8_t group) {
+    switch (group) {
+        case 0: return ObjPos_LZ1pf1;
+        case 1: return ObjPos_LZ1pf2;
+        case 2: return ObjPos_LZ2pf1;
+        case 3: return ObjPos_LZ2pf2;
+        case 4: return ObjPos_LZ3pf1;
+        case 5: return ObjPos_LZ3pf2;
+        default: return NULL;   /* ASM would read past the index table; never used */
+    }
+}
+
+/* Corner entry lookup: the ASM indexes (a1, d1.w) with a1 = first entry and
+   d1 = byte offset into LCon_Data, so word 2 + d1/2 of the group holds X. */
+static void LCon_TargetPos(uint8_t *o, uint8_t index, int16_t *out_x, int16_t *out_y) {
+    const int16_t *grp = LCon_CornerData[lcon_targetdata(o) & 0xFF];
+    *out_x = grp[2 + index / 2];
+    *out_y = grp[3 + index / 2];
+}
+
+/* divs.w: signed 32/16 division with 68000 semantics (truncates toward zero and
+   the remainder takes the dividend's sign, which is what C99 / and % already do).
+   On overflow the M68000 raises the V flag and leaves $8000 in the quotient with
+   the dividend in the remainder; that is reproduced here. The LZ corner data keeps
+   both axis deltas in the same ballpark, so the overflow never triggers in play. */
+static void LZ_DivSW(int32_t dividend, int16_t divisor,
+                     int16_t *out_quot, int16_t *out_rem) {
+    int32_t q = dividend / (int32_t)divisor;
+    if (q > 32767 || q < -32768) {                 /* overflow flag set */
+        *out_quot = (int16_t)0x8000;
+        *out_rem = (int16_t)dividend;
+        return;
+    }
+    *out_quot = (int16_t)q;
+    *out_rem = (int16_t)(dividend % (int32_t)divisor);
+}
+
+/* LCon_ChangeDir — disasm 63 269-333. Also used by object 63 (SBZ). */
+static void LCon_ChangeDir(uint8_t *o) {
+    int16_t d0 = (int16_t)(obX(o) - lcon_nextX(o));
+    int16_t d2 = (int16_t)-0x100;                  /* move left */
+    if ((uint16_t)obX(o) < (uint16_t)lcon_nextX(o)) { /* bcc.s .calcYDirection */
+        d0 = (int16_t)-d0;                          /* keep X-difference positive */
+        d2 = (int16_t)-d2;                          /* move right instead */
+    }
+
+    int16_t d1 = (int16_t)(obY(o) - lcon_nextY(o));
+    int16_t d3 = (int16_t)-0x100;                  /* move up */
+    if ((uint16_t)obY(o) < (uint16_t)lcon_nextY(o)) { /* bcc.s .checkGreaterDistance */
+        d1 = (int16_t)-d1;                          /* keep Y-difference positive */
+        d3 = (int16_t)-d3;                          /* move down instead */
+    }
+
+    int16_t quot = 0, rem = 0;
+    if ((uint16_t)d1 < (uint16_t)d0) {              /* cmp.w d0,d1 / bcs.s .moveVertical */
+        /* .moveVertical */
+        d1 = (int16_t)(obY(o) - lcon_nextY(o));      /* signed Y-difference */
+        if (d1 != 0) {                              /* beq.s .setSpeedsVertical */
+            LZ_DivSW((int32_t)d1 * 0x100, d0, &quot, &rem); /* ext.l / asl.l #8 */
+            quot = (int16_t)-quot;                   /* neg.w: move towards the target */
+        }
+        obVelY(o) = quot;
+        obVelX(o) = d2;
+        obSubpixelY(o) = rem;                       /* swap d1 -> remainder */
+        obSubpixelX(o) = 0;                         /* clr.w obSubpixelY(a0) */
+        return;
+    }
+
+    /* horizontal movement */
+    d0 = (int16_t)(obX(o) - lcon_nextX(o));         /* signed X-difference */
+    if (d0 != 0) {                                  /* beq.s .setSpeedsHorizontal */
+        LZ_DivSW((int32_t)d0 * 0x100, d1, &quot, &rem);
+        quot = (int16_t)-quot;
+    }
+    obVelX(o) = quot;
+    obVelY(o) = d3;
+    obSubpixelX(o) = rem;                           /* swap d0 -> remainder */
+    obSubpixelY(o) = 0;                             /* clr.w obSubpixelY(a0) */
+}
+
+/* LCon_Platform_Update — disasm 63 224-268 */
+static void LCon_Platform_Update(uint8_t *o) {
+    if (RAM_BYTE(f_switch + 0x0E) != 0) {          /* tst.b (f_switch+$E).w */
+        if (!lcon_reversed(o)) {                    /* tst.b lcon_reversed / bne.s */
+            lcon_reversed(o) = 1;
+            f_conveyrev = 1;                        /* (f_conveyrev).w */
+            lcon_increment(o) = (uint8_t)(0u - lcon_increment(o)); /* neg.b */
+            goto nextCorner;
+        }
+    }
+
+    /* .checkAtCorner */
+    if (obX(o) != lcon_nextX(o)) goto updatePos;     /* cmp.w lcon_nextX,d0 / bne.s */
+    if (obY(o) != lcon_nextY(o)) goto updatePos;
+
+nextCorner:
+    {
+        uint8_t d1 = (uint8_t)(lcon_posindex(o) + lcon_increment(o));
+        if ((uint8_t)d1 >= lcon_count(o)) {         /* cmp.b lcon_count,d1 / bcs.s */
+            uint8_t d0 = d1;                        /* backup for reversal check */
+            d1 = 0;
+            if (!(d0 & 0x80)) goto setTargetIndex;  /* tst.b d0 / bpl.s (not reversed) */
+            d1 = (uint8_t)(lcon_count(o) - 4);      /* last entry, indices are 0-based */
+        }
+    setTargetIndex:
+        lcon_posindex(o) = d1;
+        LCon_TargetPos(o, d1, &lcon_nextX(o), &lcon_nextY(o));
+        LCon_ChangeDir(o);
+    }
+
+updatePos:
+    SpeedToPos(o);
+}
+
+/* LCon_Main_Platform — disasm 63 71-127 */
+static void LCon_Platform(uint8_t *o);
+static void LCon_Main_Platform(uint8_t *o) {
+    obFrame(o) = 4;                                 /* "platform" frame ID */
+
+    uint16_t d0 = (uint16_t)obSubtype(o);
+    uint16_t d1 = d0;
+    d0 = (uint16_t)(d0 >> 3);                      /* upper digit, x2 */
+    d0 &= 0x1E;                                     /* limit to sane values */
+    uint8_t group = (uint8_t)(d0 >> 1);
+    if (group > 5) return;                          /* ASM would read stray data */
+
+    lcon_targetdata(o) = group;
+    /* `move.w (a2)+,lcon_posindex(a0)` is a big-endian word store, so the
+       header word $XX00 leaves lcon_posindex ($38) = 0 and lcon_count ($39) = XX. */
+    lcon_count(o) = (uint8_t)LCon_CornerData[group][0]; /* -> $39 */
+    lcon_baseX(o) = LCon_CornerData[group][1];
+
+    d1 = (uint16_t)(d1 & 0xF);
+    d1 = (uint16_t)(d1 << 2);                       /* 4 bytes per entry */
+    lcon_posindex(o) = (uint8_t)d1;                 /* initial target index */
+    lcon_increment(o) = 4;                          /* increment forwards */
+
+    if (f_conveyrev) {                              /* tst.b (f_conveyrev).w */
+        lcon_reversed(o) = 1;
+        lcon_increment(o) = (uint8_t)(0u - lcon_increment(o)); /* increment backwards */
+        uint8_t d1b = (uint8_t)(lcon_posindex(o) + lcon_increment(o));
+        if ((uint8_t)d1b >= lcon_count(o)) {         /* cmp.b lcon_count,d1 / bcs.s */
+            uint8_t d0b = d1b;
+            d1b = 0;
+            if (!(d0b & 0x80)) {                     /* tst.b d0 / bpl.s */
+                lcon_posindex(o) = d1b;
+                goto finishPlatform;
+            }
+            d1b = (uint8_t)(lcon_count(o) - 4);
+            lcon_posindex(o) = d1b;
+        } else {
+            lcon_posindex(o) = d1b;
+        }
+    }
+
+finishPlatform:
+    LCon_TargetPos(o, lcon_posindex(o), &lcon_nextX(o), &lcon_nextY(o));
+    LCon_ChangeDir(o);
+    LCon_Platform(o);                               /* bra.w LCon_Platform */
+}
+
+/* LCon_Main_Spawner — disasm 63 129-186. Returns 1 when the caller must skip
+   its own out_of_range/display tail (the ASM's `addq.l #4,sp`). */
+static int LCon_Main_Spawner(uint8_t *o, uint8_t subtype) {
+    lcon_groupid(o) = subtype;                      /* remember parent group ID */
+    uint8_t group = (uint8_t)(subtype & 0x7F);
+
+    uint8_t flag = RAM_BYTE(v_obj63 + group);
+    RAM_BYTE(v_obj63 + group) = (uint8_t)(flag | 0x01); /* bset #0 */
+    if (flag & 0x01) {                              /* bne.w DeleteObject */
+        /* FixBugs=0: this is a plain `bra.w`, so control returns to
+           LabyrinthConvey and the out_of_range/display tail still runs. */
+        DeleteObject(o);
+        return 0;
+    }
+
+    /* .spawn: read the custom platform positioning data for this group. */
+    const uint8_t *a2 = LZ_ConveyorPlatformData(group);
+    if (a2 == NULL) return 1;
+    int16_t d1 = BE16S(a2);
+    a2 += 2;
+
+    uint8_t *a1 = o;                                /* first platform reuses this slot */
+    for (;;) {
+        if (a1 != NULL) {                           /* .makePlatform */
+            obID(a1) = id_LabyrinthConvey;           /* obRoutine left at 0 on purpose */
+            obX(a1) = BE16S(a2);  a2 += 2;
+            obY(a1) = BE16S(a2);  a2 += 2;
+            obSubtype(a1) = (uint8_t)BE16(a2); a2 += 2;
+        }
+        if (d1 == 0) break;                         /* dbf d1,.loopMakePlatforms */
+        d1--;
+        a1 = (uint8_t *)FindFreeObj();               /* FixBugs=0: any free slot */
+    }
+    return 1;                                       /* addq.l #4,sp / rts */
+}
+
+/* LCon_Wheel — routine 6 (decorative wheel). Returns 1 (skips the tail). */
+static int LCon_Wheel(uint8_t *o) {
+    if ((v_framecount & 3) == 0) {                  /* andi.w #3,d0 / bne.s .display */
+        int8_t d1 = 1;
+        if (f_conveyrev) d1 = (int8_t)-d1;          /* go to previous frame instead */
+        obFrame(o) = (uint8_t)(obFrame(o) + d1);
+        obFrame(o) = (uint8_t)(obFrame(o) & 3);      /* andi.b #3,obFrame(a0) */
+    }
+    /* .display: addq.l #4,sp ; bra.w RememberState */
+    RememberState(o);
+    return 1;
+}
+
+/* LCon_Platform — routine 2, disasm 63 189-196 */
+static void LCon_Platform(uint8_t *o) {
+    PlatformObject(o, (int16_t)obActWid(o));
+    LCon_Platform_Update(o);
+}
+
+/* LCon_OnPlatform — routine 4, disasm 63 198-207 */
+static void LCon_OnPlatform(uint8_t *o) {
+    int16_t dummy = 0;
+    ExitPlatform(o, (int16_t)obActWid(o), &dummy);
+    int16_t prev_x = obX(o);
+    LCon_Platform_Update(o);
+    MvSonicOnPtfm2(o, prev_x);
+}
+
+/* LCon_Main — routine 0, disasm 63 52-68. Returns 1 to skip the caller's tail. */
+static int LCon_Main(uint8_t *o) {
+    uint8_t d0 = obSubtype(o);
+    if (d0 & 0x80) return LCon_Main_Spawner(o, d0); /* bmi.w LCon_Main_Spawner */
+
+    obRoutine(o) = (uint8_t)(obRoutine(o) + 2);    /* -> LCon_Platform */
+    obMap(o) = (uint32_t)(uintptr_t)Map_LConv;
+    obGfx(o) = (uint16_t)(ArtTile_LZ_Conveyor_Belt | Tile_Pal3);
+    obRender(o) = (uint8_t)(obRender(o) | sprite_cam_field);
+    obActWid(o) = 32 / 2;
+    obPriority(o) = 4;
+
+    if (obSubtype(o) != 0x7F) {                     /* cmpi.b #$7F / bne.s */
+        LCon_Main_Platform(o);
+        return 0;                                   /* returns to LabyrinthConvey */
+    }
+    obRoutine(o) = (uint8_t)(obRoutine(o) + 4);    /* -> LCon_Wheel */
+    obGfx(o) = (uint16_t)ArtTile_LZ_Conveyor_Belt; /* palette line 1 */
+    obPriority(o) = 1;
+    return LCon_Wheel(o);
+}
+
+/* Out-of-range distance value, the raw d0 left behind by the out_of_range
+   macro (Macros.asm 278-295). $63 needs it for its act-3 special case. */
+static int16_t LZ_OutOfRangeValue(int16_t pos) {
+    uint16_t d0 = (uint16_t)pos & 0xFF80;
+    uint16_t d1 = ((uint16_t)RAM_WORD(v_screenposx) - 128) & 0xFF80;
+    return (int16_t)(d0 - d1);
+}
+
+/* Object $63 dispatcher — disasm 63 6-34 */
+static void LabyrinthConvey_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    int skip_tail = 0;
+
+    switch (obRoutine(o)) {                         /* LCon_Index: 0/2/4/6 */
+        case 0x00: skip_tail = LCon_Main(o); break;
+        case 0x02: LCon_Platform(o); break;
+        case 0x04: LCon_OnPlatform(o); break;
+        case 0x06: skip_tail = LCon_Wheel(o); break;
+    }
+    if (skip_tail) return;
+
+    int16_t d0 = LZ_OutOfRangeValue(lcon_baseX(o));  /* out_of_range.s .outOfRange */
+    if ((uint16_t)d0 <= 640) {                      /* cmpi.w #128+320+192 / bhi */
+        DisplaySprite(o);
+        return;
+    }
+
+    /* .outOfRange: keeps LZ3's wide platform group 4 from popping in */
+    if (v_act == act3) {                            /* cmpi.b #act3,(v_act).w */
+        if ((uint16_t)d0 >= 0xFF80) {               /* cmpi.w #$FF80,d0 / bhs.s */
+            DisplaySprite(o);
+            return;
+        }
+    }
+
+    /* .delete */
+    uint8_t gid = lcon_groupid(o);
+    if (!(gid & 0x80)) {                            /* bpl.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    gid &= 0x7F;
+    RAM_BYTE(v_obj63 + gid) &= (uint8_t)~0x01;      /* bclr #0,(a2,d0.w) */
+    DeleteObject(o);
+}
+
+/* ---------------------------------------------------------------------------
+   Object $64 - air bubbles (LZ)
+   disasm/_incObj/64 LZ Air Bubbles.asm
+
+   bub_inhalable:  equ objoff_2E  flag set when bubble is collectable
+   bub_origX:      equ objoff_30  original x-axis position
+   bub_time:       equ objoff_32  time until next large bubble spawn
+   bub_timebase:   equ objoff_33  base time to reset bub_time to after spawn
+   bub_minicount:  equ objoff_34  number of smaller bubbles to spawn
+   bub_bubbleflag: equ objoff_36  1 = spawning; +$4000 = large spawned; +$8000 = allow
+   bub_randomtime: equ objoff_38  randomised time between mini bubble spawns
+   bub_typelist:   equ objoff_3C  address of bubble type list
+   --------------------------------------------------------------------------- */
+#define bub_inhalable(o)  (*(uint8_t *)((uint8_t *)(o) + 0x2E))  /* objoff_2E */
+#define bub_origX(o)      (*(int16_t *)((uint8_t *)(o) + 0x30)) /* objoff_30 */
+#define bub_time(o)       (*(int16_t *)((uint8_t *)(o) + 0x32)) /* objoff_32 */
+#define bub_timebase(o)   (*(uint8_t *)((uint8_t *)(o) + 0x33)) /* objoff_33 */
+#define bub_minicount(o)  (*(uint8_t *)((uint8_t *)(o) + 0x34)) /* objoff_34 */
+#define bub_bubbleflag(o) (*(uint16_t *)((uint8_t *)(o) + 0x36))/* objoff_36 */
+#define bub_randomtime(o) (*(int16_t *)((uint8_t *)(o) + 0x38)) /* objoff_38 */
+#define bub_typelist(o)   (*(uint32_t *)((uint8_t *)(o) + 0x3C))/* objoff_3C */
+
+/* Bub_BblTypes: non-inhalable bubbles production sequence (0 = small, 1 = medium).
+   The ASM stores a pointer into this list; here the offset is kept instead. */
+static const uint8_t Bub_BblTypes[18] = {
+    0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0
+};
+
+/* Bub_ChkSonic — disasm 64 245-277. Returns 1 when Sonic is in range. */
+static int Bub_ChkSonic(uint8_t *o) {
+    if ((int8_t)f_playerctrl < 0) return 0;         /* tst.b (f_playerctrl).w / bmi.s */
+
+    uint8_t *a1 = RAM_ADDR(v_player);
+    int16_t d0 = obX(a1);
+    int16_t d1 = (int16_t)(obX(o) - 16);            /* check left */
+    if (!((uint16_t)d1 < (uint16_t)d0)) return 0;   /* cmp.w d0,d1 / bhs.s */
+    d1 = (int16_t)(d1 + 16 * 2);                    /* check right */
+    if ((uint16_t)d1 < (uint16_t)d0) return 0;      /* cmp.w d0,d1 / blo.s */
+
+    d0 = obY(a1);
+    d1 = obY(o);
+    if (!((uint16_t)d1 < (uint16_t)d0)) return 0;   /* cmp.w d0,d1 / bhs.s */
+    d1 = (int16_t)(d1 + 16);                        /* check bottom */
+    if ((uint16_t)d1 < (uint16_t)d0) return 0;      /* cmp.w d0,d1 / blo.s */
+
+    return 1;                                       /* .collectBubble */
+}
+
+/* Bub_Bursting — routine 6, disasm 64 143-153 */
+static void Bub_Bursting(uint8_t *o) {
+    AnimateSprite(o, Ani_Bub);
+    if (!(obRender(o) & 0x80)) {                    /* tst.b obRender(a0) / bpl.s */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);
+}
+
+/* Bub_ChkWater — routine 4, disasm 64 71-140 */
+static void Bub_ChkWater(uint8_t *o) {
+    int16_t d0 = (int16_t)RAM_WORD(v_waterpos1);
+    if (!((uint16_t)d0 <= (uint16_t)obY(o))) {      /* cmp.w obY(a0),d0 / blo.s .wobble */
+        /* .burst: still under the surface's sway, so pop the bubble */
+        obRoutine(o) = 6;                           /* -> Bub_Bursting */
+        obAnim(o) = (uint8_t)(obAnim(o) + 3);
+        Bub_Bursting(o);
+        return;
+    }
+
+    /* .wobble */
+    uint8_t angle = obAngle(o);
+    obAngle(o) = (uint8_t)(obAngle(o) + 1);          /* addq.b #1,obAngle(a0) */
+    int16_t xoff = (int16_t)Drown_WobbleData[angle & 0x7F];
+    obX(o) = (int16_t)(bub_origX(o) + xoff);
+
+    if (bub_inhalable(o) && Bub_ChkSonic(o)) {
+        /* FixBugs=0: the `tst.w (v_debuguse).w` guard sits inside `if FixBugs`. */
+        ResumeMusic();                              /* cancel countdown music */
+        Sound_Queue(sfx_Bubble, false);
+
+        uint8_t *a1 = RAM_ADDR(v_player);
+        obVelX(a1) = 0;
+        obVelY(a1) = 0;
+        obInertia(a1) = 0;
+        obAnim(a1) = id_SonGetAir;
+        locktime(a1) = 35;                          /* disable D-Pad input */
+        jumping(a1) = 0;
+        obStatus(a1) &= ~(1 << 5);                  /* bclr #5: pushing flag */
+        obStatus(a1) &= ~(1 << 4);                  /* bclr #4: roll-jump flag */
+
+        if (obStatus(a1) & (1 << 2)) {              /* btst #2: was Sonic rolling? */
+            obStatus(a1) &= ~(1 << 2);              /* clear rolling flag */
+            obHeight(a1) = sonic_height;
+            obWidth(a1) = sonic_width;
+            obY(a1) = (int16_t)(obY(a1) - (sonic_height - sonic_roll_height));
+        }
+        /* .burst */
+        obRoutine(o) = 6;
+        obAnim(o) = (uint8_t)(obAnim(o) + 3);
+        Bub_Bursting(o);
+        return;
+    }
+
+    /* .display */
+    SpeedToPos(o);
+    if (!(obRender(o) & 0x80)) {                    /* tst.b obRender(a0) / bpl.s */
+        DeleteObject(o);
+        return;
+    }
+    DisplaySprite(o);
+}
+
+/* Bub_BubbleMaker — routine $A, disasm 64 158-243 */
+static void Bub_BubbleMaker(uint8_t *o) {
+    if (bub_bubbleflag(o) == 0) {                   /* tst.w bub_bubbleflag / bne.s */
+        int16_t d0 = (int16_t)RAM_WORD(v_waterpos1);
+        if ((uint16_t)d0 > (uint16_t)obY(o)) goto display;  /* bhs.w .display */
+        if (!(obRender(o) & 0x80)) goto display;    /* tst.b obRender / bpl.w .display */
+
+        bub_randomtime(o) = (int16_t)(bub_randomtime(o) - 1);
+        if (bub_randomtime(o) >= 0) goto animate;   /* bpl.w .animate */
+        bub_bubbleflag(o) = 1;                      /* enter bubble spawning mode */
+
+        /* .tryAgain */
+        uint16_t r;
+        do {
+            r = RandomNumber();
+        } while ((r & 7) >= 6);                     /* cmpi.w #6,d0 / bhs.s .tryAgain */
+        bub_minicount(o) = (uint8_t)(r & 7);        /* 0-5 small bubbles */
+        bub_typelist(o) = r & 0xC;                  /* multiple of 4, up to 12 */
+
+        bub_time(o) = (int16_t)((uint8_t)bub_time(o) - 1);
+        if (bub_time(o) < 0) {                      /* bpl.s .goSpawn */
+            bub_time(o) = (int8_t)bub_timebase(o);
+            bub_bubbleflag(o) = (uint16_t)(bub_bubbleflag(o) | 0x8000);
+        }
+        /* .goSpawn / .spawnBubble */
+    } else {
+        /* .waitForBubble */
+        bub_randomtime(o) = (int16_t)(bub_randomtime(o) - 1);
+        if (bub_randomtime(o) >= 0) goto animate;   /* bpl.w .animate */
+    }
+
+    /* .spawnBubble */
+    bub_randomtime(o) = (int16_t)(RandomNumber() & 0x1F);
+
+    uint8_t *a1 = (uint8_t *)FindFreeObj();
+    if (a1 == NULL) goto chkReset;                  /* bne.s .chkReset */
+
+    obID(a1) = id_Bubble;
+    obX(a1) = obX(o);
+    obX(a1) = (int16_t)(obX(a1) + (int16_t)((RandomNumber() & 0xF) - 8));
+    obY(a1) = obY(o);
+    obSubtype(a1) = Bub_BblTypes[bub_typelist(o) + bub_minicount(o)];
+
+    if (bub_bubbleflag(o) & 0x8000) {               /* is a large bubble set to spawn? */
+        if ((RandomNumber() & 3) == 0) {            /* 1/4 chance for a large bubble */
+            uint16_t was = bub_bubbleflag(o);
+            bub_bubbleflag(o) = (uint16_t)(was | 0x4000);
+            if (!(was & 0x4000)) {                  /* bne.s .chkReset (was already set) */
+                obSubtype(a1) = 2;                  /* large / inhalable */
+            }
+        }
+    }
+    /* .chkFallback */
+    if (bub_minicount(o) == 0) {                    /* tst.b bub_minicount / bne.s */
+        uint16_t was = bub_bubbleflag(o);
+        bub_bubbleflag(o) = (uint16_t)(was | 0x4000);
+        if (!(was & 0x4000)) {
+            obSubtype(a1) = 2;
+        }
+    }
+
+chkReset:
+    bub_minicount(o) = (uint8_t)(bub_minicount(o) - 1);
+    if (!(bub_minicount(o) & 0x80)) goto animate;   /* bpl.s .animate */
+    bub_randomtime(o) = (int16_t)(bub_randomtime(o) + (int16_t)((RandomNumber() & 0x7F) + 0x80));
+    bub_bubbleflag(o) = 0;
+
+animate:
+    AnimateSprite(o, Ani_Bub);
+
+display:
+    if (OutOfRange(o, -1)) {                        /* out_of_range.w DeleteObject */
+        DeleteObject(o);
+        return;
+    }
+    {
+        int16_t d0 = (int16_t)RAM_WORD(v_waterpos1);
+        if ((uint16_t)d0 <= (uint16_t)obY(o)) {     /* blo.w DisplaySprite */
+            DisplaySprite(o);
+        }
+    }
+}
+
+/* Bub_Main / Bub_Inflate — disasm 64 30-69 */
+static void Bub_Main(uint8_t *o) {
+    obRoutine(o) = (uint8_t)(obRoutine(o) + 2);    /* -> Bub_Inflate */
+    obMap(o) = (uint32_t)(uintptr_t)Map_Bub;
+    obGfx(o) = (uint16_t)(ArtTile_LZ_Bubbles | Tile_Prio);
+    obRender(o) = (uint8_t)(obRender(o) | sprite_rendered | sprite_cam_field);
+    obActWid(o) = 32 / 2;
+    obPriority(o) = 1;
+
+    uint8_t d0 = obSubtype(o);
+    if (!(d0 & 0x80)) {                             /* bpl.s .bubble */
+        /* .bubble */
+        obAnim(o) = d0;                             /* bubble size from subtype */
+        bub_origX(o) = obX(o);
+        obVelY(o) = (int16_t)-0x88;                  /* float upwards */
+        obAngle(o) = (uint8_t)RandomNumber();       /* random start wobble angle */
+        /* fall through to Bub_Inflate */
+        AnimateSprite(o, Ani_Bub);
+        if (obFrame(o) != 6) {                      /* cmpi.b #6,obFrame / bne.s */
+            Bub_ChkWater(o);
+            return;
+        }
+        bub_inhalable(o) = 1;
+        Bub_ChkWater(o);
+        return;
+    }
+
+    /* bubble maker (subtype $80 and above) */
+    obRoutine(o) = (uint8_t)(obRoutine(o) + 8);    /* -> Bub_BubbleMaker */
+    d0 = (uint8_t)(d0 & 0x7F);
+    bub_time(o) = (int16_t)d0;
+    bub_timebase(o) = d0;
+    obAnim(o) = 6;
+    Bub_BubbleMaker(o);
+}
+
+/* Object $64 dispatcher */
+static void Bubble_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                         /* Bub_Index: 0/2/4/6/8/A */
+        case 0x00: Bub_Main(o); break;
+        case 0x02:                                      /* falls into Bub_ChkWater */
+            AnimateSprite(o, Ani_Bub);
+            if (obFrame(o) == 6) bub_inhalable(o) = 1;
+            Bub_ChkWater(o);
+            break;
+        case 0x04: Bub_ChkWater(o); break;
+        case 0x06: Bub_Bursting(o); break;
+        case 0x08: DeleteObject(o); break;              /* Bub_BurstDelete */
+        case 0x0A: Bub_BubbleMaker(o); break;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Object $77 - Eggman (LZ)
+   disasm/_incObj/77 Boss - LZ Main.asm
+
+   BossLabyrinth_ParentObj:      equ objoff_34  pointer to main boss controller
+   BossLabyrinth_GenericTimer:   equ objoff_3C  timer for the end-of-fight anim
+   BossLabyrinth_EarlyDefeatFlag:equ objoff_3D  set if boss defeated while rising
+   BossLabyrinth_SineCounter:    equ objoff_3F  sine counter for bobbing motion
+   --------------------------------------------------------------------------- */
+#define blz_parentobj(o)   (*(uint32_t *)((uint8_t *)(o) + 0x34)) /* objoff_34 */
+#define blz_timer(o)       (*(uint8_t *)((uint8_t *)(o) + 0x3C)) /* objoff_3C */
+#define blz_earlydefeat(o) (*(uint8_t *)((uint8_t *)(o) + 0x3D)) /* objoff_3D */
+#define blz_sinecnt(o)     (*(uint8_t *)((uint8_t *)(o) + 0x3F)) /* objoff_3F */
+
+/* BossLabyrinth_ObjData: routine number, animation */
+static const uint8_t BossLabyrinth_ObjData[6] = {
+    2, 0,   /* ship body */
+    4, 1,   /* face */
+    6, 7,   /* thruster */
+};
+
+/* Copy the logical X/Y flip bits from obStatus into the render flags. */
+static void BLZ_SyncFlip(uint8_t *o) {
+    uint8_t d0 = (uint8_t)((sprite_xflip | sprite_yflip) & obStatus(o));
+    obRender(o) = (uint8_t)((obRender(o) & ~(sprite_xflip | sprite_yflip)) | d0);
+}
+
+/* BossLabyrinth_Display — shared by the face and thruster children. */
+static void BLZ_Child_Display(uint8_t *o) {
+    AnimateSprite(o, Ani_Eggman);
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)blz_parentobj(o));
+    obX(o) = obX(a1);
+    obY(o) = obY(a1);
+    obStatus(o) = obStatus(a1);
+    BLZ_SyncFlip(o);
+    DisplaySprite(o);
+}
+
+/* BLZ_ShipUpdate — hit flash / defeat bookkeeping. disasm 77 120-149 */
+static void BLZ_ShipUpdate(uint8_t *o) {
+    if (blz_earlydefeat(o)) {                      /* tst.b / bne.s .defeated */
+        BossDefeated(o);
+        return;
+    }
+    if (obStatus(o) & 0x80) {                      /* tst.b obStatus / bmi.s */
+        AddPoints(100);                            /* .setDefeatFlag */
+        blz_earlydefeat(o) = 0xFF;
+        return;
+    }
+    if (obColType(o) != 0) return;                 /* tst.b obColType / bne.s .exit */
+    if (obBossFlash(o) == 0) {                     /* tst.b obBossFlash / bne.s */
+        obBossFlash(o) = 0x20;                     /* number of frames to flash */
+        Sound_Queue(sfx_HitBoss, false);
+    }
+
+    /* .flash: toggle the 2nd entry of palette line 2 between black and white.
+       `lea (v_palette+$22).w,a1` then `tst.w (a1)` — the read is a *word*. */
+    uint16_t *pal = (uint16_t *)RAM_ADDR(v_palette + 0x22);
+    int16_t d0 = cBlack;                           /* moveq #0,d0 (black) */
+    if (*pal != 0) {                               /* tst.w (a1) / bne.s .writeColor */
+        d0 = cBlack;                               /* not black -> already white, keep 0 */
+    } else {
+        d0 = cWhite;                               /* move.w #cWhite,d0 */
+    }
+    *pal = (uint16_t)d0;                           /* move.w d0,(a1) */
+    obBossFlash(o) = (uint8_t)(obBossFlash(o) - 1);
+    if (obBossFlash(o) != 0) return;              /* bne.s .exit: keep flashing */
+    obColType(o) = (uint8_t)(col_48x48 | col_boss); /* restore collision */
+}
+
+/* obBossX/obBossY are 16.16 fixed point. The ASM only ever touches them with
+   `move.w`/`cmpi.w`, which address the *high* word, so that word holds the pixel
+   position and the low word the 1/65536px remainder (BossMove adds obVel << 8 to
+   the whole longword, i.e. one velocity unit is 1/256px). These helpers keep the
+   remainder intact on writes, exactly like `move.w`. */
+static int16_t blz_bossX(uint8_t *o) { return (int16_t)(obBossX(o) >> 16); }
+static int16_t blz_bossY(uint8_t *o) { return (int16_t)(obBossY(o) >> 16); }
+static void blz_setBossX(uint8_t *o, int16_t x) {
+    obBossX(o) = (int32_t)((uint32_t)obBossX(o) & 0x0000FFFFu) | ((int32_t)(uint16_t)x << 16);
+}
+static void blz_setBossY(uint8_t *o, int16_t y) {
+    obBossY(o) = (int32_t)((uint32_t)obBossY(o) & 0x0000FFFFu) | ((int32_t)(uint16_t)y << 16);
+}
+
+/* BLZ_MoveBoss — disasm 77 108-111 */
+static void BLZ_MoveBoss(uint8_t *o) {
+    BossMove(o);
+    obY(o) = blz_bossY(o);                         /* move.w obBossY(a0),obY(a0) */
+    obX(o) = blz_bossX(o);                         /* move.w obBossX(a0),obX(a0) */
+}
+
+/* BossLabyrinth_ShipIndex handlers (disasm 77 92-478) */
+static void BLZ_ShipStart(uint8_t *o, uint8_t *a1) {
+    /* cmpi.w #boss_lz_x-$40,d0 / blo.s BLZ_MoveBoss */
+    if ((uint16_t)obX(a1) > 0x1DA0) {
+        obVelY(o) = (int16_t)-0x180;
+        obVelX(o) = 0x60;
+        ob2ndRout(o) = (uint8_t)(ob2ndRout(o) + 2);
+    }
+    BLZ_MoveBoss(o);
+    BLZ_ShipUpdate(o);
+}
+
+static void BLZ_ShipMove1(uint8_t *o) {
+    int16_t d0 = -2;                              /* moveq #-2,d0: condition counter */
+    if (blz_bossX(o) >= 0x1E48) {                 /* cmpi.w #boss_lz_x+$68 / blo.s */
+        blz_setBossX(o, 0x1E48);                  /* set X to target */
+        obVelX(o) = 0;                            /* stop moving horizontally */
+        d0++;
+    }
+    if (blz_bossY(o) <= 0x500) {                  /* cmpi.w #boss_lz_y+$440 / bgt.s */
+        blz_setBossY(o, 0x500);                   /* set Y to target */
+        obVelY(o) = 0;                            /* stop moving vertically */
+        d0++;
+    }
+    if (d0 != 0) {                                /* bne.s .moveBoss */
+        BLZ_MoveBoss(o);
+        return;
+    }
+    /* both conditions met: set the speeds for the next phase */
+    obVelX(o) = 0x140;
+    obVelY(o) = (int16_t)-0x200;
+    ob2ndRout(o) = (uint8_t)(ob2ndRout(o) + 2);
+    BLZ_MoveBoss(o);
+}
+
+static void BLZ_ShipMove2(uint8_t *o) {
+    int16_t d0 = -2;
+    if (blz_bossX(o) >= 0x1E70) {                 /* cmpi.w #boss_lz_x+$90 / blo.s */
+        blz_setBossX(o, 0x1E70);
+        obVelX(o) = 0;
+        d0++;
+    }
+    if (blz_bossY(o) <= 0x4C0) {                  /* cmpi.w #boss_lz_y+$400 / bgt.s */
+        blz_setBossY(o, 0x4C0);
+        obVelY(o) = 0;
+        d0++;
+    }
+    if (d0 != 0) {
+        BLZ_MoveBoss(o);
+        return;
+    }
+    obVelY(o) = (int16_t)-0x180;                  /* Y velocity only for next phase */
+    ob2ndRout(o) = (uint8_t)(ob2ndRout(o) + 2);
+    blz_sinecnt(o) = 0;                           /* clear vertical bob */
+    BLZ_MoveBoss(o);
+}
+
+static void BLZ_ShipMove3(uint8_t *o) {
+    if (blz_bossY(o) <= 0x100) {                  /* cmpi.w #boss_lz_y+$40 / bgt.s */
+        blz_setBossY(o, 0x100);
+        obVelX(o) = 0x140;
+        obVelY(o) = (int16_t)-0x80;
+        if (blz_earlydefeat(o)) {                 /* tst.b / beq.s .moveBoss */
+            obVelX(o) = (int16_t)(obVelX(o) * 2);  /* asl.w obVelX(a0) */
+            obVelY(o) = (int16_t)(obVelY(o) * 2);  /* asl.w obVelY(a0) */
+        }
+        /* .moveBoss */
+        ob2ndRout(o) = (uint8_t)(ob2ndRout(o) + 2);
+        BLZ_MoveBoss(o);
+        return;
+    }
+
+    /* .setDirection */
+    obStatus(o) |= 0x01;                           /* bset #0: face to the right */
+    blz_sinecnt(o) = (uint8_t)(blz_sinecnt(o) + 2);
+    int16_t s0 = 0, s1 = 0;
+    CalcSine(blz_sinecnt(o), &s0, &s1);
+    if (s1 < 0) obStatus(o) &= (uint8_t)~0x01;    /* tst.w d1 / bpl.s .trackDistance */
+
+    /* .trackDistance: asr.w #4 / swap / clr.w / add.l obBossX / swap / move.w */
+    int32_t d0 = (int32_t)(((uint32_t)(uint16_t)(int16_t)(s0 >> 4)) << 16);
+    d0 += obBossX(o);
+    d0 = (int32_t)(((uint32_t)d0 >> 16) | ((uint32_t)d0 << 16)); /* swap d0 */
+    obX(o) = (int16_t)d0;
+
+    /* Slow down while Sonic approaches, so he can be hit. disasm 77 246-262 */
+    int16_t d0w = obVelY(o);
+    int16_t d1 = (int16_t)(obY(RAM_ADDR(v_player)) - obY(o));
+    if (!(d1 < 0)) {                              /* bcs.s .calcSpeed */
+        d1 = (int16_t)(d1 - 72);                  /* subi.w #72,d1 */
+        if (!(d1 < 0)) {                          /* bcs.s .calcSpeed */
+            d0w = (int16_t)(d0w >> 1);            /* asr.w #1,d0 */
+            d1 = (int16_t)(d1 - 40);              /* subi.w #40,d1 */
+            if (!(d1 < 0)) {                      /* bcs.s .calcSpeed */
+                d0w = (int16_t)(d0w >> 1);
+                d1 = (int16_t)(d1 - 40);
+                if (!(d1 < 0)) d0w = 0;           /* moveq #0,d0 */
+            }
+        }
+    }
+    /* .calcSpeed: ext.l d0 / asl.l #8,d0 */
+    int32_t dv = (int32_t)d0w * 0x100;
+    if (blz_earlydefeat(o)) dv = dv * 2;          /* add.l d0,d0 */
+    /* .setSpeed */
+    obBossY(o) += dv;
+    obY(o) = blz_bossY(o);                         /* move.w obBossY(a0),obY(a0) */
+    BLZ_ShipUpdate(o);
+}
+
+static void BLZ_ShipAtTop(uint8_t *o) {
+    int16_t d0 = -2;
+    if (blz_bossX(o) >= 0x1F4C) {                 /* cmpi.w #boss_lz_x+$16C / blo.s */
+        blz_setBossX(o, 0x1F4C);
+        obVelX(o) = 0;
+        d0++;
+    }
+    if (blz_bossY(o) <= (int16_t)boss_lz_y) {     /* cmpi.w #boss_lz_y / bgt.s */
+        blz_setBossY(o, (int16_t)boss_lz_y);
+        obVelY(o) = 0;
+        d0++;
+    }
+    if (d0 != 0) {                                /* bne.s .moveBoss */
+        BLZ_MoveBoss(o);
+        return;
+    }
+    ob2ndRout(o) = (uint8_t)(ob2ndRout(o) + 2);
+    obStatus(o) &= (uint8_t)~0x01;                /* bclr #0: face to the left */
+    BLZ_MoveBoss(o);
+}
+
+static void BLZ_ShipWait(uint8_t *o, uint8_t *a1) {
+    if (blz_earlydefeat(o)) goto startEscape;     /* tst.b / bne.s .startEscape */
+    if (obX(a1) < 0x1EC8) goto skip;              /* cmpi.w #boss_lz_x+$E8 / blt.s */
+    if (obY(a1) > 0xF0) goto skip;                /* cmpi.w #boss_lz_y+$30 / bgt.s */
+    blz_timer(o) = 50;                            /* set a timer for 50 frames */
+    /* falls through into .startEscape */
+startEscape:
+    Sound_Queue(bgm_LZ, true);                     /* play LZ music */
+    f_lockscreen = 0;                              /* Revision<>0 */
+    obStatus(o) |= 0x01;                           /* bset #0: face to the right */
+    ob2ndRout(o) = (uint8_t)(ob2ndRout(o) + 2);
+skip:
+    BLZ_MoveBoss(o);
+}
+
+static void BLZ_Escape1(uint8_t *o) {
+    if (!blz_earlydefeat(o)) {                     /* tst.b / bne.s .escape */
+        blz_timer(o) = (uint8_t)(blz_timer(o) - 1);
+        if (blz_timer(o) != 0) {                   /* bne.s .exit */
+            BLZ_MoveBoss(o);
+            return;
+        }
+    }
+    /* .escape */
+    blz_timer(o) = 0;
+    obVelX(o) = 0x400;
+    obVelY(o) = (int16_t)-0x40;
+    blz_earlydefeat(o) = 0;
+    ob2ndRout(o) = (uint8_t)(ob2ndRout(o) + 2);
+    BLZ_MoveBoss(o);
+}
+
+static void BLZ_Escape2(uint8_t *o) {
+    if ((uint16_t)v_limitright2 > (uint16_t)boss_lz_end) { /* cmpi.w / bhs.s */
+        /* .checkOffscreen: has Eggman left the screen? (bit 7 of obRender) */
+        if (!(obRender(o) & 0x80)) {
+            /* BossLabyrinth_ShipDel. FixBugs=0: `jmp DeleteObject` from inside
+               the routine, so control comes back to BossLabyrinth_ShipMain and
+               the animation + display pass still runs on the cleared slot. */
+            DeleteObject(o);
+        }
+        BLZ_MoveBoss(o);                           /* .flee */
+        return;
+    }
+    v_limitright2 = (uint16_t)(v_limitright2 + 2); /* unlock 2 more pixels */
+    BLZ_MoveBoss(o);                               /* .flee */
+}
+
+/* BossLabyrinth_ShipMain — routine 2 */
+static void BossLabyrinth_ShipMain(uint8_t *o) {
+    uint8_t *a1 = RAM_ADDR(v_player);
+
+    switch (ob2ndRout(o)) {                        /* BossLabyrinth_ShipIndex */
+        case 0x00: BLZ_ShipStart(o, a1); break;
+        case 0x02: BLZ_ShipMove1(o);   break;
+        case 0x04: BLZ_ShipMove2(o);   break;
+        case 0x06: BLZ_ShipMove3(o);   break;
+        case 0x08: BLZ_ShipAtTop(o);   break;
+        case 0x0A: BLZ_ShipWait(o, a1); break;
+        case 0x0C: BLZ_Escape1(o);     break;
+        case 0x0E: BLZ_Escape2(o);     break;
+    }
+
+    AnimateSprite(o, Ani_Eggman);
+    BLZ_SyncFlip(o);
+    DisplaySprite(o);
+}
+
+/* BossLabyrinth_FaceMain — routine 4, disasm 77 400-448 */
+static void BossLabyrinth_FaceMain(uint8_t *o) {
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)blz_parentobj(o));
+    if (obID(a1) != obID(o)) {                     /* boss deleted offscreen? */
+        DeleteObject(o);
+        return;
+    }
+    uint8_t d0 = ob2ndRout(a1);
+    uint8_t d1 = 1;
+    /* FixBugs=0: the test reads the FACE's own flag, which is always 0, so the
+       defeated animation is unreachable here. */
+    if (blz_earlydefeat(o)) {                      /* tst.b BossLabyrinth_EarlyDefeatFlag(a0) */
+        d1 = 0x0A;                                 /* defeated */
+    } else if (obColType(a1) == 0) {               /* .checkHitState */
+        d1 = 5;                                    /* facehit */
+    } else if (obRoutine(RAM_ADDR(v_player)) >= 4) { /* .checkSonicState */
+        d1 = 4;                                    /* facelaugh */
+    }
+    /* .writeAnim */
+    obAnim(o) = d1;
+    if (d0 == 0x0E) {                              /* cmpi.b #$E,d0 / bne.s .skip */
+        obAnim(o) = 6;                             /* facepanic */
+        if (!(obRender(o) & 0x80)) {               /* tst.b obRender / bpl.s */
+            DeleteObject(o);
+            return;
+        }
+    }
+    BLZ_Child_Display(o);
+}
+
+/* BossLabyrinth_FlameMain — routine 6, disasm 77 450-478 */
+static void BossLabyrinth_FlameMain(uint8_t *o) {
+    obAnim(o) = 7;                                 /* default invisible state */
+    uint8_t *a1 = (uint8_t *)Object_GetSlot((int)blz_parentobj(o));
+    if (obID(a1) != obID(o)) {                     /* boss deleted offscreen? */
+        DeleteObject(o);
+        return;
+    }
+    /* FixBugs=0: the `bne.s` has no label, so it jumps straight to .skip and the
+       .checkMove block (the animated thruster for horizontal travel) is dead
+       code. The thruster therefore only shows up in Escape2. */
+    if (ob2ndRout(a1) == 0x0E) {                   /* cmpi.b #$E,ob2ndRout(a1) */
+        obAnim(o) = 0x0B;                          /* thruster: taking off */
+        if (!(obRender(o) & 0x80)) {               /* tst.b obRender / bpl.s */
+            DeleteObject(o);
+            return;
+        }
+    }
+    BLZ_Child_Display(o);
+}
+
+/* BossLabyrinth_Main — routine 0, disasm 77 31-56 */
+static void BossLabyrinth_Main(uint8_t *o) {
+    obX(o) = (int16_t)(boss_lz_x + 0x30);
+    obY(o) = (int16_t)(boss_lz_y + 0x500);
+    /* `move.w obX(a0),obBossX(a0)` writes the high word of the 16.16 field; the
+       low word keeps the 0 it had in the freshly cleared object slot. */
+    obBossX(o) = ((int32_t)(int16_t)obX(o)) << 16;
+    obBossY(o) = ((int32_t)(int16_t)obY(o)) << 16;
+    obColType(o) = (uint8_t)(col_48x48 | col_boss);
+    obBossHits(o) = 8;
+    obPriority(o) = 4;
+
+    const uint8_t *a2 = BossLabyrinth_ObjData;
+    uint8_t *a1 = o;                               /* first child reuses this slot */
+    for (int i = 0; i < 3; i++) {                  /* moveq #2,d1 -> dbf, 3 passes */
+        if (i > 0) {
+            a1 = (uint8_t *)FindNextFreeObj(a1);
+            if (!a1) break;                        /* bne.s BossLabyrinth_ShipMain */
+            obID(a1) = id_BossLabyrinth;
+            obX(a1) = obX(o);
+            obY(a1) = obY(o);
+        }
+        obStatus(o) &= (uint8_t)~0x01;             /* bclr #0,obStatus(a0) */
+        ob2ndRout(a1) = 0;
+        obRoutine(a1) = *a2++;
+        obAnim(a1) = *a2++;
+        obPriority(a1) = obPriority(o);
+        obMap(a1) = (uint32_t)(uintptr_t)Map_Eggman;
+        obGfx(a1) = (uint16_t)ArtTile_Eggman;
+        obRender(a1) = sprite_cam_field;
+        obActWid(a1) = 64 / 2;
+        blz_parentobj(a1) = (uint32_t)Object_GetIndex(o); /* slot index, not a pointer */
+    }
+    /* BossLabyrinth_ShipMain is reached on the same pass as the last child. */
+    BossLabyrinth_ShipMain(o);
+}
+
+/* Object $77 dispatcher */
+static void BossLabyrinth_ObjectMain(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    switch (obRoutine(o)) {                       /* BossLabyrinth_Index: 0/2/4/6 */
+        case 0x00: BossLabyrinth_Main(o); break;
+        case 0x02: BossLabyrinth_ShipMain(o); break;
+        case 0x04: BossLabyrinth_FaceMain(o); break;
+        case 0x06: BossLabyrinth_FlameMain(o); break;
     }
 }

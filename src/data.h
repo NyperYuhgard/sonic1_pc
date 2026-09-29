@@ -862,20 +862,44 @@ extern const uint8_t *Map_MBlockLZ;
 extern size_t   Map_MBlockLZ_len;
 
 extern const uint8_t *Map_LBlock;
+extern size_t   Map_LBlock_len;
 
 extern const uint8_t *Map_Gar;
+extern size_t   Map_Gar_len;
 
 extern const uint8_t *Map_LConv;
+extern size_t   Map_LConv_len;
 
 extern const uint8_t *Map_Orb;
+extern size_t   Map_Orb_len;
 
 extern const uint8_t *Map_Bub;
+extern size_t   Map_Bub_len;
 
 extern const uint8_t *Map_WFall;
+extern size_t   Map_WFall_len;
 
 extern const uint8_t *Map_Pole;
+extern size_t   Map_Pole_len;
 
 extern const uint8_t *Map_Flap;
+extern size_t   Map_Flap_len;
+
+extern const uint8_t *Map_Jaws;
+extern size_t   Map_Jaws_len;
+
+extern const uint8_t *Map_Burro;
+extern size_t   Map_Burro_len;
+
+extern const uint8_t *Map_Harp;
+extern size_t   Map_Harp_len;
+
+extern const uint8_t *Map_Surf;
+extern size_t   Map_Surf_len;
+
+/* $0A drowning countdown numbers reuse the unused Sonic face mappings */
+extern const uint8_t *Map_UnusedFace;
+extern size_t   Map_UnusedFace_len;
 
 extern const uint8_t *Map_Brick;
 extern size_t   Map_Brick_len;
@@ -1037,6 +1061,31 @@ extern size_t   Ani_Roll_len;
 
 extern const uint8_t *Ani_Splash;
 extern size_t   Ani_Splash_len;
+
+/* Labyrinth Zone */
+extern const uint8_t *Ani_Drown;
+extern size_t   Ani_Drown_len;
+
+extern const uint8_t *Ani_Flap;
+extern size_t   Ani_Flap_len;
+
+extern const uint8_t *Ani_Harp;
+extern size_t   Ani_Harp_len;
+
+extern const uint8_t *Ani_Jaws;
+extern size_t   Ani_Jaws_len;
+
+extern const uint8_t *Ani_Burro;
+extern size_t   Ani_Burro_len;
+
+extern const uint8_t *Ani_Orb;
+extern size_t   Ani_Orb_len;
+
+extern const uint8_t *Ani_Bub;
+extern size_t   Ani_Bub_len;
+
+extern const uint8_t *Ani_WFall;
+extern size_t   Ani_WFall_len;
 
 extern const uint8_t *SonicDynPLC;
 extern size_t   SonicDynPLC_len;
@@ -1206,6 +1255,25 @@ extern size_t   ObjPos_FZ_len;
 
 extern const uint8_t *ObjPos_End;
 extern size_t   ObjPos_End_len;
+
+/* Conveyor platform corner lists ($63 LZ Conveyor, objpos/platforms/) */
+extern const uint8_t *ObjPos_LZ1pf1;
+extern size_t   ObjPos_LZ1pf1_len;
+
+extern const uint8_t *ObjPos_LZ1pf2;
+extern size_t   ObjPos_LZ1pf2_len;
+
+extern const uint8_t *ObjPos_LZ2pf1;
+extern size_t   ObjPos_LZ2pf1_len;
+
+extern const uint8_t *ObjPos_LZ2pf2;
+extern size_t   ObjPos_LZ2pf2_len;
+
+extern const uint8_t *ObjPos_LZ3pf1;
+extern size_t   ObjPos_LZ3pf1_len;
+
+extern const uint8_t *ObjPos_LZ3pf2;
+extern size_t   ObjPos_LZ3pf2_len;
 
 
 /* ---------------- Collision ---------------- */
