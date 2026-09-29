@@ -79,8 +79,10 @@ void RememberState(void *obj);
 
 /* Is the object's spawn marker (default obX, else the passed field) outside
    the range of ± 128+320+192 px around the screen? Mirrors the out_of_range
-   macro in Macros.asm. Returns nonzero when out of range. */
-int OutOfRange(void *obj, int16_t ring_origX);
+   macro in Macros.asm. Pass pos = -1 to use obX. bmicheck enables the macro's
+   optional third argument (the redundant `bmi.w exit`); only three call sites
+   in the disasm use it. Returns nonzero when out of range. */
+int OutOfRange(void *obj, int16_t pos, int bmicheck);
 
 /* Kill Sonic: set death status, animation, velocity, graphics, and queue
    death sound. Used by Sonic_HandleDeath (normal death) and TimeOver. */

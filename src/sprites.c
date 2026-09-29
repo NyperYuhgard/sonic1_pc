@@ -14,6 +14,12 @@
 void Sprites_EmitPiece(uint8_t *sprite_table, int *sprite_index,
                        int base_y, int base_x, const uint8_t **data,
                        uint16_t gfx, int xflip, int yflip) {
+    /* ASM buildsprite (.loopSpritePieces): `cmpi.b #sprites_max,d5 / beq.s .return`
+       aborts only the piece-drawing loop of the CURRENT object; .objectLoop and
+       .priorityLoop keep going so every queued object still gets its bounds
+       check and its sprite_rendered flag. Never short-circuit the object loops. */
+    if (*sprite_index >= sprites_max) return;
+
     const uint8_t *p = *data;
     int y_off = (int8_t)p[0];
     int width_code = (p[1] >> 2) & 3;      /* width-1 (Sonic 1: 2 bits) */
@@ -80,8 +86,8 @@ void BuildSprites(void) {
 
     int sprite_index = 0;
 
-    for (int layer = 0; layer < 8 && sprite_index < sprites_max; layer++) {
-        for (int i = 0; i < sprite_queue_count && sprite_index < sprites_max; i++) {
+    for (int layer = 0; layer < 8; layer++) {
+        for (int i = 0; i < sprite_queue_count; i++) {
             uint8_t *obj = sprite_queue[i];
             if (!obj || obID(obj) == 0) continue;
             if ((obPriority(obj) & 7) != layer) continue;
@@ -136,37 +142,41 @@ void BuildSprites(void) {
             /* ---- RAMA: raw mappings ---- */
             if (render & sprite_rawmappings) {
                 const uint8_t *piece_data = map;
-                if (sprite_index < sprites_max) {
-                    Sprites_EmitPiece(sprite_table, &sprite_index, y, x,
-                                       &piece_data, gfx, xflip, yflip);
-                }
+                Sprites_EmitPiece(sprite_table, &sprite_index, y, x,
+                                   &piece_data, gfx, xflip, yflip);
                 obRender(obj) |= sprite_rendered;
                 continue;
             }
 
             size_t map_len = Map_LookupLength(map);
-            if (map_len == 0) continue;
+            int num_pieces = 0;              /* blank frame -> draw nothing... */
+            const uint8_t *piece_data = NULL;
+            if (map_len != 0) {
+                size_t frame_idx = (size_t)(uint8_t)obFrame(obj);
+                if (frame_idx * 2 + 1 < map_len) {
+                    uint16_t frame_offset = ((const uint16_t *)map)[frame_idx];
+                    if (frame_offset < map_len) {
+                        const uint8_t *frame_data = map + frame_offset;
+                        int n = frame_data[0];
+                        /* ASM: `move.b (a1)+,d1 / subq.b #1,d1 / bmi.s .setVisible`:
+                           a blank frame (0 pieces) skips the drawing but STILL
+                           reaches .setVisible and sets sprite_rendered. Only the
+                           screen-bounds .skipObject paths leave the flag clear. */
+                        if (n > 0 && n <= 32 &&
+                            (size_t)frame_offset + 1 + (size_t)n * 5 <= map_len) {
+                            num_pieces = n;
+                            piece_data = frame_data + 1;
+                        }
+                    }
+                }
+            }
 
-            int frame_idx = obFrame(obj);
-            if ((size_t)(frame_idx * 2 + 1) >= map_len) continue;
-            uint16_t frame_offset = ((const uint16_t *)map)[frame_idx];
-
-            if (frame_offset >= map_len) continue;
-            const uint8_t *frame_data = map + frame_offset;
-
-            int num_pieces = frame_data[0];
-            if (num_pieces <= 0 || num_pieces > 32) continue;
-
-            if ((size_t)frame_offset + 1 + (size_t)num_pieces * 5 > map_len) continue;
-
-            const uint8_t *piece_data = frame_data + 1;
-
-            for (int p = 0; p < num_pieces && sprite_index < sprites_max; p++) {
+            for (int p = 0; p < num_pieces; p++) {
                 Sprites_EmitPiece(sprite_table, &sprite_index, y, x,
                                    &piece_data, gfx, xflip, yflip);
             }
 
-            obRender(obj) |= sprite_rendered;
+            obRender(obj) |= sprite_rendered;   /* ...but the object is on screen */
         }
     }
 

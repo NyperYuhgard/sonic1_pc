@@ -503,7 +503,7 @@ void ObjFloorDist2(void *obj, int16_t x, int16_t *dist, int16_t *angle) {
 void RememberState(void *obj) {
     uint8_t *o = (uint8_t *)obj;
 
-    if (!OutOfRange(obj, -1)) {            /* out_of_range.w .offscreen (bne) */
+    if (!OutOfRange(obj, -1, 0)) {               /* out_of_range.w .offscreen (bne) */
         DisplaySprite(obj);                /* bra.w DisplaySprite */
         return;
     }
@@ -522,19 +522,25 @@ void RememberState(void *obj) {
    cond = ((pos & ~0x7F) - (((v_screenposx - 128) & ~0x7F)));
    delete when the high bit of cond is set OR cond > 128+320+192.
    The ring pass passes ring_origX(a0); pass -1 to mean obX(a0).
+
+   bmicheck selects the optional `bmi.w exit` (Macros.asm 289-292). Only three
+   call sites in the whole disasm pass it: 54 MZ Invisible Lava Tag:41,
+   5E SLZ Seesaw:14 and 7A/7B Boss SLZ:517. The macro itself calls it
+   redundant, and it is (the bmi range is a subset of the bhi range), but the
+   flag is kept so the C mirrors the macro instead of hardcoding dead
+   behaviour on the ~80 call sites that do not emit it.
    =========================================================================== */
-int OutOfRange(void *obj, int16_t ring_origX) {
+int OutOfRange(void *obj, int16_t pos, int bmicheck) {
     uint8_t *o = (uint8_t *)obj;
-    int16_t pos = ring_origX;
-    if (ring_origX == -1) {
+    if (pos == -1) {
         pos = obX(o);
     }
     uint16_t d0 = (uint16_t)pos & 0xFF80;                      /* andi.w #$FF80 */
     uint16_t d1 = ((uint16_t)RAM_WORD(0xF700) - 128) & 0xFF80; /* v_screenposx */
     int16_t diff = (int16_t)(d0 - d1);                         /* sub.w d1,d0 */
 
-    if (diff < 0) {
-        return 1;                                              /* bmi.w exit */
+    if (bmicheck && diff < 0) {                                /* bmi.w exit */
+        return 1;
     }
     if ((uint16_t)diff > 128 + 320 + 192u) {                   /* cmpi/bhi (unsigned) */
         return 1;
@@ -548,7 +554,14 @@ int OutOfRange(void *obj, int16_t ring_origX) {
    word in the low 16 bits (ASM d0); the updated seed is stored in v_random.
 
    move.l (v_random).w,d1 / bne.s .scramble / move.l #$2A6D365A,d1
-   .scramble: d1 = d1*41 (via asl/add); d0 = low(d1) + high(d1); seed = d0<<16
+   .scramble: d1 = d1*41 (via asl/add); d0 = low(d1) + high(d1)
+   move.w d0,d1 / swap d1 / move.l d1,(v_random).w
+
+   The stored seed is NOT plain "d0 << 16". `move.w d0,d1` rewrites only the
+   low word of d1, so its upper word survives the following swap and ends up as
+   the seed's low half. Zeroing it instead collapses the sequence to
+   R' = 41*R mod 65536 (period 8192) and desyncs every routine that seeds
+   itself from v_random.
    =========================================================================== */
 static uint16_t RandomNumber(void) {
     uint32_t d1 = v_random;                          /* move.l (v_random).w,d1 */
@@ -561,12 +574,13 @@ static uint16_t RandomNumber(void) {
     d1 = (d1 << 2) + d0;                             /* asl.l #2,d1 / add.l d0,d1 */
     d1 = (d1 << 3) + d0;                             /* asl.l #3,d1 / add.l d0,d1 */
 
-    d0 = (uint32_t)(uint16_t)d1;                     /* move.w d1,d0 (low word) */
-    d1 = (d1 >> 16) | (d1 << 16);                    /* swap d1 */
-    d0 = ((uint32_t)d0 + (uint16_t)d1) & 0xFFFF;     /* add.w d1,d0 (low+high words) */
+    d0 = (uint32_t)(uint16_t)d1;                     /* move.w d1,d0 -> L */
+    d0 = (d0 + (uint16_t)(d1 >> 16)) & 0xFFFF;       /* swap d1 / add.w d1,d0 -> (L+H) */
 
-    d1 = d0 << 16;                                   /* move.w d0,d1 / swap d1 */
-    v_random = d1;                                   /* move.l d1,(v_random).w */
+    /* move.w d0,d1 rewrites only the LOW word of d1, so its upper word (L)
+       survives; the following swap.d1 then yields (d0 << 16) | L. The seed is
+       therefore NOT d0 << 16 — the next call folds L back in via 41*seed. */
+    v_random = ((uint32_t)(uint16_t)d0 << 16) | (uint16_t)d1; /* move.l d1,(v_random).w */
 
     return (uint16_t)d0;                             /* d0 contains pseudo-random number */
 }
@@ -3610,7 +3624,7 @@ static void Signpost_Main(void *obj) {
         AnimateSprite(obj, Ani_Sign);            /* lea (Ani_Sign).l,a1 / bsr AnimateSprite */
     }
     DisplaySprite(obj);                          /* bsr.w DisplaySprite (FixBugs=0: before out_of_range) */
-    if (OutOfRange(o, -1)) {                     /* out_of_range.w DeleteObject */
+    if (OutOfRange(o, -1, 0)) {                        /* out_of_range.w DeleteObject */
         DeleteObject(o);
     }
 }
@@ -4105,7 +4119,7 @@ static void Bri_Bend(uint8_t *o) {
 
 /* Bri_ChkDel — delete the main bridge object and all child logs if offscreen. */
 static void Bri_ChkDel(uint8_t *o) {
-    if (!OutOfRange(o, -1)) {                    /* out_of_range.w .deleteBridge */
+    if (!OutOfRange(o, -1, 0)) {                       /* out_of_range.w .deleteBridge */
         return;                                  /* FixBugs=0: rts (no DisplaySprite here) */
     }
 
@@ -4169,7 +4183,7 @@ static void Rock_Solid(uint8_t *o) {
 
     /* FixBugs=0: DisplaySprite then out_of_range DeleteObject */
     DisplaySprite(o);
-    if (OutOfRange(o, -1)) {                    /* out_of_range.w DeleteObject */
+    if (OutOfRange(o, -1, 0)) {                       /* out_of_range.w DeleteObject */
         DeleteObject(o);
     }
 }
@@ -4599,7 +4613,7 @@ static void Edge_Solid(uint8_t *o) {
 
 static void Edge_Display(uint8_t *o) {
     DisplaySprite(o);                           /* bsr.w DisplaySprite */
-    if (OutOfRange(o, -1)) {                    /* out_of_range.w DeleteObject */
+    if (OutOfRange(o, -1, 0)) {                       /* out_of_range.w DeleteObject */
         DeleteObject(o);
     }
 }
@@ -4735,7 +4749,7 @@ static void Light_Animate(uint8_t *o) {
     }
 
     /* .chkdel: */
-    if (OutOfRange(o, -1)) {                             /* out_of_range.w DeleteObject */
+    if (OutOfRange(o, -1, 0)) {                                /* out_of_range.w DeleteObject */
         DeleteObject(o);
         return;
     }
@@ -4852,7 +4866,7 @@ static void LavaMaker_Main(void *obj) {
         case 0: LavaM_Main(o);     break;
         case 2: LavaM_MakeLava(o); break;
     }
-    if (OutOfRange(o, -1)) {
+    if (OutOfRange(o, -1, 0)) {
         DeleteObject(o);
     }
 }
@@ -4985,7 +4999,7 @@ static void LBall_Action(uint8_t *o) {
     if (Ani_Fire) AnimateSprite(o, Ani_Fire);
 
     /* LBall_ChkDel (FixBugs=0): only the out_of_range check, no DisplaySprite */
-    if (OutOfRange(o, -1)) {
+    if (OutOfRange(o, -1, 0)) {
         DeleteObject(o);
     }
 }
@@ -5250,7 +5264,7 @@ static void GBall_Move(uint8_t *o) {
 
 /* Swing_ChkDel — delete platform and every child when off-screen. */
 static void Swing_ChkDel(uint8_t *o) {
-    if (!OutOfRange(o, swing_origX(o))) return;
+    if (!OutOfRange(o, swing_origX(o), 0)) return;
 
     uint8_t count = swing_children(o);
     uint8_t *entry = (uint8_t *)o + 0x29;
@@ -5405,7 +5419,7 @@ static void Hel_Main(uint8_t *o) {
 /* Hel_ChkDel — delete parent + children if offscreen. FixBugs=0: rts only
    on the on-screen branch (DisplaySprite is done by the caller). */
 static void Hel_ChkDel(uint8_t *o) {
-    if (!OutOfRange(o, -1)) return;                       /* out_of_range.w .deleteHelix */
+    if (!OutOfRange(o, -1, 0)) return;                          /* out_of_range.w .deleteHelix */
 
     /* .deleteHelix */
     uint8_t d2 = hel_nchildren(o);                        /* move.b (a2)+,d2 */
@@ -5674,7 +5688,7 @@ static void Plat_Move(uint8_t *o) {
 
 /* --- Plat_ChkDel: delete platform if out of range (FixBugs=0: rts) --- */
 static void Plat_ChkDel(uint8_t *o) {
-    if (OutOfRange(o, plat_origX(o))) {                   /* out_of_range.s plat_origX */
+    if (OutOfRange(o, plat_origX(o), 0)) {                      /* out_of_range.s plat_origX */
         Plat_Delete(o);
     }
 }
@@ -6256,7 +6270,7 @@ static void Scen_Main(uint8_t *o) {
 /* Scen_ChkDel — Routine 2
  *  out_of_range.w DeleteObject ; bra.w DisplaySprite */
 static void Scen_ChkDel(uint8_t *o) {
-    if (OutOfRange(o, -1)) {                 /* out_of_range.w DeleteObject */
+    if (OutOfRange(o, -1, 0)) {                    /* out_of_range.w DeleteObject */
         DeleteObject(o);
         return;
     }
@@ -6937,7 +6951,7 @@ static void Ring_Main_Expand(void *obj) {
 static void Ring_Animate(uint8_t *o) {
     obFrame(o) = v_ani1_frame;
     DisplaySprite(o);
-    if (OutOfRange(o, ring_origX(o))) {
+    if (OutOfRange(o, ring_origX(o), 0)) {
         DeleteObject(o);
     }
 }
@@ -7366,7 +7380,7 @@ mon_animate:
         }
         /* Mon_Display (falls through) */
         DisplaySprite(o);                        /* bsr.w DisplaySprite */
-        if (OutOfRange(o, -1)) {                 /* out_of_range.w DeleteObject */
+        if (OutOfRange(o, -1, 0)) {                    /* out_of_range.w DeleteObject */
             DeleteObject(o);
         }
         /* rts */
@@ -7508,7 +7522,7 @@ static void Monitor_Main(void *obj) {
                     AnimateSprite(o, Ani_Monitor);
                 }
                 DisplaySprite(o);
-                if (OutOfRange(o, -1)) {
+                if (OutOfRange(o, -1, 0)) {
                     DeleteObject(o);
                 }
             }
@@ -7524,7 +7538,7 @@ static void Monitor_Main(void *obj) {
         case 8:
             /* Mon_Display — Routine 8 */
             DisplaySprite(o);
-            if (OutOfRange(o, -1)) {
+            if (OutOfRange(o, -1, 0)) {
                 DeleteObject(o);
             }
             break;
@@ -8647,7 +8661,7 @@ static void LGrass_ChkDel(uint8_t *o) {
         LGrass_DelFlames(o);
         return;
     }
-    if (OutOfRange(o, lgrass_origX(o))) {
+    if (OutOfRange(o, lgrass_origX(o), 0)) {
         DeleteObject(o);
     }
     /* FixBugs=0: rts */
@@ -9044,7 +9058,7 @@ static void GlassBlock_Main(void *obj) {
         case 8: Glass_Sheen_Triggered(o);  break;
     }
     /* out_of_range.w .delete ; bra.w DisplaySprite */
-    if (OutOfRange(o, -1)) {
+    if (OutOfRange(o, -1, 0)) {
         DeleteObject(o);
         return;
     }
@@ -9123,7 +9137,7 @@ static void CStom_UpdateBlockY(uint8_t *o) {
 
 /* --- CStom_ChkDel: FixBugs=0 → out_of_range ; sin DisplaySprite extra --- */
 static void CStom_ChkDel(uint8_t *o) {
-    if (OutOfRange(o, -1)) DeleteObject(o);
+    if (OutOfRange(o, -1, 0)) DeleteObject(o);
 }
 
 /* --- CStom_Main — routine 0: setup + spawn 4 objetos --- */
@@ -9545,7 +9559,7 @@ handleFlashing:
 display:
     /* FixBugs=0: DisplaySprite PRIMERO, luego out_of_range */
     DisplaySprite(o);
-    if (OutOfRange(o, -1)) {
+    if (OutOfRange(o, -1, 0)) {
         DeleteObject(o);
     }
 }
@@ -9675,7 +9689,7 @@ static int PushB_Solid_ChkCollision(uint8_t *o, int16_t d1, int16_t d2, int16_t 
 
 /* --- PushB_Display: DisplaySprite + out_of_range ------------------------- */
 static void PushB_Display(uint8_t *o) {
-    if (!OutOfRange(o, -1)) {
+    if (!OutOfRange(o, -1, 0)) {
         DisplaySprite(o);
         return;
     }
@@ -9684,7 +9698,7 @@ static void PushB_Display(uint8_t *o) {
 
 /* --- PushB_ChkWithinOrigin: si está fuera pero el original no, reset ---- */
 static void PushB_ChkWithinOrigin(uint8_t *o) {
-    if (OutOfRange(o, pblock_origX(o))) {
+    if (OutOfRange(o, pblock_origX(o), 0)) {
         /* .deleteAndAllowRespawn */
         uint8_t *a2 = RAM_ADDR(v_objstate);
         uint8_t d0 = obRespawnNo(o);
@@ -10335,7 +10349,7 @@ static void Spikes_Solid(uint8_t *o) {
              *      spikes_origX (the spike's spawn X), so moving spikes don't despawn
              *      when they slide out of the camera range. */
             DisplaySprite(o);                                        /* bsr.w DisplaySprite */
-            if (OutOfRange(o, spikes_origX(o))) {                    /* out_of_range.w DeleteObject,spikes_origX */
+            if (OutOfRange(o, spikes_origX(o), 0)) {                       /* out_of_range.w DeleteObject,spikes_origX */
                 DeleteObject(o);
             }
 }
@@ -12075,7 +12089,7 @@ static void Prison_Main(void *obj) {
         case 0x0E: Pri_EndAct(o);     break;
     }
 
-    if (OutOfRange(o, -1)) {
+    if (OutOfRange(o, -1, 0)) {
         DeleteObject(o);
         return;
     }
@@ -12490,7 +12504,7 @@ static void Springs_ObjectMain(void *obj) {
 
     /* Outer display + range check (FixBugs=0 order) */
     DisplaySprite(o);                                     /* bsr.w DisplaySprite */
-    if (OutOfRange(o, -1)) {                              /* out_of_range.w DeleteObject */
+    if (OutOfRange(o, -1, 0)) {                                 /* out_of_range.w DeleteObject */
         DeleteObject(o);
     }
 }
@@ -12916,7 +12930,7 @@ static void Brick_Action(uint8_t *o) {
 
     chkdel:
     /* REV01 / FixBugs=0: out_of_range primero, DisplaySprite después. */
-    if (OutOfRange(o, -1)) {                            /* out_of_range.w DeleteObject */
+    if (OutOfRange(o, -1, 0)) {                               /* out_of_range.w DeleteObject */
         DeleteObject(o);
         return;
     }
@@ -13086,7 +13100,7 @@ static void Bump_Hit(uint8_t *o) {
 static void Bump_Display(uint8_t *o) {
     if (Ani_Bump) AnimateSprite(o, Ani_Bump);                /* lea (Ani_Bump).l,a1 */
 
-    if (OutOfRange(o, -1)) {                                 /* out_of_range.s .delete */
+    if (OutOfRange(o, -1, 0)) {                                    /* out_of_range.s .delete */
         /* .delete: limpiar flag de respawn-block y borrar */
         uint8_t *a2 = RAM_ADDR(v_objstate);
         uint8_t d0 = obRespawnNo(o);
@@ -13165,7 +13179,7 @@ static void GRing_Main(uint8_t *o) {
 /* --- GRing_Animate (Routine 2) ------------------------------------------ */
 static void GRing_Animate(uint8_t *o) {
     obFrame(o) = (uint8_t)v_ani1_frame;                 /* move.b (v_ani1_frame).w */
-    if (OutOfRange(o, -1)) {                            /* out_of_range.w DeleteObject */
+    if (OutOfRange(o, -1, 0)) {                               /* out_of_range.w DeleteObject */
         DeleteObject(o);
         return;
     }
@@ -13261,7 +13275,7 @@ static void Flash_Collect(uint8_t *o) {
 /* --- Flash_ChkDel (Routine 2) ------------------------------------------ */
 static void Flash_ChkDel(uint8_t *o) {
     Flash_Collect(o);                                   /* bsr.s Flash_Collect */
-    if (OutOfRange(o, -1)) {                            /* out_of_range.w DeleteObject */
+    if (OutOfRange(o, -1, 0)) {                               /* out_of_range.w DeleteObject */
         DeleteObject(o);
         return;
     }
@@ -13448,7 +13462,7 @@ static void GeyserMaker_Main(void *obj) {
         case 0x08: GMake_Display(o);  break;
         case 0x0A: GMake_Delete(o);   break;
     }
-    if (OutOfRange(o, -1)) {
+    if (OutOfRange(o, -1, 0)) {
         DeleteObject(o);
     }
 }
@@ -13551,7 +13565,7 @@ static void Geyser_Action(uint8_t *o) {
     if (Ani_Geyser) AnimateSprite(o, Ani_Geyser);
 
     /* Geyser_ChkDel (FixBugs=0) */
-    if (OutOfRange(o, -1)) {
+    if (OutOfRange(o, -1, 0)) {
         DeleteObject(o);
     }
 }
@@ -13591,7 +13605,7 @@ static void Geyser_BigLavaWall(uint8_t *o) {
     obFrame(o) = (uint8_t)d0;
 
     /* Geyser_ChkDel (FixBugs=0) */
-    if (OutOfRange(o, -1)) {
+    if (OutOfRange(o, -1, 0)) {
         DeleteObject(o);
     }
 }
@@ -13744,7 +13758,7 @@ static void LWall_Solid(uint8_t *o) {
     DisplaySprite(o);
     if (lwall_flag(o) != 0) return;     /* bne.s .show */
 
-    if (OutOfRange(o, -1)) {
+    if (OutOfRange(o, -1, 0)) {
         /* .startDelete
          * FixBugs=0 does NOT check obRespawnNo != 0 before bclr;
          * that's the known bug where placement in debug mode can corrupt
@@ -14201,7 +14215,7 @@ static void MBlock_StandOn(uint8_t *o) {
 
 /* --- MBlock_DisplayOrDelete --- */
 static void MBlock_DisplayOrDelete(uint8_t *o) {
-    if (OutOfRange(o, mblock_origX(o))) {               /* out_of_range.w DeleteObject,mblock_origX */
+    if (OutOfRange(o, mblock_origX(o), 0)) {                  /* out_of_range.w DeleteObject,mblock_origX */
         DeleteObject(o);
         return;
     }
@@ -14278,7 +14292,7 @@ static int MBlock_SecretLZ1Raft(uint8_t *o) {
         obSubtype(o) -= 3;                              /* subq.b #3 → tipo 4 */
     }
     /* .hidePlatform: addq.l #4,sp ; out_of_range.w DeleteObject,mblock_origX */
-    if (OutOfRange(o, mblock_origX(o))) {
+    if (OutOfRange(o, mblock_origX(o), 0)) {
         DeleteObject(o);
     }
     return 1;
@@ -14386,7 +14400,7 @@ static void LTag_ChkDel(uint8_t *o) {
     /* out_of_range.w DeleteObject,obX(a0),1 ; rts
      * El objeto se borra si está fuera de rango, pero NUNCA se muestra
      * (mappings en blanco, y no hay DisplaySprite). */
-    if (OutOfRange(o, -1)) {                            /* usa obX(o), como el macro */
+    if (OutOfRange(o, -1, 1)) {                            /* usa obX(o), bmicheck=1 (Macros.asm 289-292) */
         DeleteObject(o);
     }
 }
@@ -14767,7 +14781,7 @@ static void FBlock_Action(uint8_t *o) {
     }
 
     /* .chkDel (REV01) */
-    if (OutOfRange(o, fb_origX(o))) {
+    if (OutOfRange(o, fb_origX(o), 0)) {
         /* out_of_range → .checkSYZSpecial */
         if (type == 0x7 && fb_moving(o) != 0) {
             /* El bloque horizontal de SYZ3 en movimiento nunca se borra:
@@ -15254,7 +15268,7 @@ static void Sball_Twirl(uint8_t *o) {
 
 /* --- SBall_ChkDel — display o borra toda la cadena ------------------ */
 static void SBall_ChkDel(uint8_t *o) {
-    if (!OutOfRange(o, sball_origX(o))) {                    /* out_of_range.w .delete */
+    if (!OutOfRange(o, sball_origX(o), 0)) {                       /* out_of_range.w .delete */
         DisplaySprite(o);                                    /* bra.w DisplaySprite */
         return;
     }
@@ -15361,7 +15375,7 @@ static void BBall_Move(uint8_t *o) {
         case 3: BBall_Type3_Circling(o);   break;
     }
 
-    if (OutOfRange(o, bball_origX(o))) {                     /* out_of_range.w DeleteObject,bball_origX */
+    if (OutOfRange(o, bball_origX(o), 0)) {                        /* out_of_range.w DeleteObject,bball_origX */
         DeleteObject(o);
         return;
     }
@@ -17089,7 +17103,7 @@ static void Cat_Head(uint8_t *o) {
     obFrame(o) = frame;
 
 display:
-    if (OutOfRange(o, -1)) {
+    if (OutOfRange(o, -1, 0)) {
         Cat_Despawn(o);
         return;
     }
@@ -17744,7 +17758,7 @@ static void Drown_AirLeft(uint8_t *o) {
 /* Drown_DecrementExtraBubbles — shared tail of the bubble-spawn sequence. */
 static void Drown_DecrementExtraBubbles(uint8_t *o) {
     drown_extrabubbles(o) = (uint8_t)(drown_extrabubbles(o) - 1);
-    if (drown_extrabubbles(o) >= 0) return;                   /* bpl.s .return */
+    if ((int8_t)drown_extrabubbles(o) >= 0) return;          /* bpl.s .return */
     drown_extrabubflag(o) = 0;                                /* clr.w */
 }
 
@@ -18586,7 +18600,7 @@ static void Waterfall_Main(void *obj) {
 
 /* Orb_DisplayNoMove / .deleteWithSpikeballs — disasm 60 128-152 */
 static void Orb_DisplayNoMove(uint8_t *o) {
-    if (!OutOfRange(o, -1)) {                    /* out_of_range.w .deleteWithSpikeballs */
+    if (!OutOfRange(o, -1, 0)) {                       /* out_of_range.w .deleteWithSpikeballs */
         DisplaySprite(o);                        /* bra.w DisplaySprite */
         return;
     }
@@ -18819,11 +18833,13 @@ static void LBlk_SideSink(uint8_t *o) {
     lblk_untouched(o) = 0;
 }
 
-/* LBlk_OnWater — cork block that follows the water surface. disasm 61 154-190 */
+/* LBlk_OnWater — cork block that follows the water surface. disasm 61 161-193
+   sub.w obY(a0),d0 sets carry on borrow, so bcc (= no borrow, waterY >=u blockY,
+   block at or above the water) is the test for bit 15 being CLEAR. */
 static void LBlk_OnWater(uint8_t *o) {
     int16_t d0 = (int16_t)(RAM_WORD(v_waterpos1) - obY(o));
     if (d0 == 0) return;                           /* beq.s .return2 */
-    if ((uint16_t)d0 > 0x8000) {                   /* bcc.s .corkSink (block above water) */
+    if ((uint16_t)d0 < 0x8000) {                   /* bcc.s .corkSink (block above water) */
         /* .corkSink: at most 2px above the water level */
         if (d0 > 2) d0 = 2;                        /* cmpi.w #2,d0 / ble.s .sink */
         obY(o) = (int16_t)(obY(o) + d0);
@@ -18865,7 +18881,7 @@ static void LBlk_Main(uint8_t *o) {
     obRoutine(o) = (uint8_t)(obRoutine(o) + 2);    /* -> LBlk_Action */
     obMap(o) = (uint32_t)(uintptr_t)Map_LBlock;
     obGfx(o) = (uint16_t)(ArtTile_LZ_Blocks | Tile_Pal3);
-    obRender(o) = (uint8_t)(obRender(o) | sprite_cam_field);
+    obRender(o) = (uint8_t)sprite_cam_field;        /* move.b (not ori.b) */
     obPriority(o) = 3;
 
     uint16_t d0 = (uint16_t)((uint16_t)obSubtype(o) >> 3); /* lsr.w #3,d0 */
@@ -18905,7 +18921,7 @@ static void LBlk_Action(uint8_t *o) {
     }
 
     /* .chkdel */
-    if (OutOfRange(o, lblk_origX(o))) {            /* out_of_range.w DeleteObject */
+    if (OutOfRange(o, lblk_origX(o), 0)) {               /* out_of_range.w DeleteObject */
         DeleteObject(o);
         return;
     }
@@ -19287,7 +19303,10 @@ static void LabyrinthConvey_Main(void *obj) {
    --------------------------------------------------------------------------- */
 #define bub_inhalable(o)  (*(uint8_t *)((uint8_t *)(o) + 0x2E))  /* objoff_2E */
 #define bub_origX(o)      (*(int16_t *)((uint8_t *)(o) + 0x30)) /* objoff_30 */
-#define bub_time(o)       (*(int16_t *)((uint8_t *)(o) + 0x32)) /* objoff_32 */
+/* bub_time is a BYTE at 0x32 and bub_timebase is the very next BYTE at 0x33:
+   the ASM only ever does subq.b/move.b on it, so it must not be a word here
+   or every write would clobber bub_timebase. */
+#define bub_time(o)       (*(uint8_t *)((uint8_t *)(o) + 0x32))  /* objoff_32 */
 #define bub_timebase(o)   (*(uint8_t *)((uint8_t *)(o) + 0x33)) /* objoff_33 */
 #define bub_minicount(o)  (*(uint8_t *)((uint8_t *)(o) + 0x34)) /* objoff_34 */
 #define bub_bubbleflag(o) (*(uint16_t *)((uint8_t *)(o) + 0x36))/* objoff_36 */
@@ -19333,7 +19352,7 @@ static void Bub_Bursting(uint8_t *o) {
 /* Bub_ChkWater — routine 4, disasm 64 71-140 */
 static void Bub_ChkWater(uint8_t *o) {
     int16_t d0 = (int16_t)RAM_WORD(v_waterpos1);
-    if (!((uint16_t)d0 <= (uint16_t)obY(o))) {      /* cmp.w obY(a0),d0 / blo.s .wobble */
+    if (!((uint16_t)d0 < (uint16_t)obY(o))) {        /* cmp.w obY(a0),d0 / blo.s .wobble */
         /* .burst: still under the surface's sway, so pop the bubble */
         obRoutine(o) = 6;                           /* -> Bub_Bursting */
         obAnim(o) = (uint8_t)(obAnim(o) + 3);
@@ -19388,7 +19407,7 @@ static void Bub_ChkWater(uint8_t *o) {
 static void Bub_BubbleMaker(uint8_t *o) {
     if (bub_bubbleflag(o) == 0) {                   /* tst.w bub_bubbleflag / bne.s */
         int16_t d0 = (int16_t)RAM_WORD(v_waterpos1);
-        if ((uint16_t)d0 > (uint16_t)obY(o)) goto display;  /* bhs.w .display */
+        if ((uint16_t)d0 >= (uint16_t)obY(o)) goto display; /* bhs.w .display */
         if (!(obRender(o) & 0x80)) goto display;    /* tst.b obRender / bpl.w .display */
 
         bub_randomtime(o) = (int16_t)(bub_randomtime(o) - 1);
@@ -19403,10 +19422,10 @@ static void Bub_BubbleMaker(uint8_t *o) {
         bub_minicount(o) = (uint8_t)(r & 7);        /* 0-5 small bubbles */
         bub_typelist(o) = r & 0xC;                  /* multiple of 4, up to 12 */
 
-        bub_time(o) = (int16_t)((uint8_t)bub_time(o) - 1);
-        if (bub_time(o) < 0) {                      /* bpl.s .goSpawn */
-            bub_time(o) = (int8_t)bub_timebase(o);
-            bub_bubbleflag(o) = (uint16_t)(bub_bubbleflag(o) | 0x8000);
+        bub_time(o) = (uint8_t)(bub_time(o) - 1);             /* subq.b #1,bub_time(a0) */
+        if ((int8_t)bub_time(o) < 0) {                        /* bpl.s .goSpawn */
+            bub_time(o) = bub_timebase(o);                    /* move.b bub_timebase */
+            bub_bubbleflag(o) = (uint16_t)(bub_bubbleflag(o) | 0x8000);  /* bset #7 */
         }
         /* .goSpawn / .spawnBubble */
     } else {
@@ -19427,21 +19446,21 @@ static void Bub_BubbleMaker(uint8_t *o) {
     obY(a1) = obY(o);
     obSubtype(a1) = Bub_BblTypes[bub_typelist(o) + bub_minicount(o)];
 
-    if (bub_bubbleflag(o) & 0x8000) {               /* is a large bubble set to spawn? */
+    if (bub_bubbleflag(o) & 0x8000) {               /* btst #7 / beq.s .chkReset */
         if ((RandomNumber() & 3) == 0) {            /* 1/4 chance for a large bubble */
             uint16_t was = bub_bubbleflag(o);
             bub_bubbleflag(o) = (uint16_t)(was | 0x4000);
-            if (!(was & 0x4000)) {                  /* bne.s .chkReset (was already set) */
-                obSubtype(a1) = 2;                  /* large / inhalable */
-            }
+            if (was & 0x4000) goto chkReset;        /* bne.s .chkReset: flag was already set */
+            obSubtype(a1) = 2;                      /* large / inhalable, then fall through */
         }
-    }
-    /* .chkFallback */
-    if (bub_minicount(o) == 0) {                    /* tst.b bub_minicount / bne.s */
-        uint16_t was = bub_bubbleflag(o);
-        bub_bubbleflag(o) = (uint16_t)(was | 0x4000);
-        if (!(was & 0x4000)) {
-            obSubtype(a1) = 2;
+        /* .chkFallback — reachable only when bit 7 is set (or the 1/4 roll
+           succeeded); `beq.s .chkReset` skips it entirely otherwise. */
+        if (bub_minicount(o) == 0) {                /* tst.b bub_minicount / bne.s */
+            uint16_t was = bub_bubbleflag(o);
+            bub_bubbleflag(o) = (uint16_t)(was | 0x4000);
+            if (!(was & 0x4000)) {
+                obSubtype(a1) = 2;
+            }
         }
     }
 
@@ -19455,13 +19474,13 @@ animate:
     AnimateSprite(o, Ani_Bub);
 
 display:
-    if (OutOfRange(o, -1)) {                        /* out_of_range.w DeleteObject */
+    if (OutOfRange(o, -1, 0)) {                           /* out_of_range.w DeleteObject */
         DeleteObject(o);
         return;
     }
     {
         int16_t d0 = (int16_t)RAM_WORD(v_waterpos1);
-        if ((uint16_t)d0 <= (uint16_t)obY(o)) {     /* blo.w DisplaySprite */
+        if ((uint16_t)d0 < (uint16_t)obY(o)) {            /* blo.w DisplaySprite */
             DisplaySprite(o);
         }
     }
@@ -19472,7 +19491,7 @@ static void Bub_Main(uint8_t *o) {
     obRoutine(o) = (uint8_t)(obRoutine(o) + 2);    /* -> Bub_Inflate */
     obMap(o) = (uint32_t)(uintptr_t)Map_Bub;
     obGfx(o) = (uint16_t)(ArtTile_LZ_Bubbles | Tile_Prio);
-    obRender(o) = (uint8_t)(obRender(o) | sprite_rendered | sprite_cam_field);
+    obRender(o) = (uint8_t)(sprite_rendered | sprite_cam_field);  /* move.b (not ori.b) */
     obActWid(o) = 32 / 2;
     obPriority(o) = 1;
 
@@ -19497,8 +19516,8 @@ static void Bub_Main(uint8_t *o) {
     /* bubble maker (subtype $80 and above) */
     obRoutine(o) = (uint8_t)(obRoutine(o) + 8);    /* -> Bub_BubbleMaker */
     d0 = (uint8_t)(d0 & 0x7F);
-    bub_time(o) = (int16_t)d0;
-    bub_timebase(o) = d0;
+    bub_time(o) = d0;                                         /* move.b d0,bub_time(a0) */
+    bub_timebase(o) = d0;                                     /* move.b d0,bub_timebase(a0) */
     obAnim(o) = 6;
     Bub_BubbleMaker(o);
 }

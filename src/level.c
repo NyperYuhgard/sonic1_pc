@@ -1146,6 +1146,10 @@ static void LZDynamicWater(void) {
 void LZWaterFeatures(void) {
     if (v_zone != id_LZ) return;
 
+    /* Revision 1: tst.b (f_nobgscroll).w / bne.s .setWaterHeight
+       (set while Sonic is drowning by $0A Drown_Countdown). */
+    if (f_nobgscroll) goto set_water_height;
+
     if (obRoutine(RAM_ADDR(v_player)) >= 6) goto set_water_height;
 
     LZWindTunnels();
@@ -1207,8 +1211,7 @@ void OscillateNumInit(void) {
         0x0080, 0x0000, 0x0080, 0x0000, 0x0080, 0x0000, 0x0080, 0x0000,
         0x0080, 0x0000, 0x0080, 0x0000, 0x50F0, 0x011E, 0x2080, 0x00B4,
         0x3080, 0x010E, 0x5080, 0x01C2, 0x7080, 0x0276, 0x0080, 0x0000,
-        0x0080, 0x0000,
-    };
+    };   /* 33 words: $FF5E bitfield + $FF60..$FF9F (16 value/rate pairs) */
 
     for (size_t i = 0; i < sizeof(baselines) / sizeof(baselines[0]); i++) {
         RAM_SET_U16(0xFE5E + (uint32_t)i * 2, baselines[i]);

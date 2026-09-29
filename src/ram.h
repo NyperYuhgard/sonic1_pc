@@ -425,7 +425,10 @@ static inline void RAM_SET_U32(uint32_t addr, uint32_t v) {
 
 #define f_restart               (RAM_WORD(0xFE02))
 #define v_framecount            (RAM_WORD(0xFE04))
-#define v_framebyte             (RAM_BYTE(0xFE05))
+/* 68k: v_framebyte: equ v_framecount+1 -> the LOW byte of the frame counter
+   word ($FF05, big-endian). v_framecount is stored here with RAM_WORD, i.e.
+   native little-endian, so its low byte lives at 0xFE04 and not at 0xFE05. */
+#define v_framebyte             (RAM_BYTE(0xFE04))
 #define v_debugitem             (RAM_BYTE(0xFE06))
 #define v_debuguse              (RAM_WORD(0xFE08))
 #define v_debugspeedtimer       (RAM_BYTE(0xFE0A))
