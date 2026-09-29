@@ -124,6 +124,7 @@ static void SpikeBall_Main(void *obj);
 static void Roller_Main(void *obj);
 static void BossSpringYard_Main(void *obj);
 static void BossBlock_Main(void *obj);
+static void WaterSplash_Main(void *obj);
 
 void AnimateSprite(void *obj, const uint8_t *anim_script);
 
@@ -162,6 +163,7 @@ typedef struct {
 static const ObjEntry obj_map[] = {
     /* $01-$0F Sonic, title screen and credits ------------------------------------- */
     { id_SonicPlayer,      SonicPlayer_Main,      },  /* $01  01 Sonic.asm */
+    { id_Splash,           WaterSplash_Main,      },  /* $08  08 LZ Water Splash.asm */
     { id_SonicSpecial,     SonicSpecial_Main,     },  /* $09  09 Sonic in Special Stage.asm */
     { id_Signpost,         Signpost_Main,         },  /* $0D  0D Signpost.asm */
     { id_TitleSonic,       TitleSonic_Main,       },  /* $0E  0E,0F Title Screen - Sonic, Press Start, TM.asm */
@@ -966,44 +968,59 @@ static void Sonic_Water(void *obj) {
 
     int16_t water_y = v_waterpos1;
     if (obY(o) > water_y) {
-        /* below water surface - entering water */
+        /* --- below water surface: entering water --- */
         uint8_t was_underwater = obStatus(o) & (1 << 6);
-        obStatus(o) |= (1 << 6);   /* set underwater flag */
+        obStatus(o) |= (1 << 6);              /* bset #6,obStatus(a0) */
         if (was_underwater) {
-            return;  /* already underwater */
+            return;                            /* bne.s .return: ya estaba dentro */
         }
+
         /* just entered water */
-        ResumeMusic();
+        ResumeMusic();                         /* bsr.w ResumeMusic */
         {
             uint8_t *bubbles = RAM_ADDR(v_sonicbubbles);
-            RAM_BYTE(v_sonicbubbles) = id_DrownCount;
-            obSubtype(bubbles) = 0x81;
+            RAM_BYTE(v_sonicbubbles) = id_DrownCount;   /* move.b #id_DrownCount,(v_sonicbubbles) */
+            obSubtype(bubbles)       = 0x81;            /* move.b #$81,(v_sonicbubbles+obSubtype) */
         }
-        v_sonspeedmax = son_maxspeed / 2;
-        v_sonspeedacc = son_acceleration / 2;
-        v_sonspeeddec = son_deceleration / 2;
+        v_sonspeedmax = son_maxspeed / 2;      /* move.w #son_maxspeed/2 */
+        v_sonspeedacc = son_acceleration / 2;  /* move.w #son_acceleration/2 */
+        v_sonspeeddec = son_deceleration / 2;  /* move.w #son_deceleration/2 */
+
+        /* asr.w obVelX: ÷2 ; asr.w obVelY ×2: ÷4 */
         obVelX(o) = (int16_t)(obVelX(o) >> 1);
         obVelY(o) = (int16_t)(obVelY(o) >> 2);
-        if (obVelY(o) != 0) {
-            /* load splash object, play sound */
+        if (obVelY(o) == 0) {
+            return;                            /* beq.s .return: sin splash si velY == 0 */
         }
+        RAM_BYTE(v_splash) = id_Splash;   /* move.b #id_Splash,(v_splash).w */
+        Sound_Queue(sfx_Splash, false);        /* move.w #sfx_Splash,d0 ; jmp (QueueSound2).l */
     } else {
-        /* above water surface - exiting water */
+        /* --- above water surface: exiting water --- */
         uint8_t was_underwater = obStatus(o) & (1 << 6);
-        obStatus(o) &= ~(1 << 6);  /* clear underwater flag */
+        obStatus(o) &= ~(1 << 6);              /* bclr #6,obStatus(a0) */
         if (!was_underwater) {
-            return;  /* already above water */
+            return;                            /* beq.s .return: ya estaba fuera */
         }
+
         /* just exited water */
-        ResumeMusic();
-        v_sonspeedmax = son_maxspeed;
-        v_sonspeedacc = son_acceleration;
-        v_sonspeeddec = son_deceleration;
-        obVelY(o) = (int16_t)(obVelY(o) << 1);
-        if (obVelY(o) != 0) {
-            /* load splash object, play sound */
-            if (obVelY(o) < -0x1000) obVelY(o) = -0x1000;
+        ResumeMusic();                         /* bsr.w ResumeMusic */
+        v_sonspeedmax = son_maxspeed;          /* move.w #son_maxspeed */
+        v_sonspeedacc = son_acceleration;      /* move.w #son_acceleration */
+        v_sonspeeddec = son_deceleration;      /* move.w #son_deceleration */
+
+        obVelY(o) = (int16_t)(obVelY(o) << 1); /* asl.w obVelY(a0): ×2 */
+        if (obVelY(o) == 0) {
+            return;                            /* beq.w .return: sin splash si velY == 0 */
         }
+        RAM_BYTE(v_splash) = id_Splash;   /* move.b #id_Splash,(v_splash).w */
+
+        /* cmpi.w #-$1000,obVelY(a0) ; bgt.s .belowmaxspeed
+           → clamp SOLO si velY <= -$1000 (saltamos si velY > -$1000) */
+        if (obVelY(o) <= -0x1000) {
+            obVelY(o) = -0x1000;               /* move.w #-$1000,obVelY(a0) */
+        }
+        /* .belowmaxspeed: */
+        Sound_Queue(sfx_Splash, false);        /* move.w #sfx_Splash,d0 ; jmp (QueueSound2).l */
     }
 }
 
@@ -2669,7 +2686,75 @@ static void Sonic_LoadGfx(void *obj) {
         }
     } while (--d1 > 0);
 }
+/* ===========================================================================
+ *  Object 08 — LZ Water Splash
+ *  Ported verbatim from _incObj/08 LZ Water Splash.asm (REV01, FixBugs=0).
+ *
+ *  Splash que aparece en la superficie del agua (LZ) cuando Sonic entra o
+ *  sale. Se spawnea desde Sonic_Water y se autodestruye cuando termina la
+ *  animación (Ani_Splash usa afRoutine $FC para avanzar obRoutine → 4).
+ *
+ *  Notas de traducción:
+ *    - Spla_Main NO tiene rts: cae directamente en Spla_Display en el mismo
+ *      frame. Se replica llamando a Spla_Display(o) al final.
+ *    - Spla_Display copia obY desde v_waterpos1 (no desde Sonic), de modo
+ *      que el splash sigue la altura del agua aunque Sonic salte.
+ * =========================================================================== */
 
+static void Spla_Main(uint8_t *o);
+static void Spla_Display(uint8_t *o);
+static void Spla_Delete(uint8_t *o);
+
+/* --- Spla_Main — Routine 0 ------------------------------------------------
+ * move.l #Map_Splash,obMap / ori.b #sprite_cam_field,obRender /
+ * move.b #1,obPriority / move.b #32/2,obActWid /
+ * move.w #ArtTile_LZ_Splash|Tile_Pal3,obGfx /
+ * move.w (v_player+obX).w,obX(a0) / fall-through a Spla_Display
+ * ------------------------------------------------------------------------ */
+static void Spla_Main(uint8_t *o) {
+    obRoutine(o) += 2;                              /* addq.b #2 → Spla_Display */
+
+    obMap(o)      = (uint32_t)(uintptr_t)Map_Splash;
+    obRender(o)  |= sprite_cam_field;               /* ori.b #sprite_cam_field */
+    obPriority(o) = 1;                              /* move.b #1: encima de Sonic */
+    obActWid(o)   = 32 / 2;                         /* move.b #32/2 */
+    obGfx(o)      = (uint16_t)(ArtTile_LZ_Splash | Tile_Pal3);
+
+    obX(o) = obX(RAM_ADDR(v_player));               /* copia X desde Sonic */
+
+    /* ASM falls through into Spla_Display en el mismo frame. */
+    Spla_Display(o);
+}
+
+/* --- Spla_Display — Routine 2 --------------------------------------------
+ * move.w (v_waterpos1).w,obY(a0) /
+ * lea (Ani_Splash).l,a1 / jsr (AnimateSprite).l / jmp (DisplaySprite).l
+ * ------------------------------------------------------------------------ */
+static void Spla_Display(uint8_t *o) {
+    obY(o) = (int16_t)v_waterpos1;                  /* copia Y desde la altura del agua */
+
+    if (Ani_Splash) {                               /* lea (Ani_Splash).l,a1 */
+        AnimateSprite(o, Ani_Splash);               /* jsr (AnimateSprite).l */
+    }
+    DisplaySprite(o);                               /* jmp (DisplaySprite).l */
+}
+
+/* --- Spla_Delete — Routine 4 ---------------------------------------------
+ * jmp (DeleteObject).l
+ * ------------------------------------------------------------------------ */
+static void Spla_Delete(uint8_t *o) {
+    DeleteObject(o);
+}
+
+/* --- Dispatcher Object 08 — Spla_Index: 0=Main, 2=Display, 4=Delete ----- */
+static void WaterSplash_Main(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+    switch (obRoutine(o)) {
+        case 0: Spla_Main(o);    break;
+        case 2: Spla_Display(o); break;
+        case 4: Spla_Delete(o);  break;
+    }
+}
 /* ===========================================================================
  *  Object 09 — Sonic in Special Stage
  *  Ported from _incObj/09 Sonic in Special Stage.asm (REV01, FixBugs=0).

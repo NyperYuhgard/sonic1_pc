@@ -52,7 +52,7 @@ Coverage per zone, counting only the objects the disassembly attributes to it:
 | ID | `id_*` | Description | Zones | Status | Routine | Disasm source |
 |---|---|---|---|---|---|---|
 | `$01` | `id_SonicPlayer` | Sonic the Hedgehog | any | **Ported** | `SonicPlayer_Main` | `01 Sonic.asm` |
-| `$08` | `id_Splash` | water splash (LZ) | LZ | Not ported | — | `08 LZ Water Splash.asm` |
+| `$08` | `id_Splash` | water splash (LZ) | LZ | **Ported** | — | `08 LZ Water Splash.asm` |
 | `$09` | `id_SonicSpecial` | Sonic the Hedgehog (in Special Stages) | any | **Ported** | `SonicSpecial_Main` | `09 Sonic in Special Stage.asm` |
 | `$0A` | `id_DrownCount` | drowning countdown numbers and small bubbles that float out of Sonic's mouth (LZ) | LZ | Not ported | — | `0A LZ Drowning Countdown.asm` |
 | `$0B` | `id_Pole` | breakable pole in wind tunnels that Sonic hangs onto (LZ) | LZ | Not ported | — | `0B LZ Pole that Breaks.asm` |
@@ -217,7 +217,6 @@ them.
 
 | ID | `id_*` | Description | Disasm source |
 |---|---|---|---|
-| `$08` | `id_Splash` | water splash (LZ) | `08 LZ Water Splash.asm` |
 | `$0A` | `id_DrownCount` | drowning countdown numbers and small bubbles that float out of Sonic's mouth (LZ) | `0A LZ Drowning Countdown.asm` |
 | `$0B` | `id_Pole` | breakable pole in wind tunnels that Sonic hangs onto (LZ) | `0B LZ Pole that Breaks.asm` |
 | `$0C` | `id_FlapDoor` | flapping door before wind tunnels (LZ) | `0C LZ Flapping Door.asm` |

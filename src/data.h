@@ -958,6 +958,8 @@ extern const uint8_t *Map_Invis;
 
 extern const uint8_t *Map_Hog;
 
+extern const uint8_t *Map_Splash;
+extern size_t   Map_Splash_len;
 
 /* ---------------- Animations (Ani_*) and DPLC ---------------- */
 extern const uint8_t *Ani_Sonic;
@@ -1032,6 +1034,9 @@ extern size_t   Ani_Bump_len;
 
 extern const uint8_t *Ani_Roll;
 extern size_t   Ani_Roll_len;
+
+extern const uint8_t *Ani_Splash;
+extern size_t   Ani_Splash_len;
 
 extern const uint8_t *SonicDynPLC;
 extern size_t   SonicDynPLC_len;
