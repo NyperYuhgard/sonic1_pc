@@ -996,7 +996,7 @@ static void ResumeMusic(void) {
         if (f_lockscreen) {
             bgm = bgm_Boss;
         }
-        Sound_Queue(bgm, false);
+        Sound_Queue(bgm, true);
     }
     v_air = 30;
     RAM_BYTE(v_sonicbubbles + 0x2C) = 0;  /* bub_time offset */
@@ -18161,7 +18161,7 @@ static void Harpoon_Main(void *obj) {
 
 static void Surf_Action(uint8_t *o) {
     /* Wrap the camera every $20px so the surface looks camera-independent. */
-    int16_t d1 = (int16_t)((uint16_t)RAM_WORD(v_screenposx) & 0xFFE0);
+    int16_t d1 = (int16_t)((uint16_t)v_screenposx & 0xFFE0);
     d1 = (int16_t)(d1 + surf_origX(o));
     if (v_framebyte & 0x01) d1 = (int16_t)(d1 + 0x20);     /* flicker */
     obX(o) = d1;
@@ -19351,7 +19351,7 @@ static void Bub_Bursting(uint8_t *o) {
 
 /* Bub_ChkWater — routine 4, disasm 64 71-140 */
 static void Bub_ChkWater(uint8_t *o) {
-    int16_t d0 = (int16_t)RAM_WORD(v_waterpos1);
+    int16_t d0 = (int16_t)v_waterpos1;
     if (!((uint16_t)d0 < (uint16_t)obY(o))) {        /* cmp.w obY(a0),d0 / blo.s .wobble */
         /* .burst: still under the surface's sway, so pop the bubble */
         obRoutine(o) = 6;                           /* -> Bub_Bursting */
@@ -19406,7 +19406,7 @@ static void Bub_ChkWater(uint8_t *o) {
 /* Bub_BubbleMaker — routine $A, disasm 64 158-243 */
 static void Bub_BubbleMaker(uint8_t *o) {
     if (bub_bubbleflag(o) == 0) {                   /* tst.w bub_bubbleflag / bne.s */
-        int16_t d0 = (int16_t)RAM_WORD(v_waterpos1);
+        int16_t d0 = (int16_t)v_waterpos1;
         if ((uint16_t)d0 >= (uint16_t)obY(o)) goto display; /* bhs.w .display */
         if (!(obRender(o) & 0x80)) goto display;    /* tst.b obRender / bpl.w .display */
 
@@ -19479,7 +19479,7 @@ display:
         return;
     }
     {
-        int16_t d0 = (int16_t)RAM_WORD(v_waterpos1);
+        int16_t d0 = (int16_t)v_waterpos1;
         if ((uint16_t)d0 < (uint16_t)obY(o)) {            /* blo.w DisplaySprite */
             DisplaySprite(o);
         }

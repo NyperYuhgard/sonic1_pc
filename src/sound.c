@@ -53,7 +53,7 @@ static const snd_map_t sfx_map[] = {
     { sfx_SSItem,       "assets/SoundFX/Stage/RotateSS.wav" },
     { sfx_Splash,       "assets/SoundFX/Stage/WaterSplash.wav" },
     { sfx_HitBoss,      "assets/SoundFX/Stage/BossHit.wav" },
-    { sfx_Bubble,       "assets/SoundFX/Global/BubbleBounce.wav" },
+    { sfx_Bubble,       "assets/SoundFX/Stage/Breathing.wav" },
     { sfx_Fireball,     "assets/SoundFX/Stage/SmallFireball.wav" },
     { sfx_Shield,       "assets/SoundFX/Global/BlueShield.wav" },
     { sfx_Saw,          "assets/SoundFX/Stage/Buzzsaw.wav" },
