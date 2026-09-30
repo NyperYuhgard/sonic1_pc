@@ -18995,16 +18995,39 @@ static const int16_t LCon_CornerData[6][14] = {
 
 /* ObjPosLZPlatform_Index (offset 0x38 in the ASM's ObjPos_Index table) maps
    group IDs 0-5 to the custom platform positioning data in objpos/platforms/. */
+/* ObjPosLZPlatform_Index (offset 0x38 in the ASM's ObjPos_Index table) maps
+   group IDs 0-5 to the custom platform positioning data in objpos/platforms/. */
 static const uint8_t *LZ_ConveyorPlatformData(uint8_t group) {
+    const uint8_t *p = NULL;
     switch (group) {
-        case 0: return ObjPos_LZ1pf1;
-        case 1: return ObjPos_LZ1pf2;
-        case 2: return ObjPos_LZ2pf1;
-        case 3: return ObjPos_LZ2pf2;
-        case 4: return ObjPos_LZ3pf1;
-        case 5: return ObjPos_LZ3pf2;
-        default: return NULL;   /* ASM would read past the index table; never used */
+        case 0: p = ObjPos_LZ1pf1; break;
+        case 1: p = ObjPos_LZ1pf2; break;
+        case 2: p = ObjPos_LZ2pf1; break;
+        case 3: p = ObjPos_LZ2pf2; break;
+        case 4: p = ObjPos_LZ3pf1; break;
+        case 5: p = ObjPos_LZ3pf2; break;
+        default: p = NULL; break;
     }
+    /* [DBG] */
+    fprintf(stderr, "[LZ_ConvData] group=%d -> ptr=%p\n",
+            group, (const void *)p);
+    if (p) {
+        fprintf(stderr, "  bytes: %02X %02X %02X %02X %02X %02X %02X %02X\n",
+                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+        /* BE16S/16 sobre los bytes crudos */
+        uint16_t w0 = ((uint16_t)p[0] << 8) | p[1];
+        uint16_t w1 = ((uint16_t)p[2] << 8) | p[3];
+        uint16_t w2 = ((uint16_t)p[4] << 8) | p[5];
+        uint16_t w3 = ((uint16_t)p[6] << 8) | p[7];
+        fprintf(stderr, "  BE16: w0(count)=$%04X w1(X0)=$%04X w2(Y0)=$%04X w3(sub0)=$%04X\n",
+                w0, w1, w2, w3);
+        /* LE para comparar */
+        uint16_t l0 = ((uint16_t)p[1] << 8) | p[0];
+        uint16_t l1 = ((uint16_t)p[3] << 8) | p[2];
+        fprintf(stderr, "  LE16: w0=$%04X w1=$%04X\n", l0, l1);
+    }
+    /* [/DBG] */
+    return p;
 }
 
 /* Corner entry lookup: the ASM indexes (a1, d1.w) with a1 = first entry and
@@ -19158,37 +19181,77 @@ finishPlatform:
 
 /* LCon_Main_Spawner — disasm 63 129-186. Returns 1 when the caller must skip
    its own out_of_range/display tail (the ASM's `addq.l #4,sp`). */
+/* LCon_Main_Spawner — disasm 63 129-186. Returns 1 when the caller must skip
+   its own out_of_range/display tail (the ASM's `addq.l #4,sp`). */
 static int LCon_Main_Spawner(uint8_t *o, uint8_t subtype) {
-    lcon_groupid(o) = subtype;                      /* remember parent group ID */
     uint8_t group = (uint8_t)(subtype & 0x7F);
 
+    /* [DBG] */
+    fprintf(stderr, "[LCon_Spawner] slot=%d subtype=$%02X group=%d\n",
+            Object_GetIndex(o), subtype, group);
+    /* [/DBG] */
+
+    lcon_groupid(o) = subtype;                      /* remember parent group ID */
+
     uint8_t flag = RAM_BYTE(v_obj63 + group);
+
+    /* [DBG] */
+    fprintf(stderr, "  v_obj63[%d] before = $%02X\n", group, flag);
+    /* [/DBG] */
+
     RAM_BYTE(v_obj63 + group) = (uint8_t)(flag | 0x01); /* bset #0 */
     if (flag & 0x01) {                              /* bne.w DeleteObject */
-        /* FixBugs=0: this is a plain `bra.w`, so control returns to
-           LabyrinthConvey and the out_of_range/display tail still runs. */
+        /* [DBG] */
+        fprintf(stderr, "  flag already set -> abort (no platforms)\n");
+        /* [/DBG] */
         DeleteObject(o);
         return 0;
     }
 
     /* .spawn: read the custom platform positioning data for this group. */
     const uint8_t *a2 = LZ_ConveyorPlatformData(group);
-    if (a2 == NULL) return 1;
+    if (a2 == NULL) {
+        /* [DBG] */
+        fprintf(stderr, "  platform data NULL -> abort (no platforms)\n");
+        /* [/DBG] */
+        return 1;
+    }
     int16_t d1 = BE16S(a2);
     a2 += 2;
 
+    /* [DBG] */
+    fprintf(stderr, "  count(d1)=%d, first entry: X=$%04X Y=$%04X sub=$%02X\n",
+            d1, BE16S(a2), BE16S(a2 + 2), (uint8_t)BE16(a2 + 4));
+    /* [/DBG] */
+
     uint8_t *a1 = o;                                /* first platform reuses this slot */
+    int it = 0;
     for (;;) {
+        /* [DBG] */
+        fprintf(stderr, "  iter %d: a1 slot=%d\n",
+                it, a1 ? Object_GetIndex(a1) : -1);
+        /* [/DBG] */
         if (a1 != NULL) {                           /* .makePlatform */
             obID(a1) = id_LabyrinthConvey;           /* obRoutine left at 0 on purpose */
             obX(a1) = BE16S(a2);  a2 += 2;
             obY(a1) = BE16S(a2);  a2 += 2;
             obSubtype(a1) = (uint8_t)BE16(a2); a2 += 2;
+            /* [DBG] */
+            fprintf(stderr, "    created @ slot %d: X=$%04X Y=$%04X sub=$%02X\n",
+                    Object_GetIndex(a1), obX(a1), obY(a1), obSubtype(a1));
+            /* [/DBG] */
         }
         if (d1 == 0) break;                         /* dbf d1,.loopMakePlatforms */
         d1--;
         a1 = (uint8_t *)FindFreeObj();               /* FixBugs=0: any free slot */
+        /* [DBG] */
+        if (!a1) fprintf(stderr, "    FindFreeObj FAILED on iter %d\n", it + 1);
+        /* [/DBG] */
+        it++;
     }
+    /* [DBG] */
+    fprintf(stderr, "  spawner done, %d platforms created\n", it + 1);
+    /* [/DBG] */
     return 1;                                       /* addq.l #4,sp / rts */
 }
 
@@ -19223,6 +19286,12 @@ static void LCon_OnPlatform(uint8_t *o) {
 /* LCon_Main — routine 0, disasm 63 52-68. Returns 1 to skip the caller's tail. */
 static int LCon_Main(uint8_t *o) {
     uint8_t d0 = obSubtype(o);
+
+    /* [DBG] */
+    fprintf(stderr, "[LCon_Main] slot=%d subtype=$%02X routine=%d\n",
+            Object_GetIndex(o), d0, obRoutine(o));
+    /* [/DBG] */
+
     if (d0 & 0x80) return LCon_Main_Spawner(o, d0); /* bmi.w LCon_Main_Spawner */
 
     obRoutine(o) = (uint8_t)(obRoutine(o) + 2);    /* -> LCon_Platform */
@@ -19246,14 +19315,20 @@ static int LCon_Main(uint8_t *o) {
    macro (Macros.asm 278-295). $63 needs it for its act-3 special case. */
 static int16_t LZ_OutOfRangeValue(int16_t pos) {
     uint16_t d0 = (uint16_t)pos & 0xFF80;
-    uint16_t d1 = ((uint16_t)RAM_WORD(v_screenposx) - 128) & 0xFF80;
+    uint16_t d1 = ((uint16_t)RAM_WORD(0xF700) - 128) & 0xFF80;
     return (int16_t)(d0 - d1);
 }
 
 /* Object $63 dispatcher — disasm 63 6-34 */
+/* Object $63 dispatcher — disasm 63 6-34 */
 static void LabyrinthConvey_Main(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     int skip_tail = 0;
+
+    /* [DBG] */
+    fprintf(stderr, "[LCon] dispatch slot=%d routine=%d subtype=$%02X\n",
+            Object_GetIndex(o), obRoutine(o), obSubtype(o));
+    /* [/DBG] */
 
     switch (obRoutine(o)) {                         /* LCon_Index: 0/2/4/6 */
         case 0x00: skip_tail = LCon_Main(o); break;
@@ -19279,6 +19354,12 @@ static void LabyrinthConvey_Main(void *obj) {
 
     /* .delete */
     uint8_t gid = lcon_groupid(o);
+
+    /* [DBG] */
+    fprintf(stderr, "[LCon] OUT OF RANGE slot=%d gid=$%02X d0=$%04X\n",
+            Object_GetIndex(o), gid, (uint16_t)d0);
+    /* [/DBG] */
+
     if (!(gid & 0x80)) {                            /* bpl.w DeleteObject */
         DeleteObject(o);
         return;

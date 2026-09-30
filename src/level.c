@@ -14,6 +14,7 @@
 #include "plc.h"
 #include "hud.h"
 #include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 
 /* Forward declarations for main.c helpers we call */
@@ -819,6 +820,45 @@ static void Level_Enter(void) {
     }
 
     v_gamemode = 0x0C;
+
+        /* [DBG] dump one-shot de punteros y del objpos */
+    static int dbg_opl = -1;
+    if (dbg_opl < 0) dbg_opl = getenv("SONIC_LOG_OPL") ? 1 : 0;
+    if (dbg_opl) {
+        fprintf(stderr, "\n=== LEVEL ENTER zone=%d act=%d ===\n",
+                (int)v_zone, (int)v_act);
+        fprintf(stderr,
+            "LZ platform ptrs: LZ1pf1=%p LZ1pf2=%p LZ2pf1=%p LZ2pf2=%p LZ3pf1=%p LZ3pf2=%p\n",
+            (void*)ObjPos_LZ1pf1, (void*)ObjPos_LZ1pf2,
+            (void*)ObjPos_LZ2pf1, (void*)ObjPos_LZ2pf2,
+            (void*)ObjPos_LZ3pf1, (void*)ObjPos_LZ3pf2);
+        fprintf(stderr,
+            "LZ1 objpos ptr=%p len=%zu\n",
+            (void*)ObjPos_LZ1, ObjPos_LZ1_len);
+        /* Dump de los primeros 12 objetos del objpos LZ actual */
+        uint8_t z = (uint8_t)v_zone, a = (uint8_t)v_act;
+        unsigned row = z * 4 + a;
+        if (row < sizeof(objpos_index)/sizeof(objpos_index[0])) {
+            const uint8_t *m = objpos_index[row].main;
+            fprintf(stderr, "objpos_index[%u] ptr=%p, primeros objetos:\n",
+                    row, (void*)m);
+            if (m) {
+                for (int i = 0; i < 12; i++) {
+                    uint16_t x = ((uint16_t)m[i*6+0]<<8) | m[i*6+1];
+                    uint16_t y = ((uint16_t)m[i*6+2]<<8) | m[i*6+3];
+                    uint8_t id = m[i*6+4];
+                    uint8_t sub = m[i*6+5];
+                    fprintf(stderr, "  [%2d] X=$%04X Y=$%04X id=$%02X sub=$%02X",
+                            i, x, y, id & 0x7F, sub);
+                    if ((id & 0x7F) == 0x63) fprintf(stderr, "  <-- OBJ 63!");
+                    fprintf(stderr, "\n");
+                    if (x == 0xFFFF && y == 0xFFFF) break; /* objpos terminator */
+                }
+            }
+        }
+        fprintf(stderr, "=== /LEVEL ENTER ===\n\n");
+    }
+    /* [/DBG] */
 }
 
 /* ===================================================================
@@ -1332,7 +1372,12 @@ static int OPL_SpawnObj(uint8_t **a0p, uint8_t *a2, uint8_t d2) {
     }
 
     a1 = (uint8_t *)FindFreeObj();
-    if (!a1) return 1;
+    if (!a1) {
+        /* [DBG] */
+        fprintf(stderr, "[OPL_Spawn] NO FREE SLOT for id=$%02X\n", a0[4] & 0x7F);
+        /* [/DBG] */
+        return 1;
+    }
 
     obX(a1) = (int16_t)opl_be16(a0); a0 += 2;
     d0 = opl_be16(a0); a0 += 2;
@@ -1345,6 +1390,12 @@ static int OPL_SpawnObj(uint8_t **a0p, uint8_t *a2, uint8_t d2) {
     obID(a1)       = (uint8_t)(d0 & 0x7F);
     obSubtype(a1)  = a0[0]; a0 += 1;
     *a0p = a0;
+
+    /* [DBG] */
+    fprintf(stderr, "[OPL_Spawn] slot=%d id=$%02X sub=$%02X X=$%04X Y=$%04X d2=%d\n",
+            Object_GetIndex(a1), obID(a1), obSubtype(a1),
+            obX(a1), obY(a1), d2);
+    /* [/DBG] */
     return 0;
 }
 
@@ -1371,10 +1422,22 @@ static void OPL_Main(void) {
     opl_ptr_left  = a0;
     opl_ptr_sec   = NULL;
 
+    /* [DBG] */
+    fprintf(stderr, "[OPL_Main] row=%u objpos=%p firstX=$%04X\n",
+            row, (void*)a0, (uint16_t)((a0[0]<<8)|a0[1]));
+    /* [/DBG] */
+
     *a2 = 0x01;
     *(a2 + 1) = 0x01;
     a2 += 2;
     for (int i = 0x5E; i >= 0; i--) { *(uint32_t *)a2 = 0; a2 += 4; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FIX: el ASM reinicia a2 a v_objstate tras limpiar la lista.
+       Sin esto, los contadores de respawn del primer objeto se
+       corrompen y se queda como 1 permanente.
+       ═══════════════════════════════════════════════════════════════ */
+    a2 = RAM_ADDR(v_objstate);
 
     d6 = (uint16_t)v_screenposx;
     if (d6 >= 128) d6 -= 128;
@@ -1383,11 +1446,17 @@ static void OPL_Main(void) {
 
     a0   = opl_ptr_right;
     start = a0;
+    int count_right = 0;
     while (opl_be16(a0) < d6) {
         if (a0[4] & 0x80) (*a2)++;
         a0 += 6;
+        count_right++;
     }
     opl_ptr_right = a0;
+    /* [DBG] */
+    fprintf(stderr, "[OPL_Main] d6=$%04X right scan: %d objs, counter[0]=%d\n",
+            d6, count_right, *a2);
+    /* [/DBG] */
 
     a0 = start;
     if (d6 >= 128) {
@@ -1398,6 +1467,11 @@ static void OPL_Main(void) {
         }
     }
     opl_ptr_left = a0;
+
+    /* [DBG] */
+    fprintf(stderr, "[OPL_Main] counter[1]=%d, opl_screen will start at -1\n",
+            *(a2 + 1));
+    /* [/DBG] */
 
     v_opl_screen = 0xFFFF;
     OPL_Next();
