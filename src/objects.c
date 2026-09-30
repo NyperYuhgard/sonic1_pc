@@ -19629,18 +19629,18 @@ static void BLZ_MoveBoss(uint8_t *o) {
     BossMove(o);
     obY(o) = blz_bossY(o);                         /* move.w obBossY(a0),obY(a0) */
     obX(o) = blz_bossX(o);                         /* move.w obBossX(a0),obX(a0) */
+    BLZ_ShipUpdate(o);
 }
 
 /* BossLabyrinth_ShipIndex handlers (disasm 77 92-478) */
 static void BLZ_ShipStart(uint8_t *o, uint8_t *a1) {
     /* cmpi.w #boss_lz_x-$40,d0 / blo.s BLZ_MoveBoss */
-    if ((uint16_t)obX(a1) > 0x1DA0) {
+    if ((uint16_t)obX(a1) >= 0x1DA0) {
         obVelY(o) = (int16_t)-0x180;
         obVelX(o) = 0x60;
         ob2ndRout(o) = (uint8_t)(ob2ndRout(o) + 2);
     }
     BLZ_MoveBoss(o);
-    BLZ_ShipUpdate(o);
 }
 
 static void BLZ_ShipMove1(uint8_t *o) {
@@ -19794,13 +19794,14 @@ static void BLZ_Escape1(uint8_t *o) {
 }
 
 static void BLZ_Escape2(uint8_t *o) {
-    if ((uint16_t)v_limitright2 > (uint16_t)boss_lz_end) { /* cmpi.w / bhs.s */
+    if ((uint16_t)v_limitright2 >= (uint16_t)boss_lz_end) { /* cmpi.w / bhs.s */
         /* .checkOffscreen: has Eggman left the screen? (bit 7 of obRender) */
         if (!(obRender(o) & 0x80)) {
             /* BossLabyrinth_ShipDel. FixBugs=0: `jmp DeleteObject` from inside
                the routine, so control comes back to BossLabyrinth_ShipMain and
                the animation + display pass still runs on the cleared slot. */
             DeleteObject(o);
+            return;
         }
         BLZ_MoveBoss(o);                           /* .flee */
         return;
