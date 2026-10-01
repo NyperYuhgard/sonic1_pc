@@ -11192,11 +11192,11 @@ static void GotThroughCard_Main(void *obj) {
     switch (obRoutine(o)) {
         case 0x00: Got_ChkPLC(o); break;
         case 0x02: Got_MoveIn(o); break;
-        case 0x04:
-        case 0x08:
-        case 0x0C: Got_Wait(o); break;
+        case 0x04: Got_Wait(o); break;
         case 0x06: Got_Bonus(o); break;
+        case 0x08: Got_Wait(o); break;
         case 0x0A: Got_NextLevel(o); break;
+        case 0x0C: Got_Wait(o); break;
         case 0x0E: Got_SBZ2_MoveOut(o); break;
         case 0x10: Got_SBZ2_Boundary(o); break;
     }
@@ -17593,13 +17593,13 @@ static int16_t LZ_ObjHitCeiling(uint8_t *o) {
    Returns 0 when the object is on screen, 1 when it is off screen (the
    routine's d0, which callers test with `bne`). */
 static int LZ_ChkObjectVisible(uint8_t *o) {
-    int16_t d0 = (int16_t)(obX(o) - (int16_t)RAM_WORD(v_screenposx));
-    if (d0 < 0) return 1;                                 /* bmi.s .offscreen */
-    if (d0 >= 320) return 1;                               /* cmpi.w #320,d0 / bge */
-    int16_t d1 = (int16_t)(obY(o) - (int16_t)RAM_WORD(v_screenposy));
+    int16_t d0 = (int16_t)(obX(o) - (int16_t)RAM_WORD(0xF700));   /* v_screenposx */
+    if (d0 < 0) return 1;
+    if (d0 >= 320) return 1;
+    int16_t d1 = (int16_t)(obY(o) - (int16_t)RAM_WORD(0xF704));   /* v_screenposy */
     if (d1 < 0) return 1;
     if (d1 >= 224) return 1;
-    return 0;                                             /* moveq #0,d0 */
+    return 0;
 }
 
 /* Drown_WobbleData — disasm/_incObj/0A LZ Drowning Countdown.asm 178-201.
@@ -17653,10 +17653,10 @@ static void Drown_ShowNumber(uint8_t *o) {
     obVelY(o) = 0;
     obRender(o) = sprite_rendered;                  /* screen-fixed positioning */
 
-    int16_t d0 = (int16_t)(obX(o) - (int16_t)RAM_WORD(v_screenposx));
+    int16_t d0 = (int16_t)(obX(o) - (int16_t)RAM_WORD(0xF700));
     d0 = (int16_t)(d0 + 0x80);
     obX(o) = d0;
-    d0 = (int16_t)(obY(o) - (int16_t)RAM_WORD(v_screenposy));
+    d0 = (int16_t)(obY(o) - (int16_t)RAM_WORD(0xF704));
     d0 = (int16_t)(d0 + 0x80);
     obScreenY(o) = d0;                              /* same field as obSubpixelX */
 
@@ -18837,7 +18837,7 @@ static void LBlk_SideSink(uint8_t *o) {
    sub.w obY(a0),d0 sets carry on borrow, so bcc (= no borrow, waterY >=u blockY,
    block at or above the water) is the test for bit 15 being CLEAR. */
 static void LBlk_OnWater(uint8_t *o) {
-    int16_t d0 = (int16_t)(RAM_WORD(v_waterpos1) - obY(o));
+    int16_t d0 = (int16_t)(v_waterpos1 - obY(o));
     if (d0 == 0) return;                           /* beq.s .return2 */
     if ((uint16_t)d0 < 0x8000) {                   /* bcc.s .corkSink (block above water) */
         /* .corkSink: at most 2px above the water level */
