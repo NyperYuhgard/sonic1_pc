@@ -468,7 +468,7 @@ void ObjFloorDist(void *obj, int16_t *dist, int16_t *angle) {
     int16_t d1;
     uint8_t d3;
     int16_t y = (int16_t)(obY(o) + (int8_t)obHeight(o));
-    int16_t x = (int16_t)(obX(o) & ~1);          /* bclr #0,d3 (FixBugs-style) */
+    int16_t x = obX(o);          /* bclr #0,d3 (FixBugs-style) */
     FindFloor(y, x, 0x0D, 0, 0x10, &v_anglebuffer, obj, &d1);   /* ← esta línea */
     d3 = v_anglebuffer;
     if (d3 & 0x01)
@@ -3069,7 +3069,7 @@ static void SonicSS_Jump(uint8_t *o) {
         angle = (uint8_t)((v_ssangle >> 8));
     } else {
         angle = (uint8_t)((v_ssangle >> 8) & 0xFC);
-    }  
+    }
     angle = (uint8_t)(-angle);
     angle -= 0x40;
 
@@ -3092,7 +3092,7 @@ static void SonicSS_Fall(uint8_t *o) {
         angle = (uint8_t)((v_ssangle >> 8));
     } else {
         angle = (uint8_t)((v_ssangle >> 8) & 0xFC);
-    }  
+    }
     int16_t s0, s1;
     CalcSine(angle, &s0, &s1);
 
@@ -3267,8 +3267,8 @@ static void SonicSS_ChkItems_NonSolidActionBlock(uint8_t *o) {
             v_emeralds++;
         }
         if (g_settings.ss_alt_anim) {                        /* → SonicSS_ExitStage */
-            obAnim(o) = id_Leap1; 
-            obAnim(o) = id_Leap2; 
+            obAnim(o) = id_Leap1;
+            obAnim(o) = id_Leap2;
         }
         Sound_Queue(bgm_Emerald, false);
         return;
@@ -3358,9 +3358,9 @@ static void SonicSS_ChkItems_SolidActionBlock(uint8_t *o) {
 
     /* GOAL? */
     if (id == id_SS_GOAL) {
-        obRoutine(o) += 2;  
+        obRoutine(o) += 2;
         if (g_settings.ss_alt_anim) {                        /* → SonicSS_ExitStage */
-            obAnim(o) = id_Shrink; 
+            obAnim(o) = id_Shrink;
         }
         Sound_Queue(sfx_SSGoal, false);
         return;
@@ -8537,8 +8537,8 @@ static void LGrass_Main(uint8_t *o) {
     obFrame(o)  = data->frame;
     obActWid(o) = data->actwid;
 
-    
-    
+
+
 
     obSubtype(o) &= 0x0F;
     obHeight(o) = 128 / 2;
@@ -9813,18 +9813,24 @@ static void PushB_SolidAction(uint8_t *o, int16_t d1, int16_t d2, int16_t d3, in
         return;
     }
     if (state == 4) {
-        /* .falling */
         SpeedToPos(o);
         obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+
         int16_t dist, angle;
         ObjFloorDist(o, &dist, &angle);
         if (dist < 0) {
             obY(o) = (int16_t)(obY(o) + dist);
             obVelY(o) = 0;
             ob2ndRout(o) = 0;
-            /* Comprobación de lava: si el tile bajo el bloque es $16A+ */
-            /* (necesita acceso al 16x16 word; con ObjFloorDist actual no
-               lo tenemos, así que por ahora no activamos onlava) */
+
+            /* move.w (a1),d0 / andi.w #$3FF,d0 / cmpi.w #$16A,d0 / blo.s .return */
+            uint16_t tile = v_last_floor_block & 0x3FF;
+            if (tile >= 0x16A) {
+                int16_t d0 = (int16_t)(pblock_lavaspeed(o) >> 3); /* asr.w #3 */
+                obVelX(o) = d0;
+                pblock_onlava(o) = 1;
+                obSubpixelY(o) = 0;
+            }
         }
         return;
     }
@@ -9850,8 +9856,8 @@ static void PushB_OnLava(uint8_t *o) {
     }
 
     if (obStatus(o) & (1 << 1)) {
-        /* Disparado por geiser */
         obVelY(o) = (int16_t)(obVelY(o) + 0x18);
+
         int16_t dist, angle;
         ObjFloorDist(o, &dist, &angle);
         if (dist < 0) {
@@ -9859,15 +9865,14 @@ static void PushB_OnLava(uint8_t *o) {
             obVelY(o) = 0;
             obStatus(o) &= ~(1 << 1);
 
-            /* Comprobación de tile lava (mismo problema que arriba) */
-            if (0) {   /* TODO: check tile == $16A+ */
+            uint16_t tile = v_last_floor_block & 0x3FF;
+            if (tile >= 0x16A) {                    /* ← borra el if(0) */
                 int16_t d0 = (int16_t)(pblock_lavaspeed(o) >> 3);
                 obVelX(o) = d0;
                 pblock_onlava(o) = 1;
                 obSubpixelY(o) = 0;
             }
         }
-        /* .lavaPlatform */
     } else {
         /* .PushB_OnLava_CheckWall */
         if (obVelX(o) == 0) {
@@ -9913,6 +9918,7 @@ static void PushB_OnLava(uint8_t *o) {
     }
 }
 
+#define gmake_parent(o) (*(uint32_t *)((uint8_t *)(o) + 0x3C))
 /* --- PushB_SpawnLavaGeysers: hardcoded MZ2/MZ3 --- */
 static void PushB_SpawnLavaGeysers(uint8_t *o) {
     uint16_t zact = RAM_U16(0xFE10);
@@ -9932,14 +9938,13 @@ static void PushB_SpawnLavaGeysers(uint8_t *o) {
 
     uint8_t *a1 = (uint8_t *)FindFreeObj();
     if (!a1) return;
+
     obID(a1) = id_GeyserMaker;
-    obX(a1) = (int16_t)(obX(o) + d2);
-    obY(a1) = (int16_t)(obY(o) + 16);
-    /* gmake_parent: en ASM es un long con la dirección del padre. En el
-       port, guarda el índice de slot. Ajusta el offset según tu port de
-       4C Geyser Maker (lo más probable es objoff_3C). */
-    /* TODO: rellenar cuando portes Object 4C. */
-    (void)a1;
+    obX(a1)  = (int16_t)(obX(o) + d2);
+    obY(a1)  = (int16_t)(obY(o) + 16);
+
+    /* move.l a0,gmake_parent(a1) — pero con slot index en vez de puntero. */
+    gmake_parent(a1) = (uint32_t)Object_GetIndex(o);
 }
 
 /* --- PushB_Action — routine 2 --- */
@@ -10135,7 +10140,7 @@ static void TitleCard_Main(void *obj) {
 
         /* Card_MoveOut: 32 px/frame back toward cardFinalX (the start). */
         if (!(obRender(o) & 0x80)) {
-            DeleteObject(obj);      
+            DeleteObject(obj);
             return;
         }
         int16_t d1 = 0x20;
@@ -10145,7 +10150,7 @@ static void TitleCard_Main(void *obj) {
             AddPLC(plcid_Explode); /* Card_ChangeArt */
             int d0 = (uint8_t)v_zone + plcid_GHZAnimals;
             AddPLC(d0);
-            DeleteObject(obj);      
+            DeleteObject(obj);
             return;
         }
         if (target < cur) d1 = -d1;
@@ -13514,12 +13519,12 @@ static void Geyser_Main(uint8_t *o) {
         if (bottom != NULL) {
             Geyser_MakeChild(bottom, tip);
             obRoutine(bottom) += 2;        /* → Geyser_Action (2) */
-            
-            /* The original disassembly used this line, but it causes issues in the port; 
-               commenting it out fixes the problem. 
-               However, the visual fidelity isn't quite the same, though the difference 
+
+            /* The original disassembly used this line, but it causes issues in the port;
+               commenting it out fixes the problem.
+               However, the visual fidelity isn't quite the same, though the difference
                is barely noticeable unless you examine it frame by frame. */
-            
+
             //obGfx(bottom)     |= 0x10;     /* bset #4,obGfx (custom height) */
 
             obY(bottom)        = (int16_t)(obY(bottom) + 0x100);
