@@ -12,7 +12,7 @@
 #include "objects.h"
 #include "data.h"
 #include "debugmode.h"
-
+#include <stdio.h>
 #include <stdint.h>
 
 /* GFX and animation constants (objects.c / _incObj/01 Sonic.asm) */
@@ -104,7 +104,7 @@ static const uint8_t *Debug_MapForId(uint8_t id) {
         case id_SpinningLight:      return Map_Light;
         case id_Bumper:             return Map_Bump;
         case id_FloatingBlock:      return Map_FBlock;
-        case id_SwingingPlatform:   return Map_BBall;
+        case id_SwingingPlatform:   return Map_Swing_GHZ;
         case id_RunningDisc:        return Map_Disc;
         case id_SpinPlatform:       return Map_Spin;
         case id_Saws:               return Map_Saw;
@@ -143,6 +143,39 @@ static const DebugItemEntry GHZDebugList[] = {
     DBUG(id_Lamppost,      1,    0,  ArtTile_Lamppost),
     DBUG(id_GiantRing,     0,    0,  ArtTile_Giant_Ring|Tile_Pal2),
     DBUG(id_HiddenBonus,   1,    1,  ArtTile_Hidden_Points|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x00, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x01, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x02, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x03, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x04, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x05, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x06, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x07, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x08, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x09, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x0A, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x0B, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x0C, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x0D, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x0E, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x0F, 0, ArtTile_GHZ_MZ_Swing|Tile_Prio),
+    DBUG(id_SwingingPlatform, 0x10, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x11, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x12, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x13, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x14, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x15, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x16, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x17, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x18, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x19, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x1A, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x1B, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x1C, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x1D, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x1E, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+    DBUG(id_SwingingPlatform, 0x1F, 0, ArtTile_GHZ_Giant_Ball|Tile_Pal3),
+
 };
 
 static const DebugItemEntry LZDebugList[] = {
@@ -380,13 +413,24 @@ static void Debug_ChgItem(uint8_t *o, const DebugItemEntry *list, uint8_t d6) {
             Debug_ExitDebugMode(o);
             return;
         }
-        obX(a1)   = obX(o);                         /* move.w obX(a0),obX(a1) */
-        obY(a1)   = obY(o);                         /* move.w obY(a0),obY(a1) */
-        obID(a1)     = list[v_debugitem].id;        /* _move.b obMap(a0),obID(a1) */
-        obRender(a1) = obRender(o);                 /* move.b obRender(a0),obRender(a1) */
-        obStatus(a1) = obRender(o) & 0x7F;          /* obRender->status, bit 7 cleared */
-        obSubtype(a1)= list[v_debugitem].subtype;   /* move.b 4(a2,d0.w),obSubtype(a1) */
-        return;                                     /* rts */
+        const DebugItemEntry *e = &list[v_debugitem];
+
+        obX(a1)   = obX(o);
+        obY(a1)   = obY(o);
+        obID(a1)     = e->id;
+        obRender(a1) = obRender(o);
+        obStatus(a1) = obRender(o) & 0x7F;
+        obSubtype(a1)= e->subtype;
+
+        fprintf(stderr,
+                "[Debug] spawn slot=%d id=$%02X subtype=$%02X frame=$%02X "
+                "vram=$%04X at (%d,%d) item=%d/%d\n",
+                Object_GetIndex(a1),
+                e->id, e->subtype, e->frame, e->vram,
+                obX(a1), obY(a1),
+                v_debugitem, d6 - 1);
+
+        return;
     }
 
     Debug_ExitDebugMode(o);

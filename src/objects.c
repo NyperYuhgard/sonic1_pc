@@ -5047,7 +5047,7 @@ static void LavaBall_Main(void *obj) {
 #define gb_linkdist(o)     (*(uint8_t *)((uint8_t *)(o) + 0x3C))
 #define gb_swingdir(o)     (*(uint8_t *)((uint8_t *)(o) + 0x3D))
 #define gb_swingspeed(o)   (*(int16_t *)((uint8_t *)(o) + 0x3E))
-#define gb_anglew(o)       (*(int16_t *)((uint8_t *)(o) + 0x30))
+#define gb_anglew(o)       (*(int16_t *)((uint8_t *)(o) + 0x26))
 
 static void Swing_Main(uint8_t *o);
 static void Swing_Platform(uint8_t *o);
@@ -5138,17 +5138,17 @@ static void Swing_Main(uint8_t *o) {
         obRoutine(a1)  = 0x0A;                 /* Swing_ChainLink */
         obID(a1)       = d4;
         obMap(a1)      = obMap(o);
-        obGfx(a1)      = (uint16_t)(obGfx(o) & ~0x0060); /* bclr #6 → pal 1 */
+        obGfx(a1)      = (uint16_t)(obGfx(o) & ~0x0040); /* bclr #6 → pal 1 */
         obRender(a1)   = sprite_cam_field;
         obPriority(a1) = 4;
         obActWid(a1)   = 16 / 2;
         obFrame(a1)    = 1;                    /* chain */
         swing_radius(a1) = d3;
         d3 = (uint8_t)(d3 - 0x10);
-        if ((int8_t)d3 < 0) {
+        if (d3 >= 0xF0) {
             obFrame(a1)    = 2;                /* anchor */
             obPriority(a1) = 3;
-            obGfx(a1)      = (uint16_t)(obGfx(o) | 0x0060); /* bset #6 → pal 3 */
+            obGfx(a1) = (uint16_t)(obGfx(o) | 0x0040); /* bset #6 → pal 3 */
         }
     }
 
