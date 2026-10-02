@@ -337,8 +337,11 @@ static const plc_entry plc_FZBoss[] = {
 
 
 
-/* Static asset list sentinels (the value of a pointer is not a constant) */
-static const plc_entry plc_Empty[] = { { 0, 0 } };
+/* Static asset list sentinels (the value of a pointer is not a constant).
+   Kept even though nothing references it directly: it's the canonical
+   "no art to load" list, used by hand-written PLCs that want to be
+   explicit about loading nothing (see PLC_NONE below). */
+static const plc_entry plc_Empty[] __attribute__((unused)) = { { 0, 0 } };
 
 /* ------------------------------------------------------------------
    The ASM queue stores a 32-bit dc.l source address; host pointers are

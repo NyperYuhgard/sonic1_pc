@@ -11,7 +11,7 @@
      1. Sprite queue and forward declarations
      2. obj_map[] — the ID -> routine dispatch table
      3. Objects_Init / ExecuteObjects / DisplaySprite / FindFreeObj / DeleteObject
-     4. Part 1  Shared object helpers (disasm/_incObj/sub/*.asm)
+     4. Part 1  Shared object helpers (disasm/_incObj/sub / .asm)
      5. Part 2  Object implementations, $01-$2F
      6. Part 3  Object implementations, $30-$5F
      7. Part 4  Object implementations, $60-$8F
@@ -324,7 +324,7 @@ void DeleteObject(void *obj) {
 
 
 /* ===========================================================================
-   Part 1  Shared object helpers (disasm/_incObj/sub/*.asm)
+   Part 1  Shared object helpers (disasm/_incObj/sub / .asm)
    =========================================================================== */
 
 /* ===========================================================================
@@ -2364,7 +2364,7 @@ static void Sonic_WallSpeedAdjust(void *obj) {
     }
 }
 
-static void Sonic_SquashUnused(void *obj) {
+static void __attribute__((unused)) Sonic_SquashUnused(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     uint8_t d0 = obAngle(o);
     d0 += 0x20;
@@ -3541,26 +3541,26 @@ chksparkle:
 static void Sign_SonicRun(uint8_t *o) {
     uint8_t *player = RAM_ADDR(v_player);
 
-    if (v_debuguse) {                            /* tst.w (v_debuguse).w / bne.w Sign_Return */
-        return;
+    fprintf(stderr, "[Sign] enter routine6: debuguse=%d status=%02X id=%02X sonicX=%d limitR=%d\n",
+            v_debuguse, obStatus(player), obID(player),
+            obX(player), v_limitright2);
+
+    if (v_debuguse) return;
+
+    if (!(obStatus(player) & (1 << 1))) {
+        f_lockctrl  = 1;
+        v_jpadhold2 = btnR;
+        v_jpadpress2 = 0;
+        fprintf(stderr, "[Sign] LOCK: lockctrl=%d hold2=%02X press2=%02X\n",
+                f_lockctrl, v_jpadhold2, v_jpadpress2);
     }
 
-    /* FixBugs=0: lock controls when not airborne, regardless of player slot */
-    if (!(obStatus(player) & (1 << 1))) {        /* btst #1 / bne.s .airborne */
-        f_lockctrl = 1;                          /* move.b #1 */
-        v_jpadhold2 = btnR;                      /* move.w #btnR<<8: stores to the F602 byte = btnR */
-    }
+    if (obID(player) == 0) { Sign_LoadEndCards(o); return; }
 
-    if (obID(player) == 0) {                     /* tst.b (v_player+obID) / beq.s Sign_LoadEndCards */
-        Sign_LoadEndCards(o);
-        return;
-    }
-
-    int16_t d0 = obX(player);                    /* move.w (v_player+obX).w,d0 */
-    int16_t d1 = (int16_t)v_limitright2 + (320 - 24); /* addi.w #320-24 */
-    if ((uint16_t)d0 < (uint16_t)d1) {           /* cmp.w d1,d0 / blo.s Sign_Return */
-        return;
-    }
+    int16_t d0 = obX(player);
+    int16_t d1 = (int16_t)v_limitright2 + (320 - 24);
+    fprintf(stderr, "[Sign] xcheck: sonicX=%d need>=%d\n", d0, d1);
+    if ((uint16_t)d0 < (uint16_t)d1) return;
     Sign_LoadEndCards(o);
 }
 
@@ -4412,7 +4412,7 @@ static int SolidObject_Heightmap(uint8_t *o, int16_t d1, int16_t d2,
                                   const uint8_t *a2) {
     uint8_t *a1 = RAM_ADDR(v_player);
     int16_t d0, d3, d4, d5;
-    int16_t halfH = d2;                    /* guardar half-height original (para el "Landed") */
+
 
     /* --- ASM: tst.b obRender(a0) ; bpl.w Solid_NoCollision --- */
     if (!(obRender(o) & 0x80)) return 0;
@@ -5057,19 +5057,8 @@ static void Swing_ChainLink(uint8_t *o);
 static void Swing_Swinging(uint8_t *o);
 static void Swing_Move(uint8_t *o);
 static void GBall_Move(uint8_t *o);
-static void Swing_UpdateSwingPosition(uint8_t *o);
 static void Swing_ChkDel(uint8_t *o);
 
-/* Swing_UpdateSwingPosition — convert angle (d0) to (sin, cos) and place
-   every object in swing_children at its radius offset from the pivot.
-   Shared by Object 15 (swinging platforms) and Object 48 (wrecking ball). */
-static void Swing_UpdateSwingPosition(uint8_t *o) {
-    int16_t s0, s1;
-    CalcSine(v_unused11 /* placeholder */, &s0, &s1); /* see note below */
-    /* The ASM reads the angle from d0, which the caller set. We accept it
-       via a static since C has no register convention here. */
-    (void)s0; (void)s1;
-}
 /* The actual implementation with d0 passed explicitly. */
 static void Swing_UpdateSwingPosition_D0(uint8_t *o, int16_t d0) {
     int16_t s0, s1;
@@ -5166,7 +5155,7 @@ static void Swing_Main(uint8_t *o) {
     /* Parent index stored last. */
     *a2++ = (uint8_t)Object_GetIndex(o);
 
-    obAngle(o) = (int16_t)0x4080;            /* $4080 word */
+    gb_anglew(o) = 0x4080;            /* $4080 word */
     gb_swingspeed(o) = (int16_t)-0x200;
 
     if (sp_backup & 0x10) {                  /* bit 4 → GHZ ball variant */
@@ -7345,7 +7334,7 @@ sidetouch:
         if (d0_out == 0) goto push;              /* tst.w d0 / beq.w .push */
         if (d0_out < 0) goto sonicleft;          /* bmi.s .sonicleft */
 
-sonicright:
+//sonicright:
         if ((int16_t)obVelX(a1) < 0) goto push;  /* tst.w obVelX / bmi.s .push */
         goto stopsonic;                          /* bra.s .stopsonic */
 
@@ -7489,7 +7478,7 @@ static void Monitor_Main(void *obj) {
                 if (d0_out == 0) goto mon2_push;
                 if (d0_out < 0) goto mon2_sonicleft;
 
-            mon2_sonicright:
+            //mon2_sonicright:
                 if ((int16_t)obVelX(a1) < 0) goto mon2_push;
                 goto mon2_stopsonic;
 
@@ -7573,8 +7562,9 @@ static void PowerUp_Main(void *obj) {
                 obMap(o) = (uint32_t)(uintptr_t)a1; /* move.l a1,obMap */
             }
             /* falls through to Pow_Move */
-            /* fall through */
+            
         }
+        /* fall through */
         case 2: {
             /* Pow_Move — Routine 2 */
             if ((int16_t)obVelY(o) >= 0) {       /* tst.w obVelY / bpl.w Pow_Checks */
@@ -8438,7 +8428,7 @@ static void Chopper_Main(void *obj) {
 #define gfire_coldata(o)     (*(const uint8_t **)((uint8_t *)(o) + 0x30))
 #define gfire_platform(o)    (*(uint32_t *)((uint8_t *)(o) + 0x38))
 #define gfire_nudge(o)       (*(int16_t *)((uint8_t *)(o) + 0x3C))
-/* --- LGrass_Data_Symmetrical (frame 0): _/*\_ ---
+/* --- LGrass_Data_Symmetrical (frame 0): _/ * \_ ---
    14 flat + 15 up + 18 flat + 15 down + 14 flat = 76 bytes */
 static const uint8_t LGrass_Data_Symmetrical[76] = {
     0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,
@@ -8464,7 +8454,7 @@ static const uint8_t LGrass_Data_Column[44] = {
     0x30,0x30,0x30,0x30,
 };
 
-/* --- LGrass_Data_Asymmetrical (frame 1): _/*\- ---
+/* --- LGrass_Data_Asymmetrical (frame 1): 
    6 flat + 31 up + 18 flat + 15 down + 6 flat = 76 bytes */
 static const uint8_t LGrass_Data_Asymmetrical[76] = {
     0x20,0x20,0x20,0x20,0x20,0x20,
@@ -9424,7 +9414,6 @@ static void ChainStomp_Main(void *obj) {
  * =========================================================================== */
 
 /* Radios de detección (X, Y) del bloque empujable. Siempre los mismos. */
-static const uint8_t But_mzBlock_sizes[2] = { 0x10, 0x10 };
 static void But_Pressed(uint8_t *o);
 static int  But_MZBlock(uint8_t *o, int bit);
 /* --- But_MZBlock: ¿hay un PushBlock (id $33) sobre el botón? -------------
@@ -9741,7 +9730,7 @@ static void PushB_SolidAction_NotOnPlatform(uint8_t *o,
     {
         uint8_t *a1 = RAM_ADDR(v_player);
         if (obStatus(a1) & 1) return;      /* Sonic mirando a la derecha */
-        int16_t dx = d0;
+        
         int16_t d3h = (int16_t)(int8_t)obActWid(o);
         int16_t wall = PushB_ObjHitWallRight(o, d3h);
         if (wall < 0) return;
@@ -9760,7 +9749,7 @@ leftSide:
     {
         uint8_t *a1 = RAM_ADDR(v_player);
         if (!(obStatus(a1) & 1)) return;         /* Sonic mirando a la izquierda */
-        int16_t dx = d0;
+        
         int16_t d3h = (int16_t)(int8_t)obActWid(o);
         int16_t wall = PushB_ObjHitWallLeft(o, (int16_t)~d3h);
         if (wall < 0) return;
@@ -9773,7 +9762,7 @@ leftSide:
 
 pushCommon:
     {
-        uint8_t *a1 = RAM_ADDR(v_player);
+        
         int16_t dx = d0;
 
         if ((int8_t)obSubtype(o) < 0) return;   /* bloque sobre stomper */
@@ -12223,7 +12212,7 @@ ledgeHit:
 
 /* Moto_Smoke_Animate — routine 4 */
 static void Moto_Smoke_Animate(void *obj) {
-    uint8_t *o = (uint8_t *)obj;
+    
     if (Ani_Moto) {                              /* lea (Ani_Moto).l,a1 */
         AnimateSprite(obj, Ani_Moto);            /* bsr.w AnimateSprite (afRoutine -> routine 6) */
     }
@@ -17118,7 +17107,7 @@ display:
 /* Cat_BodySeg1 — routines 4, 8 */
 static void Cat_BodySeg1(uint8_t *o) {
     uint8_t *a1 = (uint8_t *)Object_GetSlot((int)cat_parent(o));
-    int16_t d0, old_x, dist, angle;
+    int16_t d0, old_x;     
     int32_t d2, d3;
     uint8_t d0b, d1b;
 

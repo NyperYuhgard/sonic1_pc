@@ -40,7 +40,7 @@
    low hint address and walk up by the allocation granularity until one is
    free. The first 64 KB block is unused in a normal process, so this
    succeeds on the first try in practice. */
-static const uint8_t *alloc_32bit(size_t n) {
+static uint8_t *alloc_32bit(size_t n) {
     size_t hdr = sizeof(size_t);
     size_t total = n + hdr;
 
@@ -54,7 +54,7 @@ static const uint8_t *alloc_32bit(size_t n) {
                                   MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         if (!base) continue;
         ((size_t *)base)[0] = n;         /* same length header as the POSIX path */
-        return (const uint8_t *)base + hdr;
+        return (uint8_t *)base + hdr;
     }
     return NULL;
 }
@@ -66,13 +66,13 @@ static void free_32bit(const uint8_t *p) {
 
 #else /* POSIX */
 
-static const uint8_t *alloc_32bit(size_t n) {
+static uint8_t *alloc_32bit(size_t n) {
     size_t hdr = sizeof(size_t);
     void *base = mmap(NULL, n + hdr, PROT_READ | PROT_WRITE,
                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
     if (base == MAP_FAILED) return NULL;
     ((size_t *)base)[0] = n;
-    return (const uint8_t *)base + hdr;
+    return (uint8_t *)base + hdr;
 }
 
 static void free_32bit(const uint8_t *p) {
@@ -1947,7 +1947,7 @@ static uint8_t *parse_anim_asm(const char *text, size_t text_len,
 
 typedef struct {
     char name[64];
-    const uint8_t *pieces;
+    uint8_t *pieces;
     size_t count;
 } MapFrame;
 
@@ -2047,8 +2047,7 @@ static uint8_t *parse_map_asm(const char *text, size_t text_len,
             piece[3] = (uint8_t)(tile & 0xFF);
             piece[4] = (uint8_t)(x & 0xFF);
 
-            const uint8_t *np = (const uint8_t *)realloc(
-                fr->pieces, (fr->count + 1) * 5);
+            uint8_t *np = realloc(fr->pieces, (fr->count + 1) * 5);
             if (!np) continue;
             fr->pieces = np;
             memcpy(fr->pieces + fr->count * 5, piece, 5);
@@ -2150,8 +2149,8 @@ static uint8_t *parse_map_asm_named(const char *text, const char *tblname,
 
         if (is_directive(ins, "mappingsTableEntry.w")) {
             if (ent_count < 256) {
-                strncpy(ent_owner[ent_count], cur_table, 63);
-                ent_owner[ent_count][63] = '\0';
+                snprintf(ent_owner[ent_count], sizeof ent_owner[ent_count],
+                        "%s", cur_table);
                 parse_table_expr(ins + 20, ent_ref[ent_count], 64,
                                  &ent_delta[ent_count]);
                 ent_count++;
@@ -2160,8 +2159,7 @@ static uint8_t *parse_map_asm_named(const char *text, const char *tblname,
         }
         if (is_directive(ins, "mappingsTable")) {
             if (has_label && lab[0]) {
-                strncpy(cur_table, lab, 63);
-                cur_table[63] = '\0';
+                snprintf(cur_table, sizeof cur_table, "%s", lab);
             }
             continue;
         }
@@ -2227,8 +2225,7 @@ static uint8_t *parse_map_asm_named(const char *text, const char *tblname,
             piece[3] = (uint8_t)(tile & 0xFF);
             piece[4] = (uint8_t)(x & 0xFF);
 
-            const uint8_t *np = (const uint8_t *)realloc(
-                fr->pieces, (fr->count + 1) * 5);
+            uint8_t *np = realloc(fr->pieces, (fr->count + 1) * 5);
             if (!np) continue;
             fr->pieces = np;
             memcpy(fr->pieces + fr->count * 5, piece, 5);
@@ -2502,7 +2499,7 @@ static int load_asm_asset(const char *name, const uint8_t **out_ptr,
         return -1;
     }
 
-    const uint8_t *low = alloc_32bit(data_len);
+    uint8_t *low = alloc_32bit(data_len);
     if (!low) {
         fprintf(stderr, "[Data] mmap MAP_32BIT failed for: %s\n", path);
         free((void *)data);
@@ -2537,7 +2534,7 @@ static int load_asm_asset_named(const char *name, const char *tblname,
     }
 
     size_t data_len = text_len;
-    const uint8_t *low = alloc_32bit(data_len);
+    uint8_t *low = alloc_32bit(data_len);
     if (!low) {
         fprintf(stderr, "[Data] mmap MAP_32BIT failed for: %s\n", path);
         free((void *)data);

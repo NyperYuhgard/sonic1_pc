@@ -291,7 +291,7 @@ void ObjView_Render(void) {
         memset(line, ' ', sizeof(line));
         line[WIN_COLS] = '\0';
 
-        char tmp[8];
+        char tmp[16];
         sprintf(tmp, "%2d", i);             memcpy(&line[0],  tmp, 2);
         fmt_hex8(tmp, id);                  memcpy(&line[3],  tmp, 2);
         fmt_hex8(tmp, obRoutine(o));        memcpy(&line[6],  tmp, 2);

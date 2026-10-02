@@ -17,12 +17,6 @@ static inline const uint8_t *GetColIndex(void) {
     return col_index_ptr;
 }
 
-/* BE word read from the 256x256 layout (v_lvllayout_fg) */
-static inline uint16_t layout_be16(const uint8_t *p);
-
-/* BE word read from the 16x16 block mappings (v_16x16) */
-static inline uint16_t block_be16(const uint8_t *p);
-
 /* ===========================================================================
    FindNearestTile
    Inputs:

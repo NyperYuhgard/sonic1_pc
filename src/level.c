@@ -1373,9 +1373,7 @@ static int OPL_SpawnObj(uint8_t **a0p, uint8_t *a2, uint8_t d2) {
 
     a1 = (uint8_t *)FindFreeObj();
     if (!a1) {
-        /* [DBG] */
-        fprintf(stderr, "[OPL_Spawn] NO FREE SLOT for id=$%02X\n", a0[4] & 0x7F);
-        /* [/DBG] */
+        
         return 1;
     }
 
@@ -1391,11 +1389,7 @@ static int OPL_SpawnObj(uint8_t **a0p, uint8_t *a2, uint8_t d2) {
     obSubtype(a1)  = a0[0]; a0 += 1;
     *a0p = a0;
 
-    /* [DBG] */
-    fprintf(stderr, "[OPL_Spawn] slot=%d id=$%02X sub=$%02X X=$%04X Y=$%04X d2=%d\n",
-            Object_GetIndex(a1), obID(a1), obSubtype(a1),
-            obX(a1), obY(a1), d2);
-    /* [/DBG] */
+    
     return 0;
 }
 
@@ -1422,10 +1416,6 @@ static void OPL_Main(void) {
     opl_ptr_left  = a0;
     opl_ptr_sec   = NULL;
 
-    /* [DBG] */
-    fprintf(stderr, "[OPL_Main] row=%u objpos=%p firstX=$%04X\n",
-            row, (void*)a0, (uint16_t)((a0[0]<<8)|a0[1]));
-    /* [/DBG] */
 
     *a2 = 0x01;
     *(a2 + 1) = 0x01;
@@ -1453,10 +1443,6 @@ static void OPL_Main(void) {
         count_right++;
     }
     opl_ptr_right = a0;
-    /* [DBG] */
-    fprintf(stderr, "[OPL_Main] d6=$%04X right scan: %d objs, counter[0]=%d\n",
-            d6, count_right, *a2);
-    /* [/DBG] */
 
     a0 = start;
     if (d6 >= 128) {
@@ -1467,11 +1453,6 @@ static void OPL_Main(void) {
         }
     }
     opl_ptr_left = a0;
-
-    /* [DBG] */
-    fprintf(stderr, "[OPL_Main] counter[1]=%d, opl_screen will start at -1\n",
-            *(a2 + 1));
-    /* [/DBG] */
 
     v_opl_screen = 0xFFFF;
     OPL_Next();
@@ -1751,7 +1732,7 @@ static void anis_ending(void) {
 
 static void anis_none(void) {}
 
-static const void (*const aniart_index[])(void) = {
+static void (*const aniart_index[])(void) = {
     anis_ghz, anis_none, anis_mz, anis_none, anis_none, anis_sbz, anis_ending,
 };
 
@@ -1789,7 +1770,7 @@ static void palcycle_ghz(void) {
 static void palcycle_none(void) {}
 #define palcycle_todo palcycle_none
 
-static const void (*const palcycle_index[])(void) = {
+static void (*const palcycle_index[])(void) = {
     palcycle_ghz, palcycle_todo, palcycle_none, palcycle_todo,
     palcycle_todo, palcycle_todo, palcycle_ghz,
 };

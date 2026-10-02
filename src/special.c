@@ -453,7 +453,7 @@ void PalCycle_SS(void) {
         uint16_t idx = v_palss_index;
         if (pal_off >= (0x80 | 0x0A)) idx += 1; /* ASM: cmpi.w #$8A,d0 / blo.s / addq.w #1,d1 */
         idx *= 0x2A;
-        if (idx + 0x2A > Pal_SSCyc2_len) return;
+        if ((size_t)idx + 0x2A > Pal_SSCyc2_len) return;
         const uint8_t *cyc = Pal_SSCyc2 + idx;
         uint8_t sub = pal_off & 0x7F;
         int extra = sub & 1;
@@ -482,7 +482,7 @@ void PalCycle_SS(void) {
          * ASM: lea (Pal_SSCyc1).l,a1 / adda.w d0,a1 — palette offset applied.
          * Los assets son big-endian; v_palette guarda palabras host (igual
          * que PalLoad / palcycle_ghz), así que hay que ensamblar cada color. */
-        if (!Pal_SSCyc1 || pal_off + 12 > Pal_SSCyc1_len) return;
+        if (!Pal_SSCyc1 || (size_t)pal_off + 12 > Pal_SSCyc1_len) return;
         const uint8_t *c1 = Pal_SSCyc1 + pal_off;
         uint16_t *dst = (uint16_t *)RAM_ADDR(v_palette_line_3 + 0x0E);
         for (int i = 0; i < 6; i++)
@@ -713,12 +713,6 @@ void SS_AnimateBlocks(void) {
 /* ===========================================================================
  *  Animation queue (SS_AniItems del ASM)
  * =========================================================================== */
-
-#define ss_ani_id(o)     ((o)[0])
-#define ss_ani_delay(o)  ((o)[2])
-#define ss_ani_frame(o)  ((o)[3])
-#define ss_ani_block(o)  (*(uint32_t *)((o) + 4))
-
 /* SS_AniRingData / SS_AniBumpData / SS_Ani1UpData / SS_AniRevData /
    SS_AniEmerData / SS_AniGlassData (byte sequences). */
 static const uint8_t SS_AniRingData[5] = {

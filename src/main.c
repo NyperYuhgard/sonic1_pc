@@ -156,7 +156,7 @@ static void ProcessSDLEvents(void) {
         /* WM close button on the main game window */
         if (ev.type == SDL_WINDOWEVENT) {
             if (ev.window.event == SDL_WINDOWEVENT_CLOSE &&
-                (int)ev.window.windowID == SDL_GetWindowID(window)) {
+                ev.window.windowID == SDL_GetWindowID(window)) {
                 running = 0;
             }
             /* Solución al bug de maximizar/redimensionar */
@@ -847,15 +847,6 @@ static void LevSelTextLoad(void) {
     LevSel_ChgSnd(vram_num, tile_attr, sound >> 4);
     LevSel_ChgSnd(vram_num + 2, tile_attr, sound & 0xF);
 }
-
-static const char *opt_labels[opt_line_count] = {
-    "WIDESCREEN     : OFF   ",
-    "FPS INTERP.    : OFF   ",
-    "SCANLINES      : OFF   ",
-    "FULLSCREEN     : OFF   ",
-    "APPLY & SAVE           ",
-    "BACK                   "
-};
 
 static void Options_BuildText(void) {
     char buf[opt_line_count][opt_line_length + 1];

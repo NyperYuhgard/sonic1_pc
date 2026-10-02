@@ -356,7 +356,9 @@ void KosDec(const uint8_t *source, uint8_t *dest) {
 
             /* Kos_RLELoop: copy d3+1 times from (dst + d2) */
             do {
-                *dst++ = dst[d2];
+                uint8_t tmp = dst[d2];
+                *dst = tmp;
+                dst++;
             } while (--d3 != -1);
         } else {
             /* Literal: copy byte as-is */
