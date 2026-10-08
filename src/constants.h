@@ -399,7 +399,10 @@ enum {
 #define angleright      0x36
 #define angleleft       0x37
 #define sticktoconvex   0x38
+#define spindash_flag   0x39
+#define spindash_count  0x3A
 #define restartime      0x3A
+#define spindash_decay  0x3B
 #define jumping         0x3C
 #define standonobject   0x3D
 #define locktime        0x3E
@@ -554,14 +557,15 @@ enum {
 #define sfx_Switch      0xCD
 #define sfx_RingLeft    0xCE
 #define sfx_Signpost    0xCF
-#define sfx__Last       0xCF
+#define sfx_SpinDash    0xD0
+#define sfx__Last       0xD0
 
 /* ---------------------------------------------------------------------------
    Special sound effects
    --------------------------------------------------------------------------- */
-#define spec__First     0xD0
-#define sfx_Waterfall   0xD0
-#define spec__Last      0xD0
+#define spec__First     0xD1
+#define sfx_Waterfall   0xD1
+#define spec__Last      0xD1
 
 /* ---------------------------------------------------------------------------
    Sound commands

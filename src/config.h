@@ -12,6 +12,7 @@ typedef struct {
     int  ss_smooth;
     int  crt;
     int  blur;
+    int  spindash;
 } Settings;
 
 extern Settings g_settings;

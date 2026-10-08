@@ -67,7 +67,7 @@ static const snd_map_t sfx_map[] = {
     { sfx_Collapse,     "assets/SoundFX/Stage/LedgeBreak.wav" },
     { sfx_SSGlass,      "assets/SoundFX/Stage/GemBlockSS.wav" },
     { sfx_Door,         "assets/SoundFX/Stage/FlappingDoor.wav" },
-    { sfx_Teleport,     "assets/SoundFX/Stage/Exit_SS.wav" },
+    { sfx_Teleport,     "assets/SoundFX/Global/Release.wav" },
     { sfx_ChainStomp,   "assets/SoundFX/Stage/Crusher.wav" },
     { sfx_Roll,         "assets/SoundFX/Global/Rolling.wav" },
     { sfx_Continue,     "assets/SoundFX/Stage/Continue.wav" },
@@ -87,6 +87,7 @@ static const snd_map_t sfx_map[] = {
     { sfx_Switch,       "assets/SoundFX/Stage/ButtonPress.wav" },
     { sfx_RingLeft,     "assets/SoundFX/Global/Ring.wav" },
     { sfx_Signpost,     "assets/SoundFX/Global/SignPost.wav" },
+    { sfx_SpinDash,     "assets/SoundFX/Global/Charge.wav" },
     /* Special (spec__): continuous/looping sounds */
     { sfx_Waterfall,    "assets/SoundFX/Stage/Waterfall.wav" },
     { sfx_Sega,         "assets/SoundFX/Stage/Sega.wav" },

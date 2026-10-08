@@ -803,6 +803,11 @@ static void Sonic_SquashUnused(void *obj);
 static void Sonic_HurtStop(void *obj);
 static void Sonic_HandleDeath(void *obj);
 
+static int Sonic_SpinDash(void *obj);
+static int Sonic_UpdateSpindash(uint8_t *o);
+static int Sonic_ChargingSpindash(uint8_t *o);
+static int Sonic_Spindash_ResetScr(uint8_t *o);
+
 /* ===========================================================================
    Sonic mode implementations (forward declared for Sonic_Modes array)
    =========================================================================== */
@@ -1295,8 +1300,183 @@ balance:
     Sonic_ResetScr(o);
 }
 
+/* ===========================================================================
+ *  Sonic_SpinDash — port of the Sonic Retro "Creating a simple Spin Dash"
+ *  tutorial ASM.
+ *
+ *  Return convention
+ *    The ASM uses `addq.l #4,sp` to skip the caller's remaining instructions
+ *    after starting / updating / releasing the spin dash. In C we translate
+ *    every such site to `return 1` and every plain `rts` to `return 0`.
+ *    Sonic_MdNormal does `if (Sonic_SpinDash(o)) return;` and gets exactly
+ *    the same behaviour.
+ *
+ *  Field layout (constants.h / ram.h)
+ *    spindash_flag(o)  = byte $39       bit 0 = "spin dash active"
+ *    spindash_count(o) = word $3A-$3B   charge counter (0..$800), overlaps
+ *                                       restartime (byte) and spindash_decay
+ *                                       (byte). Safe because restartime is
+ *                                       only touched while Sonic is dying.
+ *
+ *  Byte-vs-word subtlety
+ *    The release path does `move.b spindash_count(a0),d0`. On the 68k this
+ *    reads the byte at offset $3A, which is the HIGH byte of the word, giving
+ *    values 0..8 for a charge of 0..$800. Our word lives in native little-
+ *    endian RAM, so we reproduce that read as `spindash_count(o) >> 8`.
+ *
+ *  Temporary tutorial equates
+ *    id_SpinDash and sfx_SpinDash are aliases until proper sprites/SFX are
+ *    ported. Remove the two #defines below and use real constants later.
+ *  =========================================================================== */
+
+#define id_SpinDash   id_Roll
+
+static int Sonic_SpinDash(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    /* btst #0,spindash_flag(a0) ; bne.s Sonic_UpdateSpindash */
+    if (spindash_flag(o) & 1) {
+        return Sonic_UpdateSpindash(o);
+    }
+
+    /* Not charging yet: only start if Sonic is ducking and A/B/C is pressed. */
+    if (obAnim(o) != id_Duck) return 0;         /* bne.s .end */
+        if (!(v_jpadpress2 & btnABC)) return 0;     /* beq.w .end */
+
+            obAnim(o) = id_SpinDash;                    /* change Sonic's animation */
+            Sound_Queue(sfx_SpinDash, false);           /* jsr (QueueSound2).l */
+
+            /* bset #0,spindash_flag(a0) ; clr.w spindash_count(a0) */
+            spindash_flag(o) |= 1;
+        spindash_count(o) = 0;
+
+    /* Manual Sonic work because we skipped the parent's stack entry. */
+    Sonic_LevelBound(o);
+    Sonic_AnglePos(o);
+    return 1;                                   /* addq.l #4,sp */
+}
+
+static int Sonic_UpdateSpindash(uint8_t *o) {
+    /* btst #bitDn,(v_jpadhold2).w ; bne.w Sonic_ChargingSpindash */
+    if (v_jpadhold2 & btnDn) {
+        return Sonic_ChargingSpindash(o);
+    }
+
+    /* ==== Sonic_ReleaseSpindash ==== */
+    spindash_flag(o) &= (uint8_t)~1;            /* bclr #0: leave charging mode */
+    obHeight(o) = sonic_roll_height;
+    obWidth(o)  = sonic_roll_width;
+    obY(o)      = (int16_t)(obY(o) + (sonic_height - sonic_roll_height));
+    obAnim(o)   = id_Roll;
+    obStatus(o) |= (1 << 2);                    /* bset #2: rolling flag */
+    Sound_Queue(sfx_Teleport, false);           /* Spin Dash zoom SFX */
+
+    /* Charge → speed.
+     *        hi   = high byte of spindash_count     ; 0..8
+     *        d0   = hi << 7                          ; 0..$400
+     *        d1   = d0                               ; copy for camera delay
+     *        d0  += $800                             ; $800..$C00
+     *        if facing left: neg.w d0
+     *        obInertia = d0 */
+    {
+        uint8_t  hi  = (uint8_t)(spindash_count(o) >> 8);
+        int32_t  d0  = (int32_t)hi << 7;
+        int32_t  d1  = d0;                      /* kept for camera delay */
+        d0 += 0x800;
+
+        if (obStatus(o) & 1) d0 = -d0;          /* facing left: negate */
+            obInertia(o) = (int16_t)d0;
+
+        /* Camera delay:
+         *            d1 += d1        (×2)
+         *            d1 &= $1F00
+         *            d1 = -d1
+         *            d1 += $2000
+         *            v_cam_x_delay = d1 */
+        d1 = (d1 * 2) & 0x1F00;
+        d1 = -d1;
+        d1 += 0x2000;
+        v_cam_x_delay = (uint16_t)d1;
+    }
+
+    /* Release velocity along the current floor angle.
+     *      CalcSine: d0 = sin, d1 = cos (matches our s0/s1 output order).
+     *        obVelX = cos * inertia >> 8
+     *        obVelY = sin * inertia >> 8 */
+    {
+        int16_t s0, s1;
+        int16_t inertia = obInertia(o);
+        CalcSine(obAngle(o), &s0, &s1);
+        obVelX(o) = (int16_t)(((int32_t)s1 * inertia) >> 8);
+        obVelY(o) = (int16_t)(((int32_t)s0 * inertia) >> 8);
+    }
+
+    return Sonic_Spindash_ResetScr(o);          /* bra.s Sonic_Spindash_ResetScr */
+}
+
+static int Sonic_ChargingSpindash(uint8_t *o) {
+    /* Keep the Spin Dash animation and force Sonic_Animate to reset it.
+     *      The ASM writes `move.w #(id_SpinDash<<8),obAnim(a0)`, a big-endian
+     *      word store that lands id_SpinDash on obAnim and $00 on obPrevAni.
+     *      In our native LE layout that becomes two byte stores. */
+    obAnim(o)    = id_SpinDash;
+    obPrevAni(o) = 0;
+
+    /* Charge decay:
+     *        if spindash_count == 0: skip
+     *        spindash_count -= spindash_count >> 5
+     *      The ASM's bhs/clr.w guard can never fire for any word value. */
+    if (spindash_count(o) != 0) {
+        spindash_count(o) =
+        (uint16_t)(spindash_count(o) - (spindash_count(o) >> 5));
+    }
+
+    /* moveq #btnABC,d0 ; and.b (v_jpadpress2).w,d0 ; beq.w ResetScr */
+    if (!(v_jpadpress2 & btnABC)) {
+        return Sonic_Spindash_ResetScr(o);
+    }
+
+    /* Restart animation and bump the counter. */
+    obAnim(o)    = id_SpinDash;
+    obPrevAni(o) = 0;
+    Sound_Queue(sfx_SpinDash, false);
+
+    /* addi.w #$200, count ; if count > $800: count = $800 */
+    {
+        uint32_t c = (uint32_t)spindash_count(o) + 0x200;
+        if (c >= 0x800) c = 0x800;
+        spindash_count(o) = (uint16_t)c;
+    }
+
+    return Sonic_Spindash_ResetScr(o);
+}
+
+static int Sonic_Spindash_ResetScr(uint8_t *o) {
+    /* The `addq.l #4,sp` at the top of this block is implicit: we return 1
+     *      and Sonic_MdNormal skips the rest of its per-frame work. */
+
+    /* cmpi.w #(224/2)-16,(v_lookshift).w ; beq.s .resetscr_end
+     *      bhs.s .pull_cam_up */
+    const int16_t target = (224 / 2) - 16;      /* = 0x60 */
+    if (v_lookshift != target) {
+        if (v_lookshift > target) {
+            v_lookshift = (int16_t)(v_lookshift - 2);  /* .pull_cam_up */
+        } else {
+            v_lookshift = (int16_t)(v_lookshift + 2);  /* move camera down */
+        }
+    }
+
+    /* Manual Sonic work because we skipped the parent's stack entry. */
+    Sonic_LevelBound(o);
+    Sonic_AnglePos(o);
+    return 1;
+}
+
 static void Sonic_MdNormal(void *obj) {
     uint8_t *o = (uint8_t *)obj;
+    if (g_settings.spindash && Sonic_SpinDash(o)) {
+        return;
+    }
     if (Sonic_Jump(o)) {
         return; /* addq.l #4,sp — a successful jump skips the rest of this mode */
     }
@@ -1311,6 +1491,7 @@ static void Sonic_MdNormal(void *obj) {
 
 static void Sonic_MdJump(void *obj) {
     uint8_t *o = (uint8_t *)obj;
+    spindash_flag(o) &= (uint8_t)~1;
     Sonic_JumpHeight(o);
     Sonic_JumpDirection(o);
     Sonic_LevelBound(o);
@@ -1337,6 +1518,7 @@ static void Sonic_MdRoll(void *obj) {
 
 static void Sonic_MdJump2(void *obj) {
     uint8_t *o = (uint8_t *)obj;
+    spindash_flag(o) &= (uint8_t)~1;
     Sonic_JumpHeight(o);
     Sonic_JumpDirection(o);
     Sonic_LevelBound(o);
@@ -1567,7 +1749,7 @@ static void Sonic_RollRight(void *obj) {
     obAnim(o) = id_Roll;
 }
 
-static void Sonic_Roll(void *obj) {
+static void Sonic_Roll_Vanilla(void *obj) {
     uint8_t *o = (uint8_t *)obj;
 
     if (f_slidemode) {
@@ -1589,6 +1771,49 @@ static void Sonic_Roll(void *obj) {
         }
     }
     Sonic_ChkRoll(o);
+}
+
+static void Sonic_Roll_Spindash(void *obj) {
+    uint8_t *o = (uint8_t *)obj;
+
+    /* tst.b (f_slidemode).w ; bne.s .noroll */
+    if (f_slidemode) {
+        return;
+    }
+
+    /* move.b (v_jpadhold2).w,d0 ; andi.b #btnL+btnR,d0 ; bne.s .noroll */
+    if (v_jpadhold2 & (btnL | btnR)) {
+        return;
+    }
+
+    /* btst #bitDn,(v_jpadhold2).w ; beq.s .noroll */
+    if (!(v_jpadhold2 & btnDn)) {
+        return;
+    }
+
+    /* move.w obInertia(a0),d0 ; bpl.s .ispositive ; neg.w d0 */
+    int16_t d0 = obInertia(o);
+    if (d0 < 0) {
+        d0 = (int16_t)-d0;
+    }
+
+    /* cmpi.w #$100,d0 ; bhi.s Sonic_ChkRoll */
+    if ((uint16_t)d0 > 0x100) {
+        Sonic_ChkRoll(o);
+        return;
+    }
+
+    /* move.b #id_Duck,obAnim(a0) ; fall to .noroll: rts */
+    obAnim(o) = id_Duck;
+}
+
+
+static void Sonic_Roll(void *obj) {
+    if (g_settings.spindash) {
+        Sonic_Roll_Spindash(obj);
+    } else {
+        Sonic_Roll_Vanilla(obj);
+    }
 }
 
 static void Sonic_ChkRoll(void *obj) {
@@ -10629,6 +10854,7 @@ bounceSonicAway:
     if ((int16_t)obX(o) >= (int16_t)obX(damager)) { /* right of object → reverse */
         obVelX(o) = -(int16_t)obVelX(o);
     }
+    spindash_flag(o) &= (uint8_t)~1;
     obInertia(o) = 0;                              /* cancel ground speed */
     obAnim(o) = id_Hurt;                           /* hurt animation */
     flashtime(o) = 2 * 60;                         /* 2 seconds of invulnerability */

@@ -9,6 +9,7 @@
 #include "objects.h"
 #include "sound.h"
 #include "deform.h"
+#include "config.h"
 
 /* Game Mode ID for the title-screen check in Deform_GHZ (from sonic.asm). */
 #define GM_Title 0x04
@@ -20,7 +21,14 @@
      - _inc/ScrollHoriz & ScrollVertical.asm
      - _inc/DynamicLevelEvents.asm
    =========================================================================== */
-
+#define CamAddr_SCREENPOSX   (offsetof(RamLayout, screenposx))
+#define CamAddr_SCREENPOSY   (offsetof(RamLayout, screenposy))
+#define CamAddr_BGSCRPOSX    (offsetof(RamLayout, bgscreenposx))
+#define CamAddr_BGSCRPOSY    (offsetof(RamLayout, bgscreenposy))
+#define CamAddr_BG2SCRPOSX   (offsetof(RamLayout, bg2screenposx))
+#define CamAddr_BG2SCRPOSY   (offsetof(RamLayout, bg2screenposy))
+#define CamAddr_BG3SCRPOSX   (offsetof(RamLayout, bg3screenposx))
+#define CamAddr_BG3SCRPOSY   (offsetof(RamLayout, bg3screenposy))
 /* ---------------------------------------------------------------------------
    Camera 16.16 fixed-point helpers.
 
@@ -69,33 +77,59 @@ static void SetScreenX(int16_t old_sx, int32_t d0w) {
     RAM_WORD(0xF73A) = (uint16_t)d1;              /* v_scrshiftx */
 }
 
+#define ScreenX_int()  ((int16_t)(v_screenposx >> 16))
+
 static void MoveScreenHoriz(void) {
-    int16_t spx = cam_int(0xF700);                /* v_screenposx */
-    uint16_t a = (uint16_t)((int)obX(&ram[v_player]) - (int)spx);
+    int16_t sonic_x;
 
-    /* subi.w #(320/2)-16,d0 ; bcs.s SH_MoveCameraLeft -> Sonic < 144px from edge */
+    /* ---- Source of sonic_x: live X, or delayed tracked X ---- */
+    if (g_settings.spindash && v_cam_x_delay != 0) {
+        /* Consume one unit of the delay, exactly like subi.w #$100 */
+        uint16_t cam_delay = (uint16_t)(v_cam_x_delay - 0x100);
+        v_cam_x_delay = cam_delay;
+
+        /* The ASM does `move.b (v_cam_x_delay).w,d1`, which reads the HIGH
+           byte of the word. Our word is native little-endian, so that byte
+           is (cam_delay >> 8). */
+        uint8_t d1 = (uint8_t)(cam_delay >> 8);
+        d1 = (uint8_t)(d1 << 2);              /* lsl.b #2 */
+        d1 = (uint8_t)(d1 + 4);               /* addq.b #4 */
+
+        /* sub.b d1,d0 only touches the low byte, and v_trackpos is always
+           in 0..$FF, so this is exactly (v_trackpos - d1) & $FF. */
+        uint16_t d0 = (uint16_t)((v_trackpos - (uint16_t)d1) & 0xFF);
+
+        /* move.w (v_tracksonic,d0),d0 ; andi.w #$3FFF */
+        sonic_x = (int16_t)(RAM_WORD(v_tracksonic + d0) & 0x3FFF);
+    } else {
+        /* .normal: use Sonic's live X position */
+        sonic_x = obX(&ram[v_player]);
+    }
+
+    /* ---- Shared camera-follow logic ---- */
+    int16_t  spx = cam_int(CamAddr_SCREENPOSX);
+    uint16_t a   = (uint16_t)((int)sonic_x - (int)spx);
+
     if (a < 144u) {
-        /* SH_MoveCameraLeft (FixBugs=0 has no -16 cap) */
         uint16_t d0 = (uint16_t)((a - 144u) + (uint16_t)spx);
-        int16_t l = (int16_t)RAM_WORD(0xF728);   /* v_limitleft2 */
-        if ((int16_t)d0 <= l) d0 = (uint16_t)l;  /* bgt -> keep d0 */
+        int16_t  l  = (int16_t)v_limitleft2;
+        if ((int16_t)d0 <= l) d0 = (uint16_t)l;
         SetScreenX(spx, d0);
         return;
     }
 
-    /* subi.w #16,d0 ; bcc.s SH_MoveCameraRight -> Sonic >= 160px from edge */
     if (a >= 160u) {
-        uint16_t d0 = (uint16_t)(a - 160u);      /* after 2nd subi (a - 144 - 16) */
-        if (d0 >= 16u) d0 = 16u;                 /* cmpi.w #16,d0 ; blo keeps d0 */
+        uint16_t d0 = (uint16_t)(a - 160u);
+        if (d0 >= 16u) d0 = 16u;
         d0 = (uint16_t)(d0 + (uint16_t)spx);
-        int16_t r = (int16_t)RAM_WORD(0xF72A);   /* v_limitright2 */
-        if ((int16_t)d0 >= r) d0 = (uint16_t)r;  /* blt -> keep d0 */
+        int16_t  r  = (int16_t)v_limitright2;
+        if ((int16_t)d0 >= r) d0 = (uint16_t)r;
         SetScreenX(spx, d0);
         return;
     }
 
-    /* sweet spot: camera does not move this frame */
-    RAM_WORD(0xF73A) = 0;                         /* v_scrshiftx */
+    /* Sweet spot: Sonic is 144..160 px from the left edge, camera stays put */
+    v_scrshiftx = 0;
 }
 
 static void ScrollHoriz(void) {

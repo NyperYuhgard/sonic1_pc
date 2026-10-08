@@ -12,6 +12,7 @@ Settings g_settings = {
     .ss_smooth = 0,
     .crt  = 0,
     .blur = 0,
+    .spindash = 0,
 };
 
 #define CFG_PATH "sonic1.cfg"
