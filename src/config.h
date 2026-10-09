@@ -13,6 +13,7 @@ typedef struct {
     int  crt;
     int  blur;
     int  spindash;
+    int  updown_cam;     
 } Settings;
 
 extern Settings g_settings;

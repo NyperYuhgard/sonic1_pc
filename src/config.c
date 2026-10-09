@@ -13,6 +13,7 @@ Settings g_settings = {
     .crt  = 0,
     .blur = 0,
     .spindash = 0,
+    .updown_cam = 2,
 };
 
 #define CFG_PATH "sonic1.cfg"

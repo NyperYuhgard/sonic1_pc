@@ -215,6 +215,30 @@ static const uint16_t bg_scroll_block_sizes[] = {
     0x0070, 0x0100, 0x0100, 0x0100,
 };
 
+
+static const uint8_t BG_ScrollBlockMap_MZ[0x80] = {
+    0,0,0,0,0,0,6,6,4,4,4,4,4,4,4,4,   /* $00-$0F */
+    4,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,   /* $10-$1F */
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,   /* $20-$2F */
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,   /* $30-$3F */
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,   /* $40-$4F */
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,   /* $50-$5F */
+    2,0,                               /* $60-$61 */
+    /* padding para no salir de rango con los índices hasta $7F */
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+};
+
+static int16_t bg_x_pos_for_type(int type) {
+    switch (type) {
+        case 0:
+        case 2:  return (int16_t)(uint16_t)v_bgscreenposx_dup;
+        case 4:  return (int16_t)(uint16_t)v_bg2screenposx_dup;
+        case 6:  return (int16_t)(uint16_t)v_bg3screenposx_dup;
+    }
+    return 0;
+}
+
 static void BgScrollSpeed(int16_t y, int16_t x);
 static void Lamp_LoadInfo(void) {}
 
@@ -230,6 +254,9 @@ void LevelSizeLoad(void) {
     v_unused9 = 0;
     v_unused10 = 0;
     v_dle_routine = 0;
+    /* FIX (FixBugs=1): clear the no-BG-scroll flag on every level load, so a
+       game over on the title screen doesn't leave the BG frozen. */
+    f_nobgscroll = 0;
 
     uint16_t idx = (uint16_t)zone * 4 + (uint16_t)act;
     if (idx >= sizeof(level_size_array) / sizeof(level_size_array[0])) idx = 0;
@@ -279,19 +306,36 @@ void LevelSizeLoad(void) {
         }
     }
 
+    /* ============================================================================
+       LevSz_InitCameraPositions
+       ============================================================================
+       FIX: in ASM, `subi.w`/`cmp`/`move.w` MUTATE d0/d1 in place. When the
+       code reaches `bsr.w BgScrollSpeed`, d0 is already the camera Y and d1
+       the camera X. The previous C dropped the computed values into local
+       camX/camY and called BgScrollSpeed with the raw Sonic start position,
+       which is what made LZ/SLZ/SYZ/SBZ backgrounds initialise from the
+       wrong reference. Keep d0/d1 updated. */
     {
-        int16_t camX = (int16_t)d1 - (320 / 2);
-        if (camX < 0) camX = 0;
-        if (camX >= (int16_t)v_limitright2) camX = (int16_t)v_limitright2;
-        RAM_WORD(0xF700) = (uint16_t)camX;
+        /* .chkXLeft / .chkXRight / .setX */
+        int16_t camX = (int16_t)d1 - (320 / 2);       /* subi.w #320/2 */
+        if (camX < 0) camX = 0;                        /* bhs fall-through -> moveq #0 */
+        if (camX >= (int16_t)v_limitright2) camX = (int16_t)v_limitright2;  /* blo else clamp */
+        v_screenposx = (uint16_t)camX;                 /* move.w d1,(v_screenposx) */
+        d1 = (uint16_t)camX;                           /* keep d1 in sync */
 
-        int16_t camY = (int16_t)d0 - ((224 / 2) - 16);
+        /* .chkYTop / .chkYBottom / .setY */
+        int16_t camY = (int16_t)d0 - ((224 / 2) - 16); /* subi.w #(224/2)-16 */
         if (camY < 0) camY = 0;
         if (camY >= (int16_t)v_limitbtm2) camY = (int16_t)v_limitbtm2;
-        RAM_WORD(0xF704) = (uint16_t)camY;
+        v_screenposy = (uint16_t)camY;
+        d0 = (uint16_t)camY;                           /* keep d0 in sync */
     }
 
-    BgScrollSpeed(d0, d1);
+    /* ============================================================================
+       LevSz_InitBackgroundAndLoops
+       ============================================================================
+       Now d0/d1 hold the clamped camera positions, exactly like in ASM. */
+    BgScrollSpeed((int16_t)d0, (int16_t)d1);
 
     if (zone < sizeof(loop_chunk_nums) / 4) {
         uint8_t *p = RAM_ADDR(0xF7AC);
@@ -312,61 +356,67 @@ void LevelSizeLoad(void) {
 
 static void BgScrollSpeed(int16_t y, int16_t x) {
     if (RAM_BYTE(v_lastlamp) == 0) {
-        RAM_WORD(0xF70C) = (uint16_t)y;
-        RAM_WORD(0xF714) = (uint16_t)y;
-        RAM_WORD(0xF708) = (uint16_t)x;
-        RAM_WORD(0xF710) = (uint16_t)x;
-        RAM_WORD(0xF718) = (uint16_t)x;
+        v_bgscreenposy  = (uint16_t)y;
+        v_bg2screenposy = (uint16_t)y;
+        /* FIX (FixBugs=1): the third BG layer's Y was missing. On zones
+           where BG3 deforms independently (SBZ1, SYZ, MZ), a stale value
+           here shows up as an offset BG3 at level entry. */
+        v_bg3screenposy = (uint16_t)y;
+        v_bgscreenposx  = (uint16_t)x;
+        v_bg2screenposx = (uint16_t)x;
+        v_bg3screenposx = (uint16_t)x;
     }
 
     switch (v_zone) {
     case 0:
-        RAM_LONG(0xF708) = 0;
-        RAM_LONG(0xF70C) = 0;
-        RAM_LONG(0xF714) = 0;
-        RAM_LONG(0xF71C) = 0;
+        v_bgscreenposx  = 0;
+        v_bgscreenposy  = 0;
+        v_bg2screenposx = 0;
+        v_bg2screenposy = 0;
+        v_bg3screenposx = 0;
+        v_bg3screenposy = 0;
         memset(RAM_ADDR(v_bgscroll_buffer), 0, 12);
         break;
     case 1:
-        RAM_WORD(0xF70C) = (int16_t)(y >> 1);
+        v_bgscreenposy = (int16_t)(y >> 1);
         break;
     case 2:
         break;
     case 3:
-        RAM_WORD(0xF70C) = (int16_t)((y >> 1) + 0xC0);
-        RAM_LONG(0xF708) = 0;
+        v_bgscreenposy = (int16_t)((y >> 1) + 0xC0);
+        v_bgscreenposx = 0;
         break;
     case 4: {
-        int32_t d0 = (int32_t)y << 4;
-        int32_t d2 = d0;
-        d0 = (d0 << 1) + d2;
-        d0 >>= 8;
-        d0 += 1;
-        RAM_WORD(0xF70C) = (int16_t)d0;
-        RAM_LONG(0xF708) = 0;
+        int32_t dd = (int32_t)y << 4;
+        int32_t d2 = dd;
+        dd = (dd << 1) + d2;
+        dd >>= 8;
+        dd += 1;
+        v_bgscreenposy = (int16_t)dd;
+        v_bgscreenposx = 0;
         break;
     }
     case 5: {
-        int16_t d0 = (int16_t)((uint16_t)y & 0x7F8);
-        d0 >>= 3;
-        d0 += 1;
-        RAM_WORD(0xF70C) = (int16_t)d0;
+        int16_t dd = (int16_t)((uint16_t)y & 0x7F8);
+        dd >>= 3;
+        dd += 1;
+        v_bgscreenposy = dd;
         break;
     }
     case 6: {
-        int16_t d0 = (int16_t)RAM_WORD(0xF700);
-        d0 >>= 1;
-        RAM_WORD(0xF708) = (uint16_t)d0;
-        RAM_WORD(0xF710) = (uint16_t)d0;
-        int16_t d1 = d0;
-        d0 >>= 2;
-        d1 = d0;
-        d0 += d0;
-        d0 += d1;
-        RAM_WORD(0xF718) = (uint16_t)d0;
-        RAM_LONG(0xF70C) = 0;
-        RAM_LONG(0xF714) = 0;
-        RAM_LONG(0xF71C) = 0;
+        int16_t dd = (int16_t)v_screenposx;
+        dd >>= 1;
+        v_bgscreenposx  = (uint16_t)dd;
+        v_bg2screenposx = (uint16_t)dd;
+        int16_t d1 = dd;
+        dd >>= 2;
+        d1 = dd;
+        dd += dd;
+        dd += d1;
+        v_bg3screenposx = (uint16_t)dd;
+        v_bgscreenposy  = 0;
+        v_bg2screenposy = 0;
+        v_bg3screenposy = 0;
         memset(RAM_ADDR(v_bgscroll_buffer), 0, 12);
         break;
     }
@@ -499,7 +549,18 @@ static void draw_strip_tb(const uint8_t *layout, int cam_x, int cam_y,
         draw_chunks_block(layout, cam_x, cam_y, sx, sy, vram);
     }
 }
-
+static void draw_full_width_row(const uint8_t *layout, int cam_y,
+                                uint32_t plane_base, int screen_y) {
+    for (int i = 0; i < 32; i++) {
+        int sx = i * 16;
+        int sy = screen_y;
+        int block_row = ((cam_y + sy) & 0xF0) >> 4;
+        int col = (sx & 0x1F0) >> 4;
+        uint32_t vram = plane_base + (uint32_t)block_row * 0x100
+                                 + (uint32_t)col * 4;
+        draw_chunks_block(layout, 0 /* cam_x ignorado */, cam_y, sx, sy, vram);
+    }
+}
 static void draw_bg_top(uint16_t *flags, int cam_x, int cam_y,
                          uint32_t plane_base, const uint8_t *layout) {
     if (!(*flags & 0xFF)) return;
@@ -530,11 +591,100 @@ static void draw_bg_top(uint16_t *flags, int cam_x, int cam_y,
             draw_strip_tb(layout, cam_x, cam_y, plane_base, -16, 320 + g_render_left, d6);
         }
     }
+    if (*flags & 0x10) {   /* bit 4: top-all (REV01) */
+        *flags &= ~0x10;
+        draw_full_width_row(layout, cam_y, plane_base, -16);
+    }
+    if (*flags & 0x20) {   /* bit 5: bottom-all (REV01) */
+        *flags &= ~0x20;
+        draw_full_width_row(layout, cam_y, plane_base, 224);
+    }
+}
+static const uint8_t BG_ScrollBlockMap_SBZ[0x40] = {
+    0,0,0,0,0,6,6,6,6,6,6,6,6,6,6,4,   /* $00-$0F */
+    4,4,4,4,4,4,2,2,2,2,2,2,2,2,2,2,   /* $10-$1F */
+    2,0,                               /* $20-$21 */
+    /* padding para no salir de rango */
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+};
+
+/* Dibuja la columna fila-a-fila, eligiendo la fuente X según el mapa. */
+static void draw_sbz_column(uint16_t *flags, const uint8_t *layout, int d5) {
+    int base = ((int16_t)v_bgscreenposy & 0x1F0) >> 4;
+    const uint8_t *map = &BG_ScrollBlockMap_SBZ[base];
+
+    int d4 = -16;
+    for (int i = 0; i < 16; i++) {
+        int type = map[i];
+        if (*flags & (1u << type)) {
+            int xs = bg_x_pos_for_type(type);
+            int block_row = ((int16_t)v_bgscreenposy + d4) & 0xF0;
+            block_row >>= 4;
+            int col = ((xs + d5) & 0x1F0) >> 4;
+            uint32_t vram = vram_bg + (uint32_t)block_row * 0x100
+                                     + (uint32_t)col * 4;
+            draw_chunks_block(layout, xs, (int16_t)v_bgscreenposy, d5, d4, vram);
+        }
+        d4 += 16;
+    }
+    *flags = 0;
 }
 
+/* Draw_SBZ: dispatch de los bits 0..7 del bloque BG2 en SBZ1. */
+static void draw_sbz(uint16_t *flags, int cam_x, int cam_y,
+                     const uint8_t *layout) {
+    if (!(*flags & 0xFF)) return;
+
+    /* Bits 0/1: fila superior o inferior completa.
+       La X se toma del mapa para el BG Y actual + d4. */
+    int d4 = 0;
+    int have_row = 0;
+    if (*flags & 0x01) {
+        *flags &= ~0x01;
+        d4 = -16;
+        have_row = 1;
+    } else if (*flags & 0x02) {
+        *flags &= ~0x02;
+        d4 = 224;
+        have_row = 1;
+    }
+
+    if (have_row) {
+        int rel = ((int16_t)v_bgscreenposy + d4) & 0x1F0;
+        rel >>= 4;
+        int type = BG_ScrollBlockMap_SBZ[rel + 1];   /* +1 como el ASM */
+
+        if (type != 0) {
+            int xs = bg_x_pos_for_type(type);
+            draw_strip_lr(layout, xs, cam_y, vram_bg, d4, -16, (512 / 16) - 1);
+        } else {
+            /* type 0: fila completa ignorando X */
+            draw_full_width_row(layout, cam_y, vram_bg, d4);
+        }
+    }
+
+    /* Bits 2..7: columnas. El ASM hace un shift para "subir" los bits
+       7/5/3 a 6/4/2 y luego procesa la columna fila-a-fila. */
+    if (!(*flags & 0xFF)) return;
+
+    uint8_t rem = (uint8_t)(*flags & 0xA8);
+    int d5 = -16;
+    if (rem != 0) {
+        rem >>= 1;
+        *flags = (uint16_t)((*flags & 0xFF00) | rem);
+        d5 = 320;
+    }
+    draw_sbz_column(flags, layout, d5);
+}
 static void draw_bg_bottom(uint16_t *flags, int cam_x, int cam_y,
                             uint32_t plane_base, const uint8_t *layout) {
     if (!(*flags & 0xFF)) return;
+    if (v_zone == id_SBZ) {
+        draw_sbz(flags, cam_x, cam_y, layout);
+        return;
+    }
+
     int scroll_a = (int)(int16_t)v_scroll_block_1_size;
 
     if (*flags & 0x04) {
@@ -562,15 +712,117 @@ static void draw_bg_bottom(uint16_t *flags, int cam_x, int cam_y,
         }
     }
 }
+static void draw_mz_bg3(uint16_t *flags, const uint8_t *layout) {
+    /* --- Bloque superior o inferior completo (bits 0 y 1) --- */
+    int d4 = 0;
+    int have_row = 0;
+
+    if (*flags & 0x01) {
+        *flags &= ~0x01;
+        d4 = -16;
+        have_row = 1;
+    } else if (*flags & 0x02) {
+        *flags &= ~0x02;
+        d4 = 224;
+        have_row = 1;
+    }
+
+    if (have_row) {
+        /* d0 = ((bgscreenposy - 512) + d4) & $7F0 >> 4, con +1 de índice */
+        int16_t rel = (int16_t)((int16_t)v_bgscreenposy - 512);
+        rel = (int16_t)(rel + d4);
+        rel &= 0x07F0;
+        rel >>= 4;
+
+        int type = BG_ScrollBlockMap_MZ[rel + 1];
+
+        if (type != 0) {
+            /* Fuente X específica → fila completa (DrawBlocks_LR) */
+            int xs = bg_x_pos_for_type(type);
+            draw_strip_lr(layout, xs, (int16_t)v_bgscreenposy, vram_bg,
+                          d4, -16, (512 / 16) - 1);
+        } else {
+            /* type == 0 → Calc_VRAM_Pos_2 / DrawBlocks_LR_3 (sin offset X) */
+            draw_strip_lr(layout, 0, (int16_t)v_bgscreenposy, vram_bg,
+                          d4, 0, (512 / 16) - 1);
+        }
+    }
+
+    /* --- Columna izquierda o derecha (bits 2 y 3 → aquí ya en 0xA8>>1) --- */
+    if (!(*flags & 0xFF)) return;
+
+    int d4c = -16;
+    int d5c = -16;
+
+    /* Los flags que quedan en 0xA8 (bits 7,5,3) son las columnas.
+       El ASM los rota a 0x54 (bits 6,4,2) y los deja en el byte bajo. */
+    uint8_t rem = (uint8_t)(*flags & 0xA8);
+    if (rem != 0) {
+        rem >>= 1;
+        *flags = (uint16_t)((*flags & 0xFF00) | rem);
+        d5c = 320;
+    }
+
+    /* Índice en el mapa desde la Y actual */
+    int16_t base = (int16_t)v_bgscreenposy;
+    base = (int16_t)(base - 512);
+    base &= 0x07F0;
+    base >>= 4;
+    const uint8_t *map = &BG_ScrollBlockMap_MZ[base];
+
+    for (int i = 0; i < 16; i++) {
+        int type = map[i];
+        if (*flags & (1u << type)) {
+            int xs = bg_x_pos_for_type(type);
+            int block_row = ((int16_t)v_bgscreenposy + d4c) & 0xF0;
+            block_row >>= 4;
+            int col = (xs + d5c) & 0x1F0;
+            col >>= 4;
+            uint32_t vram = vram_bg + (uint32_t)block_row * 0x100 + (uint32_t)col * 4;
+            draw_chunks_block(layout, xs, (int16_t)v_bgscreenposy,
+                              d5c, d4c, vram);
+        }
+        d4c += 16;
+    }
+    *flags = 0;
+}
+
+/* Dispatcher BG3: MZ → caso especial, resto → 3 bloques verticales. */
+static void draw_bg3(uint16_t *flags, int cam_x, int cam_y,
+                     const uint8_t *layout) {
+    if (!(*flags & 0xFF)) return;
+
+    if (v_zone == id_MZ) {
+        draw_mz_bg3(flags, layout);
+        return;
+    }
+
+    /* Genérico REV01: tres bloques verticales en y=64, izquierda y derecha */
+    if (*flags & 0x01) {
+        *flags &= ~0x01;
+        draw_strip_tb(layout, cam_x, cam_y, vram_bg, 64, -16, 3 - 1);
+    }
+    if (*flags & 0x02) {
+        *flags &= ~0x02;
+        draw_strip_tb(layout, cam_x, cam_y, vram_bg, 64, 320, 3 - 1);
+    }
+}
 
 void LoadTilesAsYouMove(void) {
     int bg1x = (int16_t)(uint16_t)v_bgscreenposx_dup;
     int bg1y = (int16_t)(uint16_t)v_bgscreenposy_dup;
     draw_bg_top(&v_bg1_scroll_flags_dup, bg1x, bg1y, vram_bg, RAM_ADDR(v_lvllayout_bg));
+    
 
     int bg2x = (int16_t)(uint16_t)v_bg2screenposx_dup;
     int bg2y = (int16_t)(uint16_t)v_bg2screenposy_dup;
     draw_bg_bottom(&v_bg2_scroll_flags_dup, bg2x, bg2y, vram_bg, RAM_ADDR(v_lvllayout_bg));
+
+    {
+        int bg3x = (int16_t)(uint16_t)v_bg3screenposx_dup;
+        int bg3y = (int16_t)(uint16_t)v_bg3screenposy_dup;
+        draw_bg3(&v_bg3_scroll_flags_dup, bg3x, bg3y, RAM_ADDR(v_lvllayout_bg));
+    }
 
     uint16_t fgf = v_fg_scroll_flags_dup;
     if (!(fgf & 0xFF)) return;

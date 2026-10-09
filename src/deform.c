@@ -88,9 +88,9 @@ static void MoveScreenHoriz(void) {
         uint16_t cam_delay = (uint16_t)(v_cam_x_delay - 0x100);
         v_cam_x_delay = cam_delay;
 
-        /* The ASM does `move.b (v_cam_x_delay).w,d1`, which reads the HIGH
-           byte of the word. Our word is native little-endian, so that byte
-           is (cam_delay >> 8). */
+        /* move.b (v_cam_x_delay).w,d1 reads the HIGH byte of the word on
+           the 68k; our word is native little-endian, so that byte is
+           (cam_delay >> 8). */
         uint8_t d1 = (uint8_t)(cam_delay >> 8);
         d1 = (uint8_t)(d1 << 2);              /* lsl.b #2 */
         d1 = (uint8_t)(d1 + 4);               /* addq.b #4 */
@@ -106,24 +106,35 @@ static void MoveScreenHoriz(void) {
         sonic_x = obX(&ram[v_player]);
     }
 
-    /* ---- Shared camera-follow logic ---- */
-    int16_t  spx = cam_int(CamAddr_SCREENPOSX);
-    uint16_t a   = (uint16_t)((int)sonic_x - (int)spx);
+    /* ---- Shared camera-follow logic (FixBugs=1) ----
+       All comparisons here are SIGNED, matching the ASM's blt/bge.
+       The FixBugs=0 variant uses bcs/bcc (unsigned) and would need a
+       different translation; this port deliberately uses the fixed
+       variant, which is strictly safer and matches the spindash camera
+       path. */
+    int16_t spx = cam_int(CamAddr_SCREENPOSX);
+    int16_t d0  = (int16_t)((uint16_t)sonic_x - (uint16_t)spx);   /* sub.w */
 
-    if (a < 144u) {
-        uint16_t d0 = (uint16_t)((a - 144u) + (uint16_t)spx);
-        int16_t  l  = (int16_t)v_limitleft2;
-        if ((int16_t)d0 <= l) d0 = (uint16_t)l;
+    /* subi.w #(320/2)-16 ; blt.s SH_MoveCameraLeft */
+    d0 = (int16_t)(d0 - ((320 / 2) - 16));
+    if (d0 < 0) {
+        /* SH_MoveCameraLeft (FixBugs=1 adds the -16 cap) */
+        if (d0 <= -16) d0 = -16;               /* cmpi.w #-16,bgt else move.w #-16 */
+        d0 = (int16_t)(d0 + spx);              /* add.w (v_screenposx).w,d0 */
+        int16_t l = (int16_t)v_limitleft2;
+        if (d0 <= l) d0 = l;                   /* cmp.w limit ; bgt else cap */
         SetScreenX(spx, d0);
         return;
     }
 
-    if (a >= 160u) {
-        uint16_t d0 = (uint16_t)(a - 160u);
-        if (d0 >= 16u) d0 = 16u;
-        d0 = (uint16_t)(d0 + (uint16_t)spx);
-        int16_t  r  = (int16_t)v_limitright2;
-        if ((int16_t)d0 >= r) d0 = (uint16_t)r;
+    /* subi.w #16 ; bge.s SH_MoveCameraRight */
+    d0 = (int16_t)(d0 - 16);
+    if (d0 >= 0) {
+        /* SH_MoveCameraRight */
+        if (d0 >= 16) d0 = 16;                 /* cmpi.w #16 ; blo else cap */
+        d0 = (int16_t)(d0 + spx);              /* add.w (v_screenposx).w,d0 */
+        int16_t r = (int16_t)v_limitright2;
+        if (d0 >= r) d0 = r;                   /* cmp.w limit ; blt else cap */
         SetScreenX(spx, d0);
         return;
     }

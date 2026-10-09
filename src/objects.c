@@ -792,6 +792,7 @@ static void Sonic_Loops(void *obj);
 
 static void Sonic_AngleSpeed(void *obj);
 static void Sonic_ResetScr(void *obj);
+static void Sonic_ResetScr_Part2(void *obj);
 static void Sonic_LookUp(void *obj);
 static void Sonic_Duck(void *obj);
 static void Sonic_CheckDpadLetGo(void *obj);
@@ -807,6 +808,7 @@ static int Sonic_SpinDash(void *obj);
 static int Sonic_UpdateSpindash(uint8_t *o);
 static int Sonic_ChargingSpindash(uint8_t *o);
 static int Sonic_Spindash_ResetScr(uint8_t *o);
+static int UpDownCam_SmoothEnabled(void);
 
 /* ===========================================================================
    Sonic mode implementations (forward declared for Sonic_Modes array)
@@ -1695,13 +1697,36 @@ Sonic_RollSlowdownDone:
 static void Sonic_AngledRollSpeed(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     int16_t d0, d1;
+
+    /* ---- Camera reset when rolling (Sonic 2 style, FixBugs=1) ----
+       Sonic 1 does not pull the camera back to its default position while
+       Sonic rolls. Sonic 2 corrects this. Gate it on the camera mode so
+       VANILLA keeps the original feel and SONIC 2 / AUTO+spindash get the
+       fix. Same helper used by Sonic_LookUp / Sonic_Duck. */
+    if (UpDownCam_SmoothEnabled()) {
+        if (v_lookshift != 0x60) {
+            if (v_lookshift < 0x60) {
+                v_lookshift = v_lookshift + 4;   /* addq.w #4 */
+            }
+            v_lookshift = v_lookshift - 2;       /* subq.w #2 */
+        }
+    }
+
     CalcSine(obAngle(o), &d0, &d1);
     d0 = (int16_t)(((int32_t)d0 * obInertia(o)) >> 8);
     d1 = (int16_t)(((int32_t)d1 * obInertia(o)) >> 8);
-    if (d0 > 0x1000) d0 = 0x1000;
+
+    /* ---- Vertical cap (FixBugs=1 fix) ----
+       Always on. Not tied to the camera option because it's a gameplay
+       bug fix, not a style choice. Without it a charged spindash into a
+       steep slope launches Sonic at unbounded speeds. */
+    if (d0 >  0x1000) d0 =  0x1000;
     if (d0 < -0x1000) d0 = -0x1000;
-    if (d1 > 0x1000) d1 = 0x1000;
+
+    /* ---- Horizontal cap (present in all revisions) ---- */
+    if (d1 >  0x1000) d1 =  0x1000;
     if (d1 < -0x1000) d1 = -0x1000;
+
     obVelY(o) = d0;
     obVelX(o) = d1;
     Sonic_WallSpeedAdjust(o);
@@ -2476,6 +2501,11 @@ static void Sonic_AngleSpeed(void *obj) {
 }
 
 static void Sonic_ResetScr(void *obj) {
+    v_cam_y_delay = 0;
+    Sonic_ResetScr_Part2(obj);
+}
+
+static void Sonic_ResetScr_Part2(void *obj) {
     uint8_t *o = (uint8_t *)obj;
 
     if (v_lookshift == 0x60) {
@@ -2491,11 +2521,31 @@ static void Sonic_ResetScr(void *obj) {
     Sonic_CheckDpadLetGo(o);
 }
 
+static int UpDownCam_SmoothEnabled(void) {
+    switch (g_settings.updown_cam) {
+        case 1:  return 1;                          /* ON  */
+        case 2:  return 0;                          /* OFF */
+        case 0:
+        default: return g_settings.spindash;        /* AUTO: sigue al spindash */
+    }
+}
+
 static void Sonic_LookUp(void *obj) {
     uint8_t *o = (uint8_t *)obj;
 
     if (v_jpadhold2 & btnUp) {
         obAnim(o) = id_LookUp;
+
+        if (UpDownCam_SmoothEnabled()) {
+            v_cam_y_delay += 1;                 /* addq.b #1,(v_cam_y_delay).w */
+            if (v_cam_y_delay >= 120) {         /* cmpi.b #120 ; blo.s */
+                v_cam_y_delay = 120;            /* move.b #120: cap */
+            } else {
+                Sonic_ResetScr_Part2(o);        /* blo.s -> Part2 */
+                return;
+            }
+        }
+
         if (v_lookshift < 0xC8) {
             v_lookshift = v_lookshift + 2;
         }
@@ -2510,6 +2560,17 @@ static void Sonic_Duck(void *obj) {
 
     if (v_jpadhold2 & btnDn) {
         obAnim(o) = id_Duck;
+
+        if (UpDownCam_SmoothEnabled()) {
+            v_cam_y_delay += 1;
+            if (v_cam_y_delay >= 120) {
+                v_cam_y_delay = 120;
+            } else {
+                Sonic_ResetScr_Part2(o);
+                return;
+            }
+        }
+
         if (v_lookshift > 8) {
             v_lookshift = v_lookshift - 2;
         }

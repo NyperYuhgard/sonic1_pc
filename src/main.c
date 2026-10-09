@@ -887,7 +887,13 @@ static void Options_BuildText(void) {
     
     snprintf(buf[opt_row_spindash], opt_line_length + 1,
              "SPINDASH       : %-6s",
-             g_settings.spindash ? "ON" : "OFF");                  
+             g_settings.spindash ? "ON" : "OFF");     
+             
+    snprintf(buf[opt_row_updown_cam], opt_line_length + 1,
+             "UP/DOWN CAM    : %-6s",
+             g_settings.updown_cam == 0   ? "AUTO" :
+             g_settings.updown_cam == 1 ? "SONIC 2" :
+             g_settings.updown_cam == 2 ? "VANILLA" :  "AUTO" );         
 
     snprintf(buf[opt_row_apply], opt_line_length + 1,
              "APPLY & SAVE           ");
@@ -1009,7 +1015,13 @@ static void Options_Run(void) {
                 break;   
             case opt_row_crt:   g_settings.crt  ^= 1; Options_BuildText(); break;
             case opt_row_blur:  g_settings.blur ^= 1; Options_BuildText(); break;   
-            case opt_row_spindash:  g_settings.spindash ^= 1; Options_BuildText(); break;    
+            case opt_row_spindash:  g_settings.spindash ^= 1; Options_BuildText(); break;  
+            case opt_row_updown_cam:
+                if (g_settings.updown_cam == 0)      g_settings.updown_cam = 1;   /* AUTO  -> ON  */
+                else if (g_settings.updown_cam == 1) g_settings.updown_cam = 2;   /* ON    -> OFF */
+                else                                 g_settings.updown_cam = 0;   /* OFF   -> AUTO */
+                Options_BuildText();
+                break;
             }
         }
         if (v_jpadpress1 & btnR) {
@@ -1040,7 +1052,13 @@ static void Options_Run(void) {
                 break;  
             case opt_row_crt:   g_settings.crt  ^= 1; Options_BuildText(); break;
             case opt_row_blur:  g_settings.blur ^= 1; Options_BuildText(); break;
-            case opt_row_spindash:  g_settings.spindash ^= 1; Options_BuildText(); break;    
+            case opt_row_spindash:  g_settings.spindash ^= 1; Options_BuildText(); break; 
+            case opt_row_updown_cam:
+                if (g_settings.updown_cam == 0)      g_settings.updown_cam = 1;   /* AUTO  -> ON  */
+                else if (g_settings.updown_cam == 1) g_settings.updown_cam = 2;   /* ON    -> OFF */
+                else                                 g_settings.updown_cam = 0;   /* OFF   -> AUTO */
+                Options_BuildText();
+                break;   
             }          
         }
 
