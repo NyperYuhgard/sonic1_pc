@@ -12707,6 +12707,7 @@ static void Spring_LR(uint8_t *o) {
 
 /* Spring_AniLR — routine $A */
 static void Spring_AniLR(uint8_t *o) {
+    v_cam_x_delay = 0;
     if (Ani_Spring) AnimateSprite(o, Ani_Spring);
 }
 
