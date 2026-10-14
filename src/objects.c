@@ -745,6 +745,66 @@ void AnimateSprite(void *obj, const uint8_t *anim_script) {
    SonicPlayer object (id_SonicPlayer = $01)
    Ported from _incObj/01 Sonic.asm (REV01, FixBugs=0)
    =========================================================================== */
+extern const uint8_t *Ani_Sonic;
+extern const uint8_t *SonicDynPLC;
+extern const uint8_t *Art_Sonic;
+
+#define sonic_bank(o) (*(uint8_t *)((uint8_t *)(o) + 0x3E))
+
+typedef struct {
+    const uint8_t *map;
+    const uint8_t *dplc;
+    const uint8_t *art;
+} SonicBank;
+
+enum {
+    SONIC_BANK_BASE = 0,
+    SONIC_BANK_SPINDASH,
+    SONIC_BANK_COUNT
+};
+
+static SonicBank sonic_banks[SONIC_BANK_COUNT] = {
+    [SONIC_BANK_BASE]     = { NULL, NULL, NULL },
+    [SONIC_BANK_SPINDASH] = { NULL, NULL, NULL },
+};
+
+static void Sonic_InitBanks(void) {
+    static int done = 0;
+    if (done) return;
+    done = 1;
+
+    sonic_banks[SONIC_BANK_BASE].map  = Map_Sonic;
+    sonic_banks[SONIC_BANK_BASE].dplc = SonicDynPLC;
+    sonic_banks[SONIC_BANK_BASE].art  = Art_Sonic;
+
+    sonic_banks[SONIC_BANK_SPINDASH].map  = Map_Sonic_SpinDash;
+    sonic_banks[SONIC_BANK_SPINDASH].dplc = SonicDynPLC_SpinDash;
+    sonic_banks[SONIC_BANK_SPINDASH].art  = Art_Sonic_SpinDash;
+}
+
+#define id_SpinDash 0x1F
+
+static const uint8_t Sonic_Ani_SpinDash[] = {
+    0,
+    0, 1, 0, 2, 0, 3, 0, 4, 0, 5,
+    0xFF
+};
+
+static const uint8_t *Sonic_AnimDataFor(uint8_t anim_id) {
+    if (anim_id == id_SpinDash) {
+        return Sonic_Ani_SpinDash;
+    }
+    return Ani_Sonic + ((const uint16_t *)Ani_Sonic)[anim_id];
+}
+
+static uint8_t Sonic_AnimBank(uint8_t anim_id) {
+    switch (anim_id) {
+        case id_SpinDash:
+            return SONIC_BANK_SPINDASH;
+        default:
+            return SONIC_BANK_BASE;
+    }
+}
 
 static void Sonic_Main(void *obj);
 static void Sonic_Control(void *obj);
@@ -855,6 +915,7 @@ static void Sonic_Main(void *obj) {
     obPriority(o) = 2;
     obActWid(o) = 48 / 2;
     obRender(o) = sprite_cam_field;
+    sonic_bank(o) = SONIC_BANK_BASE;
     v_sonspeedmax = son_maxspeed;
     v_sonspeedacc = son_acceleration;
     v_sonspeeddec = son_deceleration;
@@ -1207,10 +1268,6 @@ static void Sonic_Water(void *obj) {
      Sonic animation script stubs (loaded from data.c)
      =========================================================================== */
 
-extern const uint8_t *Ani_Sonic;
-extern const uint8_t *SonicDynPLC;
-extern const uint8_t *Art_Sonic;
-
 static void Sonic_Move(void *obj) {
     uint8_t *o = (uint8_t *)obj;
 
@@ -1331,7 +1388,7 @@ balance:
  *    ported. Remove the two #defines below and use real constants later.
  *  =========================================================================== */
 
-#define id_SpinDash   id_Roll
+
 
 static int Sonic_SpinDash(void *obj) {
     uint8_t *o = (uint8_t *)obj;
@@ -1417,33 +1474,28 @@ static int Sonic_UpdateSpindash(uint8_t *o) {
 }
 
 static int Sonic_ChargingSpindash(uint8_t *o) {
-    /* Keep the Spin Dash animation and force Sonic_Animate to reset it.
-     *      The ASM writes `move.w #(id_SpinDash<<8),obAnim(a0)`, a big-endian
-     *      word store that lands id_SpinDash on obAnim and $00 on obPrevAni.
-     *      In our native LE layout that becomes two byte stores. */
-    obAnim(o)    = id_SpinDash;
-    obPrevAni(o) = 0;
+    /* move.b #id_SpinDash,obAnim(a0) — BYTE store, always */
+    obAnim(o) = id_SpinDash;
 
-    /* Charge decay:
-     *        if spindash_count == 0: skip
-     *        spindash_count -= spindash_count >> 5
-     *      The ASM's bhs/clr.w guard can never fire for any word value. */
+    /* tst.w spindash_count / beq / lsr.w #5 / sub.w / bhs / clr.w */
     if (spindash_count(o) != 0) {
         spindash_count(o) =
         (uint16_t)(spindash_count(o) - (spindash_count(o) >> 5));
     }
 
-    /* moveq #btnABC,d0 ; and.b (v_jpadpress2).w,d0 ; beq.w ResetScr */
+    /* moveq #btnABC,d0 / and.b (v_jpadpress2).w,d0 / beq.w ResetScr */
     if (!(v_jpadpress2 & btnABC)) {
         return Sonic_Spindash_ResetScr(o);
     }
 
-    /* Restart animation and bump the counter. */
+    /* move.w #(id_SpinDash<<8),obAnim(a0) — WORD store, SOLO al pulsar.
+     *      In LE this is 2 bytes: obAnim = id_SpinDash, obPrevAni = 0. */
     obAnim(o)    = id_SpinDash;
     obPrevAni(o) = 0;
+
     Sound_Queue(sfx_SpinDash, false);
 
-    /* addi.w #$200, count ; if count > $800: count = $800 */
+    /* addi.w #$200 / cmpi.w #$800 / blo / move.w #$800 */
     {
         uint32_t c = (uint32_t)spindash_count(o) + 0x200;
         if (c >= 0x800) c = 0x800;
@@ -2781,9 +2833,19 @@ static uint8_t anim_next_frame(uint8_t *o, const uint8_t *a1) {
     return frame_id;
 }
 
+
 static void Sonic_Animate(void *obj) {
     uint8_t *o = (uint8_t *)obj;
     uint8_t anim_id = obAnim(o);
+
+    Sonic_InitBanks();                                     /* idempotente */
+    uint8_t bank = Sonic_AnimBank(anim_id);
+    if (sonic_bank(o) != bank) {
+        sonic_bank(o) = bank;
+        obMap(o) = (uint32_t)(uintptr_t)sonic_banks[bank].map;
+        v_sonframenum = 0xFF;         /* forzar recarga DPLC/art */
+        obPrevAni(o)  = 0xFF;         /* forzar reload de anim script también */
+    }
 
     if (anim_id != obPrevAni(o)) {
         obPrevAni(o) = anim_id;
@@ -2791,7 +2853,7 @@ static void Sonic_Animate(void *obj) {
         obTimeFrame(o) = 0;
     }
 
-    const uint8_t *anim_data = Ani_Sonic + ((const uint16_t *)Ani_Sonic)[anim_id];
+    const uint8_t *anim_data = Sonic_AnimDataFor(anim_id);
     uint8_t frame_interval = anim_data[0];
 
     if ((int8_t)frame_interval >= 0) {
@@ -2978,23 +3040,24 @@ static void Sonic_Animate(void *obj) {
 
 static void Sonic_LoadGfx(void *obj) {
     uint8_t *o = (uint8_t *)obj;
-    //fprintf(stdout, "SLG: frame=%d prev=%d\n", obFrame(o), (int)v_sonframenum); //ONLY FOR DEBUG CONSOLE
     uint8_t d0 = obFrame(o);
 
-    if (d0 == v_sonframenum) {
-        return;
-    }
+    if (d0 == v_sonframenum) return;
     v_sonframenum = d0;
 
 
-    /* La tabla de offsets DPLC se almacena little-endian (ver parse_plc_asm). */
-    uint16_t offset = SonicDynPLC[d0 * 2] | (SonicDynPLC[d0 * 2 + 1] << 8);
-    const uint8_t *a2 = SonicDynPLC + offset;
+    uint8_t bank = sonic_bank(o);
+    if (bank >= SONIC_BANK_COUNT) bank = SONIC_BANK_BASE;
+    const uint8_t *dplc = sonic_banks[bank].dplc;
+    const uint8_t *art  = sonic_banks[bank].art;
 
-    uint8_t d1 = *a2++; // Número de entradas DPLC
-    if (d1 == 0) {
-        return;
-    }
+    if (!dplc || !art) return;
+
+        uint16_t offset = dplc[d0 * 2] | (dplc[d0 * 2 + 1] << 8);
+    const uint8_t *a2 = dplc + offset;
+
+    uint8_t d1 = *a2++;
+    if (d1 == 0) return;
 
     uint8_t *a3 = RAM_ADDR(v_sgfx_buffer);
     f_sonframechg = 1;
@@ -3003,11 +3066,10 @@ static void Sonic_LoadGfx(void *obj) {
         uint8_t byte1 = *a2++;
         uint8_t byte2 = *a2++;
 
-        uint8_t tile_count = (byte1 >> 4) + 1;
+        uint8_t tile_count   = (byte1 >> 4) + 1;
         uint16_t tile_offset = ((byte1 & 0x0F) << 8) | byte2;
 
-        const uint8_t *a1 = Art_Sonic + (tile_offset * 32);
-
+        const uint8_t *a1 = art + (tile_offset * 32);   /* ← usa `art` del bank */
         for (int i = 0; i < tile_count; i++) {
             for (int b = 0; b < 32; b++) {
                 *a3++ = *a1++;

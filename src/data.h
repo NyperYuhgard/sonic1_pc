@@ -578,6 +578,9 @@ extern size_t   Art_LivesNums_len;
 extern const uint8_t *Art_Sonic;
 extern size_t   Art_Sonic_len;
 
+extern const uint8_t *Art_Sonic_SpinDash;
+extern size_t         Art_Sonic_SpinDash_len;
+
 /* Uncompressed art for AnimateLevelAct (AnimateLevelGfx.asm). The MZ and
    SBZ entries only load once those zones are playable. */
 extern const uint8_t *Art_GhzWater;
@@ -651,6 +654,9 @@ extern size_t   Blk256_SBZ_len;
 /* Sonic sprite mappings */
 extern const uint8_t *Map_Sonic;
 extern size_t   Map_Sonic_len;
+
+extern const uint8_t *Map_Sonic_SpinDash;
+extern size_t         Map_Sonic_SpinDash_len;
 
 extern const uint8_t *Map_TSon;
 extern size_t   Map_TSon_len;
@@ -1090,6 +1096,8 @@ extern size_t   Ani_WFall_len;
 extern const uint8_t *SonicDynPLC;
 extern size_t   SonicDynPLC_len;
 
+extern const uint8_t *SonicDynPLC_SpinDash;
+extern size_t         SonicDynPLC_SpinDash_len;
 
 /* ---------------- Level layouts (Level_*) ---------------- */
 extern const uint8_t *Level_GHZ1;

@@ -306,6 +306,7 @@ const uint8_t *Art_LivesNums;       size_t Art_LivesNums_len;
 
 /* ---------------- Arte sin comprimir (nivel + Sonic) ---------------- */
 const uint8_t *Art_Sonic;           size_t Art_Sonic_len;
+const uint8_t *Art_Sonic_SpinDash;       size_t Art_Sonic_SpinDash_len;
 const uint8_t *Art_GhzWater;        size_t Art_GhzWater_len;
 const uint8_t *Art_GhzFlower1;      size_t Art_GhzFlower1_len;
 const uint8_t *Art_GhzFlower2;      size_t Art_GhzFlower2_len;
@@ -331,6 +332,7 @@ const uint8_t *Blk256_SBZ;          size_t Blk256_SBZ_len;
 
 /* ---------------- Mappings (Map_*) ---------------- */
 const uint8_t *Map_Sonic;           size_t Map_Sonic_len;
+const uint8_t *Map_Sonic_SpinDash;       size_t Map_Sonic_SpinDash_len;
 const uint8_t *Map_TSon;            size_t Map_TSon_len;
 const uint8_t *Map_PSB;             size_t Map_PSB_len;
 const uint8_t *Map_Cred;            size_t Map_Cred_len;
@@ -480,6 +482,7 @@ const uint8_t *Ani_Orb;             size_t Ani_Orb_len;
 const uint8_t *Ani_Bub;             size_t Ani_Bub_len;
 const uint8_t *Ani_WFall;           size_t Ani_WFall_len;
 const uint8_t *SonicDynPLC;         size_t SonicDynPLC_len;
+const uint8_t *SonicDynPLC_SpinDash;     size_t SonicDynPLC_SpinDash_len;
 
 /* ---------------- Layouts de nivel (Level_*) ---------------- */
 const uint8_t *Level_GHZ1;          size_t Level_GHZ1_len;
@@ -846,6 +849,7 @@ int Data_Init(void) {
 
     /* ---------------- Arte sin comprimir (nivel + Sonic) ---------------- */
     LOAD("artunc/Sonic.unc",                   Art_Sonic);
+    LOAD("artunc_extra/SpindashSonic.unc",              Art_Sonic_SpinDash);
     LOAD("artunc/GHZ Waterfall.unc",           Art_GhzWater);
     LOAD("artunc/GHZ Flower Large.unc",        Art_GhzFlower1);
     LOAD("artunc/GHZ Flower Small.unc",        Art_GhzFlower2);
@@ -871,6 +875,7 @@ int Data_Init(void) {
 
     /* ---------------- Mappings ---------------- */
     LOAD_MAP("_maps/Sonic.asm",                      Map_Sonic);
+    LOAD_MAP ("_maps_extra/SpinDashSonic.asm",              Map_Sonic_SpinDash);
     LOAD_MAP("_maps/Title Screen Sonic.asm",                 Map_TSon);
     LOAD_MAP("_maps/Press Start and TM.asm",                      Map_PSB);
     LOAD_MAP("_maps/Credits.asm",                    Map_Cred);
@@ -1007,6 +1012,7 @@ int Data_Init(void) {
     LOAD_ANIM("_anim/Waterfalls.asm",                Ani_WFall);
     /* El DPLC de Sonic no es un anim script, pero comparte el parser:  */
     LOAD_ANIM("_maps/Sonic - Dynamic Gfx Script.asm", SonicDynPLC);
+    LOAD_ANIM("_maps_extra/SpinDashSonicDPLC.asm", SonicDynPLC_SpinDash);
 
     /* ---------------- Layouts de nivel ---------------- */
     LOAD("levels/ghz1.bin",     Level_GHZ1);
@@ -1296,6 +1302,7 @@ void Data_Quit(void) {
 
     /* Arte sin comprimir */
     FREE(Art_Sonic);
+    FREE(Art_Sonic_SpinDash);
     FREE(Art_GhzWater); FREE(Art_GhzFlower1); FREE(Art_GhzFlower2);
     FREE(Art_MzLava1); FREE(Art_MzLava2); FREE(Art_MzTorch);
     FREE(Art_SbzSmoke); FREE(Art_BigRing);
@@ -1309,7 +1316,7 @@ void Data_Quit(void) {
     FREE(Blk16_SBZ); FREE(Blk256_SBZ);
 
     /* Mappings mmap-eados */
-    UNMAP(Map_Sonic); UNMAP(Map_TSon); UNMAP(Map_PSB); UNMAP(Map_Cred);
+    UNMAP(Map_Sonic);  UNMAP(Map_Sonic_SpinDash); UNMAP(Map_TSon); UNMAP(Map_PSB); UNMAP(Map_Cred);
     UNMAP(Map_Card); UNMAP(Map_Got); UNMAP(Map_SSR); UNMAP(Map_SSRC); UNMAP(Map_HUD); UNMAP(Map_Ring);
     UNMAP(Map_Sign); UNMAP(Map_Pri); UNMAP(Map_Shield); UNMAP(Map_Smash);
     UNMAP(Map_Hel); UNMAP(Map_Swing_GHZ); UNMAP(Map_Swing_SLZ);
@@ -1331,7 +1338,7 @@ void Data_Quit(void) {
     UNMAP(Ani_Ring); UNMAP(Ani_Sign); UNMAP(Ani_Shield);
     UNMAP(Ani_Crab); UNMAP(Ani_Moto); UNMAP(Ani_Buzz); UNMAP(Ani_Missile);
     UNMAP(Ani_Chop); UNMAP(Ani_Eggman); UNMAP(Ani_Monitor); UNMAP(Ani_Spring);
-    UNMAP(SonicDynPLC);
+    UNMAP(SonicDynPLC); UNMAP(SonicDynPLC_SpinDash);
 
     /* Layouts de nivel */
     FREE(Level_GHZ1); FREE(Level_GHZ2); FREE(Level_GHZ3); FREE(Level_GHZbg);
