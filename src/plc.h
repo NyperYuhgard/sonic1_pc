@@ -7,7 +7,11 @@
  *
  * The original game queues graphics decompression jobs via a small buffer
  * (v_plc_buffer, 16 slots). RunPLC() processes one slot per frame,
- * decompressing Nemesis-compressed art to VRAM. */
+ * decompressing Nemesis-compressed art to VRAM.
+ *
+ * Each entry carries its own VRAM bank (0..VRAM_BANK_COUNT-1). RunPLC()
+ * switches the write bank just before NemDecToVRAM and restores it after,
+ * so a single PLC list can mix entries destined to different banks. */
 
 /* Clear all pending PLC entries */
 void ClearPLC(void);

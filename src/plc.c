@@ -4,6 +4,7 @@
 #include "ram.h"
 #include "data.h"
 #include "decomp.h"
+#include "vdp.h"
 #include <string.h>
 
 /* ===================================================================
@@ -15,14 +16,30 @@
    tile destination (matching the ASM `plcm gfx,vram` = dc.l gfx,
    dc.w (vram)*tile_size).  The port's NemDecToVRAM() decompresses a
    full NEM in one call, so RunPLC() just processes one slot per frame.
+
+   VRAM BANK EXTENSION
+   -------------------
+   Each plc_entry carries a `bank` field (0..VRAM_BANK_COUNT-1). The
+   ASM has no analogue: entries are hardcoded to the MD-visible bank.
+   In this port each entry chooses its own destination bank, so a
+   single PLC list can mix entries going to different banks.
+
+       plc_decl(Nem_X, tile)          -> bank 0 (vanilla behaviour)
+       plc_decl_bank(Nem_X, tile, 2)  -> bank 2
+
+   RunPLC() saves the current write bank, switches to the entry's bank,
+   decompresses, and restores the previous one. The rest of the PLC
+   machinery (queue, order, per-frame processing) is unchanged.
    =================================================================== */
 
 typedef struct {
-    const uint8_t **src;                      /* -> runtime-loaded asset pointer */
-    uint16_t  dest;                     /* destination art tile number */
+    const uint8_t **src;   /* -> runtime-loaded asset pointer */
+    uint16_t  dest;        /* destination art tile number */
+    uint8_t   bank;        /* destination VRAM bank (0..3) */
 } plc_entry;
 
-#define plc_decl(gfx, vram) { &(gfx), (uint16_t)(vram) }
+#define plc_decl(gfx, vram)          { &(gfx), (uint16_t)(vram), 0 }
+#define plc_decl_bank(gfx, vram, b)  { &(gfx), (uint16_t)(vram), (uint8_t)(b) }
 
 /* PLC_Main (plcid_Main) — _inc/Pattern Load Cues.asm
    The ASM list also contains Nem_Lamp (lamppost) and Nem_Points (points
@@ -335,21 +352,25 @@ static const plc_entry plc_FZBoss[] = {
     plc_decl(Nem_Exhaust   , ArtTile_Eggman_Exhaust),
 };
 
-
-
 /* Static asset list sentinels (the value of a pointer is not a constant).
    Kept even though nothing references it directly: it's the canonical
    "no art to load" list, used by hand-written PLCs that want to be
    explicit about loading nothing (see PLC_NONE below). */
-static const plc_entry plc_Empty[] __attribute__((unused)) = { { 0, 0 } };
+static const plc_entry plc_Empty[] __attribute__((unused)) = { { 0, 0, 0 } };
 
 /* ------------------------------------------------------------------
    The ASM queue stores a 32-bit dc.l source address; host pointers are
    64-bit, so the RAM 6-byte slot can only hold the dest.  plc_src[]
    mirrors the RAM queue (same slot index) with the real pointers.
    A NULL entry means the slot is free, matching the ASM tst.l check.
+
+   plc_bank[] is a second parallel array holding the destination VRAM
+   bank for each queued entry. It is NOT stored in RAM: the ASM has no
+   analogue and the entry's bank is a port-only concept. RunPLC() reads
+   it before calling NemDecToVRAM.
    ------------------------------------------------------------------ */
 static const uint8_t *plc_src[plc_slot_count];
+static uint8_t        plc_bank[plc_slot_count];
 
 /* ArtLoadCues index — must stay in the same order as plcid_* in
    constants.h (see _inc/Pattern Load Cues.asm lines 27-68).  Counts
@@ -400,6 +421,7 @@ static const plc_list plc_index[] = {
 void ClearPLC(void) {
     memset(RAM_ADDR(v_plc_buffer), 0, plc_slot_size * plc_slot_count);
     memset(plc_src, 0, sizeof(plc_src));
+    memset(plc_bank, 0, sizeof(plc_bank));
 }
 
 /* Add a PLC list to the queue (sonic.asm AddPLC)
@@ -435,7 +457,8 @@ void AddPLC(int id) {
         if (slot >= plc_slot_count) {
             return;                      /* queue full */
         }
-        plc_src[slot] = p;
+        plc_src[slot]  = p;
+        plc_bank[slot] = list->entries[i].bank & (VRAM_BANK_COUNT - 1);
         *(uint16_t *)(RAM_ADDR(v_plc_buffer) + slot * plc_slot_size + 4) =
             list->entries[i].dest;
         slot++;
@@ -456,24 +479,35 @@ int PLC_IsEmpty(void) {
 /* Process one pending PLC entry per frame (sonic.asm RunPLC)
    The ASM runs a fine-grained Nemesis state machine across VBlank
    (ProcessPLC_9Tiles); the port's NemDecToVRAM() is synchronous, so
-   decompression happens here and the entry is dropped from the queue. */
+   decompression happens here and the entry is dropped from the queue.
+
+   VRAM bank: the head entry's bank is applied just for this one call.
+   The previous write-bank is saved and restored so callers that had
+   another bank active (e.g. inside a custom loader) are not surprised. */
 void RunPLC(void) {
     uint8_t *slot;
     int i;
+    int saved_bank;
 
     if (plc_src[0] == NULL) {
         return;                          /* nothing queued */
     }
 
     slot = RAM_ADDR(v_plc_buffer);
+
+    saved_bank = VDP_GetWriteBank();
+    VDP_SetWriteBank(plc_bank[0]);
     NemDecToVRAM(plc_src[0],
                  (uint32_t)*(uint16_t *)(slot + 4) * tile_size);
+    VDP_SetWriteBank(saved_bank);
 
-    /* drop the processed entry: shift the queue down one slot */
+    /* drop the processed entry: shift both parallel queues down one slot */
     for (i = 1; i < plc_slot_count; i++) {
-        plc_src[i - 1] = plc_src[i];
+        plc_src[i - 1]  = plc_src[i];
+        plc_bank[i - 1] = plc_bank[i];
     }
-    plc_src[plc_slot_count - 1] = NULL;
+    plc_src[plc_slot_count - 1]  = NULL;
+    plc_bank[plc_slot_count - 1] = 0;
 
     memmove(slot, slot + plc_slot_size,
             (size_t)(RAM_ADDR(v_plc_buffer_only_end) - slot) - plc_slot_size);
