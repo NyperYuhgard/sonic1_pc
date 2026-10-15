@@ -48,6 +48,21 @@ static uint8_t *sprite_queue_data[SIMPLE_SPRITE_QUEUE];
 uint8_t **sprite_queue = sprite_queue_data;
 int sprite_queue_count = 0;
 
+static uint8_t obj_gfx_bank[NUM_OBJECTS];
+
+static uint8_t sprite_bank_data[SIMPLE_SPRITE_QUEUE];
+uint8_t *sprite_bank = sprite_bank_data;
+
+void obSetGfxBank(void *obj, uint8_t bank) {
+    int idx = Object_GetIndex(obj);
+    if (idx >= 0 && idx < NUM_OBJECTS) obj_gfx_bank[idx] = bank & 3;
+}
+
+uint8_t obGetGfxBank(void *obj) {
+    int idx = Object_GetIndex(obj);
+    if (idx < 0 || idx >= NUM_OBJECTS) return 0;
+    return obj_gfx_bank[idx];
+}
 /* Forward declarations */
 static void TitleSonic_Main(void *obj);
 static void PSBTM_Main(void *obj);
@@ -285,6 +300,7 @@ void Objects_Init(void) {
 
     /* Clear all object RAM */
     memset(ObjRAM, 0, NUM_OBJECTS * OBJECT_SIZE);
+    memset(obj_gfx_bank, 0, sizeof(obj_gfx_bank));
 }
 
 void ExecuteObjects(void) {
@@ -319,6 +335,8 @@ void *FindFreeObj(void) {
 }
 
 void DeleteObject(void *obj) {
+    int idx = Object_GetIndex(obj);
+    if (idx >= 0 && idx < NUM_OBJECTS) obj_gfx_bank[idx] = 0;
     memset(obj, 0, OBJECT_SIZE);
 }
 

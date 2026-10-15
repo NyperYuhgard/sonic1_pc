@@ -14,6 +14,12 @@
 /* Object dispatch function type */
 typedef void (*ObjFunc)(void *obj);
 
+extern uint8_t *sprite_bank;
+
+void obSetGfxBank(void *obj, uint8_t bank);
+
+uint8_t obGetGfxBank(void *obj);
+
 /* Initialize the object system */
 void Objects_Init(void);
 

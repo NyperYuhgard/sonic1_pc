@@ -417,12 +417,12 @@ static void GM_Title_Screen(void) {
         if (Nem_TitleFg) {
             NemDecToVRAM(Nem_TitleFg, ArtTile_Title_Foreground * tile_size);
         }
-        VDP_SetWriteBank(1);
+
 
         if (Nem_TitleSonic) {
             NemDecToVRAM(Nem_TitleSonic, ArtTile_Title_Sonic * tile_size);
         }
-        VDP_SetWriteBank(0);
+
         if (Nem_TitleTM) {
             NemDecToVRAM(Nem_TitleTM, ArtTile_Title_Trademark * tile_size);
         }

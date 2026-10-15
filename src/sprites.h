@@ -24,7 +24,7 @@ typedef struct {
 void BuildSprites(void);
 void Sprites_EmitPiece(uint8_t *sprite_table, int *sprite_index,
                        int base_y, int base_x, const uint8_t **data,
-                       uint16_t gfx, int xflip, int yflip);
+                       uint16_t gfx, int xflip, int yflip, uint8_t bank);
 /* Render the sprite table buffer to the framebuffer texture */
 void Sprites_RenderToTexture(void *texture_pixels, int pitch);
 

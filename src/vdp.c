@@ -922,6 +922,9 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             uint8_t *entry = &table[i * 8];
             uint16_t pattern = (uint16_t)(entry[4] | (entry[5] << 8));
             if (((pattern >> 15) & 1) != 0) continue;
+            extern uint8_t *sprite_bank;
+            uint8_t bank = (i < sprites_max) ? sprite_bank[i] : 0;
+            const uint8_t *sprite_vram = VDP_VRAM_Bank(bank);
             int y = sy[i];
             int height_tiles = (entry[2] & 0x0F) + 1;
             int width_tiles  = (entry[2] >> 4) + 1;
@@ -941,7 +944,7 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                 int txx = xflip ? (width_tiles - 1 - tx) : tx;
                 int tile_idx = tile + txx * height_tiles + ty;
                 if (tile_idx >= 0x800) continue;
-                const uint8_t *r = &vdp.vram[tile_idx * 32 + prow * 4];
+                const uint8_t *r = &sprite_vram[tile_idx * 32 + prow * 4];
                 int sx0 = x + tx * 8 + g_render_left;
                 for (int col = 0; col < 8; col++) {
                     int color_idx = (col & 1) ? (r[col >> 1] & 0xF)
@@ -965,6 +968,9 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
             uint8_t *entry = &table[i * 8];
             uint16_t pattern = (uint16_t)(entry[4] | (entry[5] << 8));
             if (((pattern >> 15) & 1) != 1) continue;
+            extern uint8_t *sprite_bank;
+            uint8_t bank = (i < sprites_max) ? sprite_bank[i] : 0;
+            const uint8_t *sprite_vram = VDP_VRAM_Bank(bank);
             int y = sy[i];
             int height_tiles = (entry[2] & 0x0F) + 1;
             int width_tiles  = (entry[2] >> 4) + 1;
@@ -984,7 +990,7 @@ void VDP_RenderFrame(SDL_Renderer *renderer) {
                 int txx = xflip ? (width_tiles - 1 - tx) : tx;
                 int tile_idx = tile + txx * height_tiles + ty;
                 if (tile_idx >= 0x800) continue;
-                const uint8_t *r = &vdp.vram[tile_idx * 32 + prow * 4];
+                const uint8_t *r = &sprite_vram[tile_idx * 32 + prow * 4];
                 int sx0 = x + tx * 8 + g_render_left;
                 for (int col = 0; col < 8; col++) {
                     int color_idx = (col & 1) ? (r[col >> 1] & 0xF)

@@ -13,12 +13,16 @@
 
 void Sprites_EmitPiece(uint8_t *sprite_table, int *sprite_index,
                        int base_y, int base_x, const uint8_t **data,
-                       uint16_t gfx, int xflip, int yflip) {
+                       uint16_t gfx, int xflip, int yflip,
+                       uint8_t bank)
+{
     /* ASM buildsprite (.loopSpritePieces): `cmpi.b #sprites_max,d5 / beq.s .return`
        aborts only the piece-drawing loop of the CURRENT object; .objectLoop and
        .priorityLoop keep going so every queued object still gets its bounds
        check and its sprite_rendered flag. Never short-circuit the object loops. */
     if (*sprite_index >= sprites_max) return;
+
+    extern uint8_t *sprite_bank;
 
     const uint8_t *p = *data;
     int y_off = (int8_t)p[0];
@@ -58,6 +62,8 @@ void Sprites_EmitPiece(uint8_t *sprite_table, int *sprite_index,
     if (m_pri)   pattern |= 1 << 15;
     if (xflip) pattern ^= 1 << 11;
     if (yflip) pattern ^= 1 << 12;
+
+    sprite_bank[*sprite_index] = bank & 3;
 
     uint8_t *entry = &sprite_table[*sprite_index * 8];
     entry[0] = (uint8_t)(y & 0xFF);
@@ -139,11 +145,14 @@ void BuildSprites(void) {
             int xflip = (render & sprite_xflip) ? 1 : 0;
             int yflip = (render & sprite_yflip) ? 1 : 0;
 
+
+            uint8_t bank = obGetGfxBank(obj);
+
             /* ---- RAMA: raw mappings ---- */
             if (render & sprite_rawmappings) {
                 const uint8_t *piece_data = map;
                 Sprites_EmitPiece(sprite_table, &sprite_index, y, x,
-                                   &piece_data, gfx, xflip, yflip);
+                                  &piece_data, gfx, xflip, yflip, bank);
                 obRender(obj) |= sprite_rendered;
                 continue;
             }
@@ -173,7 +182,7 @@ void BuildSprites(void) {
 
             for (int p = 0; p < num_pieces; p++) {
                 Sprites_EmitPiece(sprite_table, &sprite_index, y, x,
-                                   &piece_data, gfx, xflip, yflip);
+                                  &piece_data, gfx, xflip, yflip, bank);
             }
 
             obRender(obj) |= sprite_rendered;   /* ...but the object is on screen */

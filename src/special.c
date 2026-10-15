@@ -1014,7 +1014,7 @@ static int SS_EmitSpriteFrame(int sprite_count,
 
     for (int p = 0; p < piece_count && sprite_count < sprites_max; p++) {
         Sprites_EmitPiece(sprite_tbl, &sprite_count, y, x, &pd,
-                          vram_base, 0, 0);
+                          vram_base, 0, 0, 0);
     }
     return sprite_count;
 }
