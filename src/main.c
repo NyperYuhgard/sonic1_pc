@@ -170,6 +170,7 @@ static void ProcessSDLEvents(void) {
 
         /* >>> NUEVO: reenviar el evento al editor TAS <<< */
         TASEditor_HandleEvent(&ev);
+        VDP_ViewerHandleEvent(&ev);
     }
 }
 
@@ -416,9 +417,12 @@ static void GM_Title_Screen(void) {
         if (Nem_TitleFg) {
             NemDecToVRAM(Nem_TitleFg, ArtTile_Title_Foreground * tile_size);
         }
+        VDP_SetWriteBank(1);
+
         if (Nem_TitleSonic) {
             NemDecToVRAM(Nem_TitleSonic, ArtTile_Title_Sonic * tile_size);
         }
+        VDP_SetWriteBank(0);
         if (Nem_TitleTM) {
             NemDecToVRAM(Nem_TitleTM, ArtTile_Title_Trademark * tile_size);
         }
@@ -1152,6 +1156,8 @@ static int InitSDL(void) {
         return 0;
     }
 
+    SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+
     window = SDL_CreateWindow(
         "Sonic the Hedgehog (PC Port)",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -1215,6 +1221,8 @@ int main(int argc, char *argv[]) {
     if (Data_Init() != 0) {
         fprintf(stderr, "Warning: some assets failed to load, using fallbacks\n");
     }
+
+    VDP_Init();
 
     ClearCrossResetRAM();
 

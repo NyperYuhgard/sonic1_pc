@@ -3,7 +3,9 @@
 
 #include "types.h"
 
-/* Nemesis decompression - decompress to VRAM */
+/* Nemesis decompression - decompress to VRAM.
+   Escribe en el banco indicado por g_vdp_write_bank (default 0 = MD-visible).
+   Para forzar un banco concreto: VDP_SetWriteBank(n) antes de llamar. */
 void NemDecToVRAM(const uint8_t *source, uint32_t vram_addr);
 
 /* Enigma decompression - decompress to RAM word buffer */
