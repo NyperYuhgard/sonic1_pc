@@ -831,8 +831,14 @@ enum {
 #define ArtTile_Title_Trademark           0x510
 #define ArtTile_Level_Select_Font         0x680
 
+/* -- Exclusive Art From Vram Bank 2 -------------------------------------- */
+
+#define ArtTile_SpinDust                  0x000
+
+
 /* Object IDs (from disasm "_inc/Object Pointers.asm") */
 #define id_SonicPlayer                    0x01
+#define id_SpinDust                       0x05
 #define id_Splash                         0x08
 #define id_SonicSpecial                   0x09
 #define id_DrownCount                     0x0A

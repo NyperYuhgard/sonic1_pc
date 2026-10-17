@@ -121,6 +121,12 @@ static void VBlank_StandardTransfers(void) {
         f_sonframechg = 0;
     }
     /* Sprite and hscroll transfers happen during VDP_RenderFrame */
+    if (SpinDust_IsDirty()) {
+        SpinDust_ClearDirty();
+        VDP_WriteVRAM_Bank(1, SpinDust_GetStageBuffer(),
+                      SPINDUST_VRAM_ADDR,               /* = 0x0000 (bank 2) */
+                      SPINDUST_STAGE_TILES * tile_size);
+    }
 }
 
 /* VBlank_SegaPCM ($14): Sega Screen PCM - just decrement timer */

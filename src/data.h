@@ -581,6 +581,9 @@ extern size_t   Art_Sonic_len;
 extern const uint8_t *Art_Sonic_SpinDash;
 extern size_t         Art_Sonic_SpinDash_len;
 
+extern const uint8_t *Art_SpinDust;
+extern size_t         Art_SpinDust_len;
+
 /* Uncompressed art for AnimateLevelAct (AnimateLevelGfx.asm). The MZ and
    SBZ entries only load once those zones are playable. */
 extern const uint8_t *Art_GhzWater;
@@ -991,9 +994,15 @@ extern const uint8_t *Map_Hog;
 extern const uint8_t *Map_Splash;
 extern size_t   Map_Splash_len;
 
+extern const uint8_t *Map_SpinDust;
+extern size_t Map_SpinDust_len;
+
 /* ---------------- Animations (Ani_*) and DPLC ---------------- */
 extern const uint8_t *Ani_Sonic;
 extern size_t   Ani_Sonic_len;
+
+extern const uint8_t *DustDynPLC;
+extern size_t DustDynPLC_len;
 
 /* Title screen animation scripts (loaded at runtime from assets/) */
 extern const uint8_t *Ani_TSon;

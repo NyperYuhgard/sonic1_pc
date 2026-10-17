@@ -140,6 +140,7 @@ static void Roller_Main(void *obj);
 static void BossSpringYard_Main(void *obj);
 static void BossBlock_Main(void *obj);
 static void WaterSplash_Main(void *obj);
+static void SpinDust_Main(void *obj);
 /* Labyrinth Zone objects */
 static void DrownCount_Main(void *obj);
 static void Pole_ObjectMain(void *obj);
@@ -193,6 +194,7 @@ typedef struct {
 static const ObjEntry obj_map[] = {
     /* $01-$0F Sonic, title screen and credits ------------------------------------- */
     { id_SonicPlayer,      SonicPlayer_Main,      },  /* $01  01 Sonic.asm */
+    { id_SpinDust,         SpinDust_Main          },  /* $05  05 Spindash Dust (Custom Object) */
     { id_Splash,           WaterSplash_Main,      },  /* $08  08 LZ Water Splash.asm */
     { id_SonicSpecial,     SonicSpecial_Main,     },  /* $09  09 Sonic in Special Stage.asm */
     { id_DrownCount,       DrownCount_Main,       },  /* $0A  0A LZ Drowning Countdown.asm */
@@ -937,6 +939,7 @@ static void Sonic_Main(void *obj) {
     v_sonspeedmax = son_maxspeed;
     v_sonspeedacc = son_acceleration;
     v_sonspeeddec = son_deceleration;
+    RAM_BYTE(v_dustobj) = id_SpinDust;
 }
 
 /* ===========================================================================
@@ -20371,4 +20374,110 @@ static void BossLabyrinth_ObjectMain(void *obj) {
         case 0x04: BossLabyrinth_FaceMain(o); break;
         case 0x06: BossLabyrinth_FlameMain(o); break;
     }
+}
+
+size_t LoadDynPLC_Staged(uint8_t frame,
+                         const uint8_t *dplc,
+                         const uint8_t *art,
+                         uint8_t *dst,
+                         size_t dst_size,
+                         uint8_t *out_dirty)
+{
+    if (!dplc || !art || !dst || !dst_size) return 0;
+
+    uint8_t *dst_start = dst;
+    uint8_t *dst_end   = dst + dst_size;
+
+    /* Dirección del frame dentro de la tabla DPLC (LE, igual que Sonic_LoadGfx) */
+    uint16_t off = (uint16_t)(dplc[frame * 2] | ((uint16_t)dplc[frame * 2 + 1] << 8));
+    const uint8_t *p = dplc + off;
+
+    uint8_t count = *p++;
+    if (count == 0) return 0;
+
+    do {
+        uint8_t  byte1 = *p++;
+        uint8_t  byte2 = *p++;
+
+        uint8_t  tile_count  = (byte1 >> 4) + 1;
+        uint16_t tile_offset = (uint16_t)(((byte1 & 0x0F) << 8) | byte2);
+
+        const uint8_t *src = art + (tile_offset * tile_size);
+
+        for (int i = 0; i < tile_count; i++) {
+            if (dst + tile_size > dst_end) return 0;  /* aborta sin marcar dirty */
+                memcpy(dst, src, tile_size);
+            dst += tile_size;
+            src += tile_size;
+        }
+    } while (--count > 0);
+
+    if (out_dirty) *out_dirty = 1;
+    return (size_t)(dst - dst_start);
+}
+
+/* ===========================================================================
+ *  Object 05 — Spin Dash Dust
+ *  Ported from Sonic 2/3K "Object 05 - Spin Dash Dust.asm"
+ *  Adaptado al modelo de Sonic 1 (staging buffer + flag, sin QueueDMATransfer).
+ * =========================================================================== */
+
+/* Las variables estáticas van ANTES de cualquier función que las use. */
+static uint8_t  spindust_stage[SPINDUST_STAGE_TILES * tile_size];
+static uint8_t  spindust_dirty      = 0;
+static uint8_t  spindust_last_frame = 0xFF;   /* fuerza primera carga */
+
+/* Accesores (visibles desde main.c vía objects.h) */
+uint8_t *SpinDust_GetStageBuffer(void) { return spindust_stage; }
+uint8_t  SpinDust_IsDirty(void)        { return spindust_dirty; }
+void     SpinDust_ClearDirty(void)     { spindust_dirty = 0; }
+
+static void SpinDust_Main(void *obj)
+{
+    uint8_t *o = (uint8_t *)obj;
+
+    /* --- Routine 0: init --- */
+    if (obRoutine(o) == 0) {
+        obRoutine(o) += 2;
+        obMap(o)      = (uint32_t)(uintptr_t)Map_SpinDust;
+        obRender(o)   |= sprite_cam_field;
+        obPriority(o)  = 1;
+        obActWid(o)    = 32 / 2;
+        obGfx(o)       = (uint16_t)ArtTile_SpinDust;
+        obSetGfxBank(o, 1);
+    }
+
+    /* --- SpinDust_Main --- */
+    uint8_t *player = RAM_ADDR(v_player);
+
+    if (!spindash_flag(player))       return;   /* .hide */
+        if (obStatus(player) & (1 << 1))  return;   /* airborne */
+            if (obRoutine(player) >= 4)       return;   /* hurt/death */
+
+                obX(o) = obX(player);
+    obY(o) = obY(player);
+
+    /* Bits bajos de render: X-flip, Y-flip, coord. system */
+    uint8_t render_bits = obRender(player) & 0x07;
+    obRender(o) = (obRender(o) & ~0x07) | render_bits;
+
+    /* Slow-down: sólo avanza animación en frames pares */
+    if (!(v_framebyte & 1)) {
+        uint8_t f = obFrame(o) + 1;
+        if (f >= 7) f = 0;
+        obFrame(o) = f;
+    }
+
+    /* Carga DPLC sólo si el frame cambió */
+    if (obFrame(o) != spindust_last_frame) {
+        spindust_last_frame = obFrame(o);
+        LoadDynPLC_Staged(obFrame(o),
+                          DustDynPLC,
+                          Art_SpinDust,
+                          spindust_stage,
+                          sizeof(spindust_stage),
+                          &spindust_dirty);
+    }
+
+    DisplaySprite(o);
 }

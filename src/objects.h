@@ -96,4 +96,17 @@ void KillSonic(void *obj, void *damager);
 void HurtSonic(void *obj, void *damager);
 void ReactToItem(void *obj);
 
+size_t LoadDynPLC_Staged(uint8_t frame, const uint8_t *dplc, const uint8_t *art,
+                         uint8_t *dst, size_t dst_size, uint8_t *out_dirty);
+
+/* ===========================================================================
+   Spin Dash Dust — shared with main.c's VBlank handler.
+   =========================================================================== */
+#define SPINDUST_STAGE_TILES  23
+#define SPINDUST_VRAM_ADDR    ((uint16_t)(ArtTile_SpinDust * tile_size))
+
+uint8_t *SpinDust_GetStageBuffer(void);
+uint8_t  SpinDust_IsDirty(void);
+void     SpinDust_ClearDirty(void);
+
 #endif /* SONIC1_OBJECTS_H */

@@ -526,6 +526,7 @@ _Static_assert(sizeof(RamLayout) == 0x10000, "RamLayout size mismatch");
 #define v_gameovertext2         (v_objspace + object_size * 3)
 
 #define v_shieldobj             (v_objspace + object_size * 6)
+#define v_dustobj               (v_objspace + object_size * 7)
 #define v_starsobj1             (v_objspace + object_size * 8)
 #define v_starsobj2             (v_objspace + object_size * 9)
 #define v_starsobj3             (v_objspace + object_size * 10)
